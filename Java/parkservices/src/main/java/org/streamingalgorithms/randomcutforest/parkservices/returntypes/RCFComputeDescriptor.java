@@ -19,9 +19,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
@@ -29,6 +26,9 @@ import org.streamingalgorithms.randomcutforest.inputtypes.Point;
 import org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * a basic class that is used to store the internal state of the streaming

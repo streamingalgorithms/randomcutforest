@@ -27,12 +27,12 @@ import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NOR
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

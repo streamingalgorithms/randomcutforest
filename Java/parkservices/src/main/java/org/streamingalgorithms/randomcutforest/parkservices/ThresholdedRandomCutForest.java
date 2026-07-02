@@ -44,9 +44,6 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
@@ -60,6 +57,9 @@ import org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * This class provides a combined RCF and thresholder, both of which operate in

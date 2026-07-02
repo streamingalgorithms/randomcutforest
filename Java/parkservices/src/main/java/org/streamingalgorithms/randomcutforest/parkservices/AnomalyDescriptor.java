@@ -19,10 +19,10 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
+import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFComputeDescriptor;
+
 import lombok.Getter;
 import lombok.Setter;
-
-import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFComputeDescriptor;
 
 @Getter
 @Setter

@@ -15,10 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.preprocessor.transform;
 
+import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
 import lombok.Getter;
 import lombok.Setter;
-
-import org.streamingalgorithms.randomcutforest.statistics.Deviation;
 
 @Getter
 @Setter

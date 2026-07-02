@@ -19,12 +19,12 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest.state.statistics;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

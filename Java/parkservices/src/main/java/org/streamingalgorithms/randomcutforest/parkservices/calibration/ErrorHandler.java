@@ -24,9 +24,6 @@ import static org.streamingalgorithms.randomcutforest.parkservices.RCFCaster.DEF
 import java.util.Arrays;
 import java.util.Optional;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.PredictiveRandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.parkservices.ForecastDescriptor;
@@ -35,6 +32,9 @@ import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 // we recommend the article "Regret in the On-Line Decision Problem", by Foster and Vohra,
 // Games and Economic Behavior, Vol=29 (1-2), 1999

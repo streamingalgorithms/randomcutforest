@@ -15,10 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.state.tree;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.store.IPointStore;
+
+import lombok.Data;
 
 @Data
 public class CompactRandomCutTreeContext {

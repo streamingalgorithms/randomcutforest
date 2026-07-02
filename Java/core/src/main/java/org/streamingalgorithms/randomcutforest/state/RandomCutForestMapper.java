@@ -24,9 +24,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
@@ -47,6 +44,9 @@ import org.streamingalgorithms.randomcutforest.store.IPointStore;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * A utility class for creating a {@link RandomCutForestState} instance from a

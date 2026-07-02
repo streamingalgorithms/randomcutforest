@@ -49,7 +49,7 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
 
         return submitAndJoin(() -> components.parallelStream().map(c -> c.traverse(point, visitorFactory))
                 .reduce(accumulator).map(finisher))
-                        .orElseThrow(() -> new IllegalStateException("accumulator returned an empty result"));
+                .orElseThrow(() -> new IllegalStateException("accumulator returned an empty result"));
     }
 
     @Override
@@ -85,7 +85,7 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
 
         return submitAndJoin(() -> components.parallelStream().map(c -> c.traverseMulti(point, visitorFactory))
                 .reduce(accumulator).map(finisher))
-                        .orElseThrow(() -> new IllegalStateException("accumulator returned an empty result"));
+                .orElseThrow(() -> new IllegalStateException("accumulator returned an empty result"));
     }
 
     @Override

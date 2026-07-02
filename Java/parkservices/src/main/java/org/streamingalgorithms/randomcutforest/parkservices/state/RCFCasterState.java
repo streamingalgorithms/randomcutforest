@@ -17,9 +17,9 @@ package org.streamingalgorithms.randomcutforest.parkservices.state;
 
 import static org.streamingalgorithms.randomcutforest.state.Version.V3_8;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.parkservices.state.errorhandler.ErrorHandlerState;
+
+import lombok.Data;
 
 @Data
 public class RCFCasterState extends ThresholdedRandomCutForestState {

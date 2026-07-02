@@ -20,11 +20,11 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V4_0;
 import java.io.Serializable;
 import java.util.List;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.sampler.CompactSamplerState;
 import org.streamingalgorithms.randomcutforest.state.store.PointStoreState;
 import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeState;
+
+import lombok.Data;
 
 /**
  * A class that encapsulates most of the data used in a RandomCutForest such

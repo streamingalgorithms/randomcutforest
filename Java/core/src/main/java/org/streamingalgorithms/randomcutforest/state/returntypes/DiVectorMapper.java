@@ -17,11 +17,11 @@ package org.streamingalgorithms.randomcutforest.state.returntypes;
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

@@ -15,9 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.state;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.PredictiveRandomCutForest;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
@@ -25,6 +22,9 @@ import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor;
 import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorMapper;
 import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorState;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

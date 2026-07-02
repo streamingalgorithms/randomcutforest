@@ -19,15 +19,15 @@ import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Nul
 
 import java.util.concurrent.ArrayBlockingQueue;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
 import org.streamingalgorithms.randomcutforest.state.store.NodeStoreState;
 import org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore;
 import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

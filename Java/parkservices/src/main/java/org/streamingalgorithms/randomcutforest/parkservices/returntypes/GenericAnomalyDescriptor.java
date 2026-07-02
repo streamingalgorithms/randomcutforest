@@ -17,10 +17,10 @@ package org.streamingalgorithms.randomcutforest.parkservices.returntypes;
 
 import java.util.List;
 
+import org.streamingalgorithms.randomcutforest.util.Weighted;
+
 import lombok.Getter;
 import lombok.Setter;
-
-import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 @Getter
 @Setter

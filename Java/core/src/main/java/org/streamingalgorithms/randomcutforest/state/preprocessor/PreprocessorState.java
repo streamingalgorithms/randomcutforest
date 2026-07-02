@@ -19,9 +19,9 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V4_1;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationState;
+
+import lombok.Data;
 
 @Data
 public class PreprocessorState implements Serializable {

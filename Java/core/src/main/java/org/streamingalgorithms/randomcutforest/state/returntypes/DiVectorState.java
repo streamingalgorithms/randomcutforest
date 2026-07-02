@@ -17,10 +17,10 @@ package org.streamingalgorithms.randomcutforest.state.returntypes;
 
 import java.io.Serializable;
 
+import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyAttributionVisitor;
+
 import lombok.Getter;
 import lombok.Setter;
-
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyAttributionVisitor;
 
 /**
  * A DiVector is used when we want to track a quantity in both the positive and

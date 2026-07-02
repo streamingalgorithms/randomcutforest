@@ -18,10 +18,10 @@ package org.streamingalgorithms.randomcutforest.executor;
 import java.util.Collections;
 import java.util.List;
 
-import lombok.Getter;
-
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.store.IPointStore;
+
+import lombok.Getter;
 
 /**
  * The class transforms input points into the form expected by internal models,

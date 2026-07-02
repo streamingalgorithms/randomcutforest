@@ -19,9 +19,9 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V4_0;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorState;
+
+import lombok.Data;
 
 @Data
 public class PredictiveRandomCutForestState implements Serializable {

@@ -20,9 +20,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getDeviations;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getStates;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
@@ -30,6 +27,9 @@ import org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

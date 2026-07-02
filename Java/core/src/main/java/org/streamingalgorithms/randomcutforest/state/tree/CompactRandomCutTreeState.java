@@ -19,9 +19,9 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V2_0;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.store.NodeStoreState;
+
+import lombok.Data;
 
 @Data
 public class CompactRandomCutTreeState implements Serializable {

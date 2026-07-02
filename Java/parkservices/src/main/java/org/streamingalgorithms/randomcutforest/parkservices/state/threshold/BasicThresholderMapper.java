@@ -18,13 +18,13 @@ package org.streamingalgorithms.randomcutforest.parkservices.state.threshold;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getDeviations;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getStates;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.parkservices.threshold.BasicThresholder;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

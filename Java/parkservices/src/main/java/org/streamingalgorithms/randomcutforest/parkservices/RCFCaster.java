@@ -24,9 +24,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Function;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
@@ -37,6 +34,9 @@ import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFCompu
 import org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

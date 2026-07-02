@@ -21,15 +21,15 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.store.PointStoreLarge;
 import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

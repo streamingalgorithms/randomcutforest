@@ -19,14 +19,14 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V3_8;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.parkservices.state.predictorcorrector.PredictorCorrectorState;
 import org.streamingalgorithms.randomcutforest.parkservices.state.returntypes.ComputeDescriptorState;
 import org.streamingalgorithms.randomcutforest.parkservices.state.threshold.BasicThresholderState;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorState;
 import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorState;
+
+import lombok.Data;
 
 @Data
 public class ThresholdedRandomCutForestState implements Serializable {

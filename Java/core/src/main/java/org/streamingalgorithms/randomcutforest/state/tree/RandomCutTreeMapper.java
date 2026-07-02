@@ -17,13 +17,13 @@ package org.streamingalgorithms.randomcutforest.state.tree;
 
 import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
 import org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

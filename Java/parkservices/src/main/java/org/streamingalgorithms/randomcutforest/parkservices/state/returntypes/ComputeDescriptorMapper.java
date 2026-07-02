@@ -18,14 +18,14 @@ package org.streamingalgorithms.randomcutforest.parkservices.state.returntypes;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArrayNullable;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArrayNullable;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFComputeDescriptor;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorMapper;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

@@ -22,11 +22,11 @@ import static org.streamingalgorithms.randomcutforest.preprocessor.transform.Wei
 
 import java.util.Arrays;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

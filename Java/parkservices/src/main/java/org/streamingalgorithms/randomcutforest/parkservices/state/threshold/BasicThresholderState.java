@@ -17,9 +17,9 @@ package org.streamingalgorithms.randomcutforest.parkservices.state.threshold;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationState;
+
+import lombok.Data;
 
 @Data
 public class BasicThresholderState implements Serializable {

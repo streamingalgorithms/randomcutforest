@@ -17,11 +17,11 @@ package org.streamingalgorithms.randomcutforest.parkservices.returntypes;
 
 import java.util.ArrayList;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ForecastDescriptor;
+
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter

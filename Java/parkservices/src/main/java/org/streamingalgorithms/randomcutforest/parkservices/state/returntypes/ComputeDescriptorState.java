@@ -17,9 +17,9 @@ package org.streamingalgorithms.randomcutforest.parkservices.state.returntypes;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorState;
+
+import lombok.Data;
 
 @Data
 public class ComputeDescriptorState implements Serializable {

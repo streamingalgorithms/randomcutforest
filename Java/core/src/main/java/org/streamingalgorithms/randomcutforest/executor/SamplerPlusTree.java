@@ -19,8 +19,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
 import java.util.Optional;
 
-import lombok.Getter;
-
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
@@ -28,6 +26,8 @@ import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+
+import lombok.Getter;
 
 /**
  * A SamplerPlusTree corresponds to a combination of sampler and tree where the

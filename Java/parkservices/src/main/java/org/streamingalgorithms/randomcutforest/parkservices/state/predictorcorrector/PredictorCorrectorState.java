@@ -19,11 +19,11 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V3_8;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.parkservices.state.returntypes.ComputeDescriptorState;
 import org.streamingalgorithms.randomcutforest.parkservices.state.threshold.BasicThresholderState;
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationState;
+
+import lombok.Data;
 
 @Data
 public class PredictorCorrectorState implements Serializable {

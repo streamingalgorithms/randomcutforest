@@ -19,10 +19,10 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V4_0;
 
 import java.io.Serializable;
 
-import lombok.Data;
-
 import org.streamingalgorithms.randomcutforest.state.PredictiveRandomCutForestState;
 import org.streamingalgorithms.randomcutforest.state.statistics.DeviationState;
+
+import lombok.Data;
 
 @Data
 public class ErrorHandlerState implements Serializable {
