@@ -45,3 +45,21 @@ Please do not report security issues in public issues. See [SECURITY.md](SECURIT
 This project is licensed under Apache-2.0; see [LICENSE](LICENSE). By
 contributing, you agree that your contributions will be licensed under the same
 terms.
+
+## File headers
+
+Every source file carries an Apache-2.0 license header. The project's license is
+Apache-2.0 for all files; the copyright line identifies authorship and follows
+these rules:
+
+- **Existing files** inherited from the upstream project keep their original
+  copyright notices unchanged. Do not remove or alter them.
+- **New files** you create should use the project header template
+  (`Java/license-header.txt`): `Copyright 2026 The streamingalgorithms authors`.
+- **Substantially modified files** (a new code path or feature, not a bug fix)
+  should retain the existing copyright notice and add a line beneath it:
+  `Modifications Copyright <year> The streamingalgorithms authors`.
+
+Headers are applied by hand, not auto-injected. Add or update a header only when
+the nature of your change calls for it under the rules above; routine bug fixes
+do not require a header change.
