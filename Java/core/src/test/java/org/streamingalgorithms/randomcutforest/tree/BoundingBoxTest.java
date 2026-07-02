@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.tree;
+package org.streamingalgorithms.randomcutforest.tree;
 
-import static com.amazon.randomcutforest.CommonUtils.defaultRCFgVecFunction;
-import static com.amazon.randomcutforest.CommonUtils.getProbabilityOfSeparation;
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultRCFgVecFunction;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.getProbabilityOfSeparation;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.is;

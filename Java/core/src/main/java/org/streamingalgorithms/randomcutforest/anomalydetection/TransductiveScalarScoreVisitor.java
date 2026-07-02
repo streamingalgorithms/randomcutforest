@@ -13,13 +13,13 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.amazon.randomcutforest.tree.IBoundingBoxView;
-import com.amazon.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
 public class TransductiveScalarScoreVisitor extends DynamicScoreVisitor {
 

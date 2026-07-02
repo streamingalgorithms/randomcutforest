@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
 import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
@@ -21,7 +21,7 @@ import java.util.concurrent.ForkJoinPool;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 /**
  * The following "test" is intended to provide an approximate estimate of the

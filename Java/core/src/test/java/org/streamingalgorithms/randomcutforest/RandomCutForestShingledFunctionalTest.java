@@ -13,10 +13,10 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.CommonUtils.toDoubleArray;
-import static com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static java.lang.Math.PI;
 import static java.lang.Math.cos;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -33,16 +33,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.amazon.randomcutforest.config.Precision;
-import com.amazon.randomcutforest.state.RandomCutForestMapper;
-import com.amazon.randomcutforest.state.RandomCutForestState;
-import com.amazon.randomcutforest.store.PointStore;
-import com.amazon.randomcutforest.summarization.ICluster;
-import com.amazon.randomcutforest.summarization.Summarizer;
-import com.amazon.randomcutforest.testutils.MultiDimDataWithKey;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
-import com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
-import com.amazon.randomcutforest.util.ShingleBuilder;
+import org.streamingalgorithms.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
 
 @Tag("functional")
 public class RandomCutForestShingledFunctionalTest {

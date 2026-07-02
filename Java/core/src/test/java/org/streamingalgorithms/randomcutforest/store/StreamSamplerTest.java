@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.store;
+package org.streamingalgorithms.randomcutforest.store;
 
-import static com.amazon.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
+import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;

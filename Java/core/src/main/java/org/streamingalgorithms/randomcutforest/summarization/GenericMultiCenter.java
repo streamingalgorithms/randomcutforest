@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.summarization;
+package org.streamingalgorithms.randomcutforest.summarization;
 
-import static com.amazon.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static java.lang.Math.min;
 
 import java.util.ArrayList;
@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.amazon.randomcutforest.util.Weighted;
+import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 /**
  * the following class abstracts a single centroid representation of a group of

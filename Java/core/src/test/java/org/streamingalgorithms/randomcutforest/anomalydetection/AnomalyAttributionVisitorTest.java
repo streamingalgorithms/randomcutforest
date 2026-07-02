@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static com.amazon.randomcutforest.CommonUtils.defaultScalarNormalizerFunction;
-import static com.amazon.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScalarNormalizerFunction;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,11 +30,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.amazon.randomcutforest.CommonUtils;
-import com.amazon.randomcutforest.returntypes.DiVector;
-import com.amazon.randomcutforest.tree.BoundingBox;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class AnomalyAttributionVisitorTest {
 

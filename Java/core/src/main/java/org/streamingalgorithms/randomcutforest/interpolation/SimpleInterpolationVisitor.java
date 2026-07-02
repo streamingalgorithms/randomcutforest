@@ -13,15 +13,15 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.interpolation;
+package org.streamingalgorithms.randomcutforest.interpolation;
 
 import java.util.Arrays;
 
-import com.amazon.randomcutforest.Visitor;
-import com.amazon.randomcutforest.returntypes.DensityOutput;
-import com.amazon.randomcutforest.returntypes.InterpolationMeasure;
-import com.amazon.randomcutforest.tree.IBoundingBoxView;
-import com.amazon.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.Visitor;
+import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
 /**
  * A Visitor which computes several geometric measures that related a given

@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.state.sampler;
+package org.streamingalgorithms.randomcutforest.state.sampler;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,7 +30,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.amazon.randomcutforest.sampler.CompactSampler;
+import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
 
 public class CompactSamplerMapperTest {
 

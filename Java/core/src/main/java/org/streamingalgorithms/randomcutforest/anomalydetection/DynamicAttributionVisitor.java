@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import java.util.function.BiFunction;
 
-import com.amazon.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 
 public class DynamicAttributionVisitor extends AbstractAttributionVisitor {
 

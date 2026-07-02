@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.returntypes;
+package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

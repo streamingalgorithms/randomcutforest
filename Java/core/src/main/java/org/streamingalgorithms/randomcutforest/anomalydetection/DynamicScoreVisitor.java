@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import java.util.function.BiFunction;
 

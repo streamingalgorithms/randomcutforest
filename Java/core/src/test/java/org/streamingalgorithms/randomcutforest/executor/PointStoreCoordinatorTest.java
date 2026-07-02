@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.executor;
+package org.streamingalgorithms.randomcutforest.executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -31,7 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import com.amazon.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
 
 public class PointStoreCoordinatorTest {
 

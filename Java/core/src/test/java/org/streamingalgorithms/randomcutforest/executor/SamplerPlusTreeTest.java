@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.executor;
+package org.streamingalgorithms.randomcutforest.executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,9 +34,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.amazon.randomcutforest.sampler.ISampled;
-import com.amazon.randomcutforest.sampler.IStreamSampler;
-import com.amazon.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.sampler.ISampled;
+import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 @ExtendWith(MockitoExtension.class)
 public class SamplerPlusTreeTest {

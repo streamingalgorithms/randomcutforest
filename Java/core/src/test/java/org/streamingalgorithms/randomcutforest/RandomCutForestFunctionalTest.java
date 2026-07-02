@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,9 +35,9 @@ import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.junit.jupiter.params.provider.CsvSource;
 
-import com.amazon.randomcutforest.returntypes.DensityOutput;
-import com.amazon.randomcutforest.returntypes.DiVector;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 @Tag("functional")
 public class RandomCutForestFunctionalTest {

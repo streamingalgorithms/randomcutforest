@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,8 +22,8 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 public class ConditionalFieldTest {
 

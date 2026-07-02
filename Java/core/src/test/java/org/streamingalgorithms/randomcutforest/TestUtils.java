@@ -13,16 +13,16 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collector;
 
-import com.amazon.randomcutforest.returntypes.ConvergingAccumulator;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.RandomCutTree;
+import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 
 public class TestUtils {
     public static final double EPSILON = 1e-6;

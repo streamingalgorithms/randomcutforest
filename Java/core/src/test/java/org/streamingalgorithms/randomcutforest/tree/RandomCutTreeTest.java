@@ -13,12 +13,12 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.tree;
+package org.streamingalgorithms.randomcutforest.tree;
 
-import static com.amazon.randomcutforest.CommonUtils.toDoubleArray;
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
-import static com.amazon.randomcutforest.CommonUtils.validateInternalState;
-import static com.amazon.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
+import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 import static java.lang.Math.max;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
@@ -44,14 +44,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.amazon.randomcutforest.MultiVisitor;
-import com.amazon.randomcutforest.MultiVisitorFactory;
-import com.amazon.randomcutforest.config.Config;
-import com.amazon.randomcutforest.sampler.Weighted;
-import com.amazon.randomcutforest.state.tree.CompactRandomCutTreeContext;
-import com.amazon.randomcutforest.state.tree.CompactRandomCutTreeState;
-import com.amazon.randomcutforest.state.tree.RandomCutTreeMapper;
-import com.amazon.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.MultiVisitor;
+import org.streamingalgorithms.randomcutforest.MultiVisitorFactory;
+import org.streamingalgorithms.randomcutforest.config.Config;
+import org.streamingalgorithms.randomcutforest.sampler.Weighted;
+import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeContext;
+import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeState;
+import org.streamingalgorithms.randomcutforest.state.tree.RandomCutTreeMapper;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
 
 public class RandomCutTreeTest {
 

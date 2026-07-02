@@ -13,10 +13,10 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.tree;
+package org.streamingalgorithms.randomcutforest.tree;
 
-import static com.amazon.randomcutforest.CommonUtils.checkArgument;
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,12 +28,12 @@ import java.util.function.Function;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.CommonUtils;
-import com.amazon.randomcutforest.RandomCutForest;
-import com.amazon.randomcutforest.VisitorFactory;
-import com.amazon.randomcutforest.anomalydetection.TransductiveScalarScoreVisitor;
-import com.amazon.randomcutforest.store.PointStore;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.VisitorFactory;
+import org.streamingalgorithms.randomcutforest.anomalydetection.TransductiveScalarScoreVisitor;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 public class HyperTreeTest {
 

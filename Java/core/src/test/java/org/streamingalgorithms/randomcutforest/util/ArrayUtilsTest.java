@@ -13,12 +13,12 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.util;
+package org.streamingalgorithms.randomcutforest.util;
 
-import static com.amazon.randomcutforest.CommonUtils.toDoubleArray;
-import static com.amazon.randomcutforest.CommonUtils.toDoubleArrayNullable;
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
-import static com.amazon.randomcutforest.CommonUtils.toFloatArrayNullable;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArrayNullable;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArrayNullable;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;

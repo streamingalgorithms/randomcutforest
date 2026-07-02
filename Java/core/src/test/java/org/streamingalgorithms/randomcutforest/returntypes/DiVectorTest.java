@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.returntypes;
+package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,8 +28,8 @@ import java.util.Arrays;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.state.returntypes.DiVectorMapper;
-import com.amazon.randomcutforest.state.returntypes.DiVectorState;
+import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorMapper;
+import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorState;
 
 public class DiVectorTest {
 

@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.inspect;
+package org.streamingalgorithms.randomcutforest.inspect;
 
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,9 +34,9 @@ import java.util.stream.Collector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.Neighbor;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class NearNeighborVisitorTest {
 

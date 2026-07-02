@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.interpolation;
+package org.streamingalgorithms.randomcutforest.interpolation;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,10 +26,10 @@ import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.InterpolationMeasure;
-import com.amazon.randomcutforest.tree.BoundingBox;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
+import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class SimpleInterpolationVisitorTest {
 

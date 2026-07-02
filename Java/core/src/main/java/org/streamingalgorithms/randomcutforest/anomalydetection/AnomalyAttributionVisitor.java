@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import com.amazon.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
 
 /**
  * Attribution exposes the attribution of scores produced by ScalarScoreVisitor

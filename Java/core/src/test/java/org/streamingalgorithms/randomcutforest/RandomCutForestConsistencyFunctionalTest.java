@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,8 +23,8 @@ import java.util.Random;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.config.Precision;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 /**
  * This class validates that forests configured with different execution modes

@@ -13,10 +13,10 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.util;
+package org.streamingalgorithms.randomcutforest.util;
 
-import static com.amazon.randomcutforest.util.Weighted.createSample;
-import static com.amazon.randomcutforest.util.Weighted.prefixPick;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.createSample;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

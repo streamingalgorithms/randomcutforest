@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.Random;
@@ -23,10 +23,10 @@ import java.util.Random;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.config.Precision;
-import com.amazon.randomcutforest.returntypes.RangeVector;
-import com.amazon.randomcutforest.testutils.MultiDimDataWithKey;
-import com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+import org.streamingalgorithms.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
+import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
+import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 @Tag("functional")
 public class ForecastTest {

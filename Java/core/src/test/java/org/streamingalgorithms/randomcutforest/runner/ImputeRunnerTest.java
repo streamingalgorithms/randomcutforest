@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.runner;
+package org.streamingalgorithms.randomcutforest.runner;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;

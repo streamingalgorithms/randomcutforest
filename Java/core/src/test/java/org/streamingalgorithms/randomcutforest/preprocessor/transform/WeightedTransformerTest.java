@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.preprocessor.transform;
+package org.streamingalgorithms.randomcutforest.preprocessor.transform;
 
-import static com.amazon.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
+import static org.streamingalgorithms.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.RangeVector;
-import com.amazon.randomcutforest.statistics.Deviation;
+import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
+import org.streamingalgorithms.randomcutforest.statistics.Deviation;
 
 public class WeightedTransformerTest {
 

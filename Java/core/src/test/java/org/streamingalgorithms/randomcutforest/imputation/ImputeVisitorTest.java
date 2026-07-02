@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.imputation;
+package org.streamingalgorithms.randomcutforest.imputation;
 
-import static com.amazon.randomcutforest.CommonUtils.defaultScoreSeenFunction;
-import static com.amazon.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreSeenFunction;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,11 +32,11 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.CommonUtils;
-import com.amazon.randomcutforest.tree.BoundingBox;
-import com.amazon.randomcutforest.tree.IBoundingBoxView;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class ImputeVisitorTest {
 

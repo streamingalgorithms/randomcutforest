@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.imputation;
+package org.streamingalgorithms.randomcutforest.imputation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -28,9 +28,9 @@ import java.util.Random;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.ConditionalTreeSample;
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 
 public class ConditionalSampleSummarizerTest {
 

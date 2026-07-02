@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.state.store;
+package org.streamingalgorithms.randomcutforest.state.store;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.config.Precision;
-import com.amazon.randomcutforest.store.PointStore;
-import com.amazon.randomcutforest.store.PointStoreSmall;
+import org.streamingalgorithms.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.store.PointStoreSmall;
 
 public class PointStoreMapperTest {
     private PointStoreMapper mapper;

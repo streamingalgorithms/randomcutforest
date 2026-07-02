@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.testutils.ExampleDataSets.generateFan;
+import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.generateFan;
 import static java.lang.Math.PI;
 import static java.lang.Math.cos;
 import static java.lang.Math.sin;
@@ -27,8 +27,8 @@ import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.returntypes.DensityOutput;
-import com.amazon.randomcutforest.returntypes.Neighbor;
+import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 @Tag("functional")
 public class DynamicPointSetFunctionalTest {

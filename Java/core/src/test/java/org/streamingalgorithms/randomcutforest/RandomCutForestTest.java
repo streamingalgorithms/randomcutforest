@@ -13,10 +13,10 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.CommonUtils.toDoubleArray;
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static java.lang.Math.PI;
 import static java.lang.Math.abs;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -55,32 +55,32 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.powermock.reflect.Whitebox;
 
-import com.amazon.randomcutforest.config.Config;
-import com.amazon.randomcutforest.executor.AbstractForestTraversalExecutor;
-import com.amazon.randomcutforest.executor.AbstractForestUpdateExecutor;
-import com.amazon.randomcutforest.executor.IStateCoordinator;
-import com.amazon.randomcutforest.executor.PointStoreCoordinator;
-import com.amazon.randomcutforest.executor.SamplerPlusTree;
-import com.amazon.randomcutforest.executor.SequentialForestTraversalExecutor;
-import com.amazon.randomcutforest.executor.SequentialForestUpdateExecutor;
-import com.amazon.randomcutforest.returntypes.ConditionalTreeSample;
-import com.amazon.randomcutforest.returntypes.ConvergingAccumulator;
-import com.amazon.randomcutforest.returntypes.DensityOutput;
-import com.amazon.randomcutforest.returntypes.DiVector;
-import com.amazon.randomcutforest.returntypes.InterpolationMeasure;
-import com.amazon.randomcutforest.returntypes.Neighbor;
-import com.amazon.randomcutforest.returntypes.OneSidedConvergingDiVectorAccumulator;
-import com.amazon.randomcutforest.returntypes.OneSidedConvergingDoubleAccumulator;
-import com.amazon.randomcutforest.returntypes.RangeVector;
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.sampler.CompactSampler;
-import com.amazon.randomcutforest.state.RandomCutForestMapper;
-import com.amazon.randomcutforest.state.RandomCutForestState;
-import com.amazon.randomcutforest.store.PointStore;
-import com.amazon.randomcutforest.summarization.ICluster;
-import com.amazon.randomcutforest.tree.ITree;
-import com.amazon.randomcutforest.tree.RandomCutTree;
-import com.amazon.randomcutforest.util.ShingleBuilder;
+import org.streamingalgorithms.randomcutforest.config.Config;
+import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
+import org.streamingalgorithms.randomcutforest.executor.AbstractForestUpdateExecutor;
+import org.streamingalgorithms.randomcutforest.executor.IStateCoordinator;
+import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
+import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
+import org.streamingalgorithms.randomcutforest.executor.SequentialForestTraversalExecutor;
+import org.streamingalgorithms.randomcutforest.executor.SequentialForestUpdateExecutor;
+import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
+import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
+import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
+import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
+import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDiVectorAccumulator;
+import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDoubleAccumulator;
+import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
 
 public class RandomCutForestTest {
 

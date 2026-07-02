@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.summarization;
+package org.streamingalgorithms.randomcutforest.summarization;
 
-import static com.amazon.randomcutforest.CommonUtils.checkArgument;
-import static com.amazon.randomcutforest.util.Weighted.createSample;
-import static com.amazon.randomcutforest.util.Weighted.prefixPick;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.createSample;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
 import static java.lang.Math.max;
 
 import java.util.ArrayList;
@@ -28,8 +28,8 @@ import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.util.Weighted;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 public class Summarizer {
 

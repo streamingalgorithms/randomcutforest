@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.tree;
+package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -21,9 +21,9 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.RandomCutForest;
-import com.amazon.randomcutforest.RandomCutForestTest;
-import com.amazon.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.RandomCutForestTest;
+import org.streamingalgorithms.randomcutforest.config.Precision;
 
 public class BoxCacheTest {
 

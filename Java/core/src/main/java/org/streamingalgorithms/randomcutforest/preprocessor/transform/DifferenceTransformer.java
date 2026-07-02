@@ -13,17 +13,17 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.preprocessor.transform;
+package org.streamingalgorithms.randomcutforest.preprocessor.transform;
 
-import static com.amazon.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
 import lombok.Getter;
 import lombok.Setter;
 
-import com.amazon.randomcutforest.returntypes.RangeVector;
-import com.amazon.randomcutforest.statistics.Deviation;
+import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
+import org.streamingalgorithms.randomcutforest.statistics.Deviation;
 
 @Getter
 @Setter

@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.executor;
+package org.streamingalgorithms.randomcutforest.executor;
 
-import static com.amazon.randomcutforest.util.ArrayUtils.cleanCopy;
+import static org.streamingalgorithms.randomcutforest.util.ArrayUtils.cleanCopy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -42,9 +42,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.amazon.randomcutforest.ComponentList;
-import com.amazon.randomcutforest.IComponentModel;
-import com.amazon.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.ComponentList;
+import org.streamingalgorithms.randomcutforest.IComponentModel;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
 
 @ExtendWith(MockitoExtension.class)
 public class ForestUpdateExecutorTest {

@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.returntypes;
+package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -27,9 +27,9 @@ import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.summarization.Summarizer;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
-import com.amazon.randomcutforest.util.Weighted;
+import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 public class SampleSummaryTest {
 

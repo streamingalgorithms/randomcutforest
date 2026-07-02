@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,13 +41,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.summarization.Center;
-import com.amazon.randomcutforest.summarization.ICluster;
-import com.amazon.randomcutforest.summarization.MultiCenter;
-import com.amazon.randomcutforest.summarization.Summarizer;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
-import com.amazon.randomcutforest.util.Weighted;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.summarization.Center;
+import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
+import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 @Tag("functional")
 public class SampleSummaryTest {

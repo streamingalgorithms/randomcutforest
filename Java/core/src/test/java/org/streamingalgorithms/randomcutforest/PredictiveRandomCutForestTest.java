@@ -13,18 +13,18 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest;
+package org.streamingalgorithms.randomcutforest;
 
-import static com.amazon.randomcutforest.CommonUtils.checkArgument;
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
-import static com.amazon.randomcutforest.config.ForestMode.STANDARD;
-import static com.amazon.randomcutforest.config.ForestMode.TIME_AUGMENTED;
-import static com.amazon.randomcutforest.config.ImputationMethod.FIXED_VALUES;
-import static com.amazon.randomcutforest.config.ImputationMethod.NEXT;
-import static com.amazon.randomcutforest.config.ImputationMethod.RCF;
-import static com.amazon.randomcutforest.config.ImputationMethod.ZERO;
-import static com.amazon.randomcutforest.config.TransformMethod.NONE;
-import static com.amazon.randomcutforest.config.TransformMethod.NORMALIZE;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.config.ForestMode.STANDARD;
+import static org.streamingalgorithms.randomcutforest.config.ForestMode.TIME_AUGMENTED;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.FIXED_VALUES;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.NEXT;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RCF;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZERO;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NONE;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,16 +38,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import com.amazon.randomcutforest.config.ForestMode;
-import com.amazon.randomcutforest.config.ImputationMethod;
-import com.amazon.randomcutforest.config.TransformMethod;
-import com.amazon.randomcutforest.preprocessor.Preprocessor;
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.state.PredictiveRandomCutForestMapper;
-import com.amazon.randomcutforest.summarization.Summarizer;
-import com.amazon.randomcutforest.testutils.MultiDimDataWithKey;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData.NormalDistribution;
-import com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+import org.streamingalgorithms.randomcutforest.config.ForestMode;
+import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
+import org.streamingalgorithms.randomcutforest.config.TransformMethod;
+import org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.state.PredictiveRandomCutForestMapper;
+import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData.NormalDistribution;
+import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 public class PredictiveRandomCutForestTest {
 

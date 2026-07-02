@@ -13,14 +13,14 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.summarization;
+package org.streamingalgorithms.randomcutforest.summarization;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.amazon.randomcutforest.util.Weighted;
+import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 /**
  * a set of cunstions that a conceptual "cluster" should satisfy for any generic

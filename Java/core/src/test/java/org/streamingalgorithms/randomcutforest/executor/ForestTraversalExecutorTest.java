@@ -13,9 +13,9 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.executor;
+package org.streamingalgorithms.randomcutforest.executor;
 
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,19 +40,19 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 
-import com.amazon.randomcutforest.ComponentList;
-import com.amazon.randomcutforest.IComponentModel;
-import com.amazon.randomcutforest.IMultiVisitorFactory;
-import com.amazon.randomcutforest.IVisitorFactory;
-import com.amazon.randomcutforest.RandomCutForest;
-import com.amazon.randomcutforest.TestUtils;
-import com.amazon.randomcutforest.anomalydetection.AnomalyScoreVisitor;
-import com.amazon.randomcutforest.imputation.ImputeVisitor;
-import com.amazon.randomcutforest.returntypes.ConditionalTreeSample;
-import com.amazon.randomcutforest.returntypes.ConvergingAccumulator;
-import com.amazon.randomcutforest.sampler.CompactSampler;
-import com.amazon.randomcutforest.tree.ITree;
-import com.amazon.randomcutforest.tree.RandomCutTree;
+import org.streamingalgorithms.randomcutforest.ComponentList;
+import org.streamingalgorithms.randomcutforest.IComponentModel;
+import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
+import org.streamingalgorithms.randomcutforest.IVisitorFactory;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.TestUtils;
+import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyScoreVisitor;
+import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
+import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
+import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
+import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 
 public class ForestTraversalExecutorTest {
 

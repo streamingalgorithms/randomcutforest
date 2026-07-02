@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.state;
+package org.streamingalgorithms.randomcutforest.state;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -37,17 +37,17 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.amazon.randomcutforest.ComponentList;
-import com.amazon.randomcutforest.RandomCutForest;
-import com.amazon.randomcutforest.config.Precision;
-import com.amazon.randomcutforest.executor.PointStoreCoordinator;
-import com.amazon.randomcutforest.executor.SamplerPlusTree;
-import com.amazon.randomcutforest.preprocessor.IPreprocessor;
-import com.amazon.randomcutforest.sampler.CompactSampler;
-import com.amazon.randomcutforest.state.preprocessor.PreprocessorMapper;
-import com.amazon.randomcutforest.state.preprocessor.PreprocessorState;
-import com.amazon.randomcutforest.store.PointStore;
-import com.amazon.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.ComponentList;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.config.Precision;
+import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
+import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
+import org.streamingalgorithms.randomcutforest.preprocessor.IPreprocessor;
+import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
+import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorMapper;
+import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorState;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

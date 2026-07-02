@@ -13,10 +13,10 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static com.amazon.randomcutforest.TestUtils.EPSILON;
-import static com.amazon.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.is;
@@ -33,11 +33,11 @@ import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
 
-import com.amazon.randomcutforest.CommonUtils;
-import com.amazon.randomcutforest.tree.BoundingBox;
-import com.amazon.randomcutforest.tree.IBoundingBoxView;
-import com.amazon.randomcutforest.tree.INodeView;
-import com.amazon.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class AnomalyScoreVisitorTest {
 

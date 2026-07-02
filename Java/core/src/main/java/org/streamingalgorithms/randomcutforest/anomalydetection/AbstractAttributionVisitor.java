@@ -13,15 +13,15 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.anomalydetection;
+package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import java.util.Arrays;
 
-import com.amazon.randomcutforest.CommonUtils;
-import com.amazon.randomcutforest.Visitor;
-import com.amazon.randomcutforest.returntypes.DiVector;
-import com.amazon.randomcutforest.tree.IBoundingBoxView;
-import com.amazon.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.Visitor;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
 /**
  * Attribution exposes the attribution of scores produced by ScalarScoreVisitor

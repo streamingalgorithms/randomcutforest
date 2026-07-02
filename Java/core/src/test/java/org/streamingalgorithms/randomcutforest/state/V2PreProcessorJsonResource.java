@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.state;
+package org.streamingalgorithms.randomcutforest.state;
 
 import lombok.Getter;
 

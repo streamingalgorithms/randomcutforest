@@ -13,22 +13,22 @@
  * permissions and limitations under the License.
  */
 
-package com.amazon.randomcutforest.preprocessor;
+package org.streamingalgorithms.randomcutforest.preprocessor;
 
-import static com.amazon.randomcutforest.CommonUtils.toFloatArray;
-import static com.amazon.randomcutforest.config.ForestMode.STANDARD;
-import static com.amazon.randomcutforest.config.ForestMode.STREAMING_IMPUTE;
-import static com.amazon.randomcutforest.config.ForestMode.TIME_AUGMENTED;
-import static com.amazon.randomcutforest.config.ImputationMethod.FIXED_VALUES;
-import static com.amazon.randomcutforest.config.ImputationMethod.LINEAR;
-import static com.amazon.randomcutforest.config.ImputationMethod.NEXT;
-import static com.amazon.randomcutforest.config.ImputationMethod.PREVIOUS;
-import static com.amazon.randomcutforest.config.ImputationMethod.RCF;
-import static com.amazon.randomcutforest.config.ImputationMethod.ZERO;
-import static com.amazon.randomcutforest.config.TransformMethod.NONE;
-import static com.amazon.randomcutforest.config.TransformMethod.NORMALIZE;
-import static com.amazon.randomcutforest.config.TransformMethod.NORMALIZE_DIFFERENCE;
-import static com.amazon.randomcutforest.preprocessor.Preprocessor.copyAtEnd;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.config.ForestMode.STANDARD;
+import static org.streamingalgorithms.randomcutforest.config.ForestMode.STREAMING_IMPUTE;
+import static org.streamingalgorithms.randomcutforest.config.ForestMode.TIME_AUGMENTED;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.FIXED_VALUES;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.LINEAR;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.NEXT;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.PREVIOUS;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RCF;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZERO;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NONE;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE_DIFFERENCE;
+import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.copyAtEnd;
 import static java.lang.Math.abs;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -44,17 +44,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import com.amazon.randomcutforest.RandomCutForest;
-import com.amazon.randomcutforest.config.ForestMode;
-import com.amazon.randomcutforest.config.ImputationMethod;
-import com.amazon.randomcutforest.config.TransformMethod;
-import com.amazon.randomcutforest.returntypes.RangeVector;
-import com.amazon.randomcutforest.returntypes.SampleSummary;
-import com.amazon.randomcutforest.returntypes.TimedRangeVector;
-import com.amazon.randomcutforest.state.preprocessor.PreprocessorMapper;
-import com.amazon.randomcutforest.statistics.Deviation;
-import com.amazon.randomcutforest.testutils.MultiDimDataWithKey;
-import com.amazon.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.config.ForestMode;
+import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
+import org.streamingalgorithms.randomcutforest.config.TransformMethod;
+import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
+import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
+import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorMapper;
+import org.streamingalgorithms.randomcutforest.statistics.Deviation;
+import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
+import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 public class PreprocessorTest {
 
