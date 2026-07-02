@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>software.amazon.randomcutforest</groupId>
+    <groupId>org.streamingalgorithms</groupId>
     <artifactId>randomcutforest-parent</artifactId>
     <version>4.4.0</version>
   </parent>
@@ -18,17 +18,17 @@
 
   <dependencies>
     <dependency>
-      <groupId>software.amazon.randomcutforest</groupId>
+      <groupId>org.streamingalgorithms</groupId>
       <artifactId>randomcutforest-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>software.amazon.randomcutforest</groupId>
+      <groupId>org.streamingalgorithms</groupId>
       <artifactId>randomcutforest-testutils</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>software.amazon.randomcutforest</groupId>
+      <groupId>org.streamingalgorithms</groupId>
       <artifactId>randomcutforest-serialization</artifactId>
       <version>${project.version}</version>
     </dependency>
