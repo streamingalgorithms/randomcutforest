@@ -15,10 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.preprocessor;
 
+import static java.lang.Math.round;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.FIXED_VALUES;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZERO;
 import static org.streamingalgorithms.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
-import static java.lang.Math.round;
 
 import java.util.Arrays;
 

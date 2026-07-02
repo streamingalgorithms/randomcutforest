@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static java.lang.Math.min;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
 import org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;

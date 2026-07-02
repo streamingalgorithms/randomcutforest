@@ -20,7 +20,6 @@ import java.util.concurrent.ForkJoinPool;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 /**

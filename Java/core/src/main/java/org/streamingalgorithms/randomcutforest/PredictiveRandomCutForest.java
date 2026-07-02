@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_BOUNDING_BOX_CACHE_FRACTION;
@@ -29,8 +31,6 @@ import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_ST
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.PREVIOUS;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.DEFAULT_START_NORMALIZATION;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.DEFAULT_STOP_NORMALIZATION;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.Arrays;
 import java.util.Optional;

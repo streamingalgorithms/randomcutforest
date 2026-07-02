@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 

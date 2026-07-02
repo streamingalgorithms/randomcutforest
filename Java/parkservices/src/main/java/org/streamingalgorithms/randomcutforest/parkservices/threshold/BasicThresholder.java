@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices.threshold;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
-import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE_COEFFICIENT_IN_TIME_DECAY;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.lang.Math.sqrt;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
+import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE_COEFFICIENT_IN_TIME_DECAY;
 
 import java.util.List;
 

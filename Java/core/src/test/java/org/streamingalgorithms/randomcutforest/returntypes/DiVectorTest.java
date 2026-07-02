@@ -15,19 +15,18 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.util.Arrays;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorMapper;
 import org.streamingalgorithms.randomcutforest.state.returntypes.DiVectorState;
 

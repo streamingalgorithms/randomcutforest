@@ -15,9 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.imputation;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreSeenFunction;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,10 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreSeenFunction;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;

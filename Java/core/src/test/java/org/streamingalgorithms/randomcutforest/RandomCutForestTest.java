@@ -15,8 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static java.lang.Math.PI;
 import static java.lang.Math.abs;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -41,6 +39,8 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,7 +54,6 @@ import java.util.stream.Collector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.powermock.reflect.Whitebox;
-
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestUpdateExecutor;

@@ -15,10 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.summarization;
 
+import static java.lang.Math.max;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.util.Weighted.createSample;
 import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
-import static java.lang.Math.max;
 
 import java.util.ArrayList;
 import java.util.Arrays;

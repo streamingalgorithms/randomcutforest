@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.parkservices.config.Calibration;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;

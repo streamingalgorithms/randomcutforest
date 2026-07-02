@@ -24,7 +24,6 @@ import java.util.Random;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;

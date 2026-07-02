@@ -15,14 +15,14 @@
 
 package org.streamingalgorithms.randomcutforest.util;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArrayNullable;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArrayNullable;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArrayNullable;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArrayNullable;
 
 import java.util.Arrays;
 import java.util.Random;

@@ -15,8 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.is;
@@ -28,11 +26,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 
 import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;

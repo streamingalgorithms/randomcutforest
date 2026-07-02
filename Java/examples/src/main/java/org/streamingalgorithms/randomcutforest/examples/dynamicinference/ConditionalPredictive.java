@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.examples.dynamicinference;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static java.lang.Math.min;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;

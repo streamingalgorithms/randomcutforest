@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest.examples.parkservices;
 
+import static java.lang.Math.PI;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
-import static java.lang.Math.PI;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;

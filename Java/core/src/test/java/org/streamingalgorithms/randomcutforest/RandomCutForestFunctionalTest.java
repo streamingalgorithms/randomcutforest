@@ -34,7 +34,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.junit.jupiter.params.provider.CsvSource;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;

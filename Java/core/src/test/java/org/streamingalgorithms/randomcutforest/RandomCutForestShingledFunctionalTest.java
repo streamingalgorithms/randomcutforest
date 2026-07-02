@@ -15,14 +15,14 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
-import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static java.lang.Math.PI;
 import static java.lang.Math.cos;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 
 import java.util.List;
 import java.util.Random;
@@ -32,7 +32,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;

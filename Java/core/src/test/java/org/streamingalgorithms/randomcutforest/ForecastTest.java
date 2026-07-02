@@ -15,14 +15,13 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 
 import java.util.Random;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;

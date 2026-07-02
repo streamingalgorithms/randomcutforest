@@ -22,7 +22,6 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 

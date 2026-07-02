@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

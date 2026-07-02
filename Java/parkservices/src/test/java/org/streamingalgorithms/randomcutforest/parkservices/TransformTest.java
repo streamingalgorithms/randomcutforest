@@ -22,7 +22,6 @@ import java.util.Random;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 

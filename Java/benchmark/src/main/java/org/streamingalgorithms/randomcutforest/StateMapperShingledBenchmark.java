@@ -32,11 +32,11 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.profilers.OutputSizeProfiler;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

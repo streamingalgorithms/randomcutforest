@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
+import static java.lang.Math.max;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.DEFAULT_STORE_PARENT;
 import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
-import static java.lang.Math.max;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 
 import java.util.Arrays;
 import java.util.Random;
@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.Precision;

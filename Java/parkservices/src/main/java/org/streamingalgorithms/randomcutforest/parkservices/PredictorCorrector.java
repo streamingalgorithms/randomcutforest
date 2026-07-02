@@ -15,15 +15,15 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
+import static java.lang.Math.exp;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode.ALERT_ONCE;
 import static org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode.CONDITIONAL_FORECAST;
 import static org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode.DATA_DRIFT;
 import static org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode.NONE;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.DEFAULT_NORMALIZATION_PRECISION;
-import static java.lang.Math.exp;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.Arrays;
 import java.util.List;

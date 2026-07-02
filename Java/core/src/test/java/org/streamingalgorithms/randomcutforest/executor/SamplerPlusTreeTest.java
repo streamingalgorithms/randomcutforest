@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.tree.ITree;

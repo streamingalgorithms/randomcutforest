@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_NUMBER_OF_REPRESENTATIVES;
-import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_SHRINKAGE;
 import static java.lang.Math.abs;
 import static java.lang.Math.exp;
 import static java.lang.Math.min;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_NUMBER_OF_REPRESENTATIVES;
+import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_SHRINKAGE;
 
 import java.util.ArrayList;
 import java.util.List;

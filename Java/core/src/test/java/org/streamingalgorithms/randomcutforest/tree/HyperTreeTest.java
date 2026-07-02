@@ -27,7 +27,6 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.VisitorFactory;

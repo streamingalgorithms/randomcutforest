@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RCF;
-import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 import static java.lang.Math.min;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RCF;
+import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 
 import java.util.Random;
 
@@ -28,7 +28,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;

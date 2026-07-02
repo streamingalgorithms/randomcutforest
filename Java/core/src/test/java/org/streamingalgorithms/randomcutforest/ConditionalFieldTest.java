@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 

@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.examples.summarization;
 
-import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
 import static java.lang.Math.PI;
+import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;

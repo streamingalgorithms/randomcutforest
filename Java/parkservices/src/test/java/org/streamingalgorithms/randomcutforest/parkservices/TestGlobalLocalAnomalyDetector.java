@@ -15,6 +15,15 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
+import static java.lang.Math.PI;
+import static java.lang.Math.cos;
+import static java.lang.Math.min;
+import static java.lang.Math.sin;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
@@ -25,15 +34,6 @@ import static org.streamingalgorithms.randomcutforest.parkservices.threshold.Bas
 import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_NUMBER_OF_REPRESENTATIVES;
 import static org.streamingalgorithms.randomcutforest.summarization.GenericMultiCenter.DEFAULT_SHRINKAGE;
 import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
-import static java.lang.Math.PI;
-import static java.lang.Math.cos;
-import static java.lang.Math.min;
-import static java.lang.Math.sin;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -43,7 +43,6 @@ import java.util.Random;
 import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.GenericAnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;

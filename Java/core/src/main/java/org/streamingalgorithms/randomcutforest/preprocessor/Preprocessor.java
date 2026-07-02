@@ -15,6 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.preprocessor;
 
+import static java.lang.Math.exp;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SHINGLE_SIZE;
@@ -23,9 +26,6 @@ import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.PR
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RCF;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZERO;
 import static org.streamingalgorithms.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
-import static java.lang.Math.exp;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.Arrays;
 import java.util.Optional;

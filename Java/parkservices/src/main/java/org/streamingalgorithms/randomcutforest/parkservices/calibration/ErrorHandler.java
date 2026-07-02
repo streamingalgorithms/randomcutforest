@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices.calibration;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.parkservices.RCFCaster.DEFAULT_ERROR_PERCENTILE;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.Arrays;
 import java.util.Optional;

@@ -40,7 +40,8 @@ public class CompactSamplerState implements Serializable {
     private float[] weight;
     /**
      * An array of index values identifying the points in the sample. These indexes
-     * will correspond to a {@link org.streamingalgorithms.randomcutforest.store.PointStore}.
+     * will correspond to a
+     * {@link org.streamingalgorithms.randomcutforest.store.PointStore}.
      */
     private int[] pointIndex;
     /**

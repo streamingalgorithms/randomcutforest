@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static java.lang.Math.max;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
 import java.util.List;

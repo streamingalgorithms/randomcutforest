@@ -15,10 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.util;
 
-import static org.streamingalgorithms.randomcutforest.util.Weighted.createSample;
-import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.createSample;
+import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -15,14 +15,13 @@
 
 package org.streamingalgorithms.randomcutforest.preprocessor.transform;
 
-import static org.streamingalgorithms.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.preprocessor.transform.WeightedTransformer.NUMBER_OF_STATS;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
 

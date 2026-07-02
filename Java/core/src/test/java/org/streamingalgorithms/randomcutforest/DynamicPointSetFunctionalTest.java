@@ -15,18 +15,17 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.generateFan;
 import static java.lang.Math.PI;
 import static java.lang.Math.cos;
 import static java.lang.Math.sin;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.generateFan;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 

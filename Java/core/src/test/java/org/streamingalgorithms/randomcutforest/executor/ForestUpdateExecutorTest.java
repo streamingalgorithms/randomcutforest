@@ -15,7 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
-import static org.streamingalgorithms.randomcutforest.util.ArrayUtils.cleanCopy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -27,6 +26,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.util.ArrayUtils.cleanCopy;
 
 import java.util.List;
 import java.util.stream.Stream;
@@ -41,7 +41,6 @@ import org.junit.jupiter.params.provider.ArgumentsSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.store.PointStore;

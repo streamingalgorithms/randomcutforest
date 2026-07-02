@@ -15,6 +15,14 @@
 
 package org.streamingalgorithms.randomcutforest.preprocessor;
 
+import static java.lang.Math.abs;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.config.ForestMode.STANDARD;
 import static org.streamingalgorithms.randomcutforest.config.ForestMode.STREAMING_IMPUTE;
@@ -29,21 +37,12 @@ import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NON
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE_DIFFERENCE;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.copyAtEnd;
-import static java.lang.Math.abs;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;

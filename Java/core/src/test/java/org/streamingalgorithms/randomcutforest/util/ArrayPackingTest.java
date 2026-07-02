@@ -15,16 +15,16 @@
 
 package org.streamingalgorithms.randomcutforest.util;
 
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.pack;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackDoubles;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackFloats;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackInts;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackShorts;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.pack;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackDoubles;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackFloats;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackInts;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackShorts;
 
 import java.util.Arrays;
 import java.util.Random;

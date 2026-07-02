@@ -15,6 +15,14 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.FIXED_VALUES;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.LINEAR;
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.NEXT;
@@ -24,14 +32,6 @@ import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZE
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.DIFFERENCE;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE_DIFFERENCE;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Random;
@@ -43,7 +43,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.Precision;

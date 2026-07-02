@@ -15,13 +15,13 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
 import static java.lang.Math.min;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
 
 import java.util.List;
 import java.util.Random;
@@ -29,7 +29,6 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.parkservices.config.Calibration;
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.AnalysisDescriptor;

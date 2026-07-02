@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
+import static java.lang.Math.round;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
-import static java.lang.Math.round;
 
 import java.util.function.Function;
 import java.util.stream.Collector;

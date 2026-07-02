@@ -32,11 +32,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class V1JsonToV3StateConverterTest {

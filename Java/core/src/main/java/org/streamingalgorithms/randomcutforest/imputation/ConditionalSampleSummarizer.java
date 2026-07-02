@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.imputation;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static java.lang.Math.min;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
 import java.util.Arrays;

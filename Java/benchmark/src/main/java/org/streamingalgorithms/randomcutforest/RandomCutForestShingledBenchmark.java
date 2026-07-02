@@ -29,7 +29,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;

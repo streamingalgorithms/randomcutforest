@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices.state;
 
-import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.copyAtEnd;
-import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.shiftLeft;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.copyAtEnd;
+import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.shiftLeft;
 
 import java.util.Random;
 import java.util.stream.Stream;
@@ -31,7 +31,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
@@ -43,6 +42,7 @@ import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
 import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

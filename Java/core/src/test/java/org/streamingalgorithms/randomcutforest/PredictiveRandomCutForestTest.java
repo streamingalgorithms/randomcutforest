@@ -15,6 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.config.ForestMode.STANDARD;
@@ -25,19 +31,12 @@ import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.RC
 import static org.streamingalgorithms.randomcutforest.config.ImputationMethod.ZERO;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NONE;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;

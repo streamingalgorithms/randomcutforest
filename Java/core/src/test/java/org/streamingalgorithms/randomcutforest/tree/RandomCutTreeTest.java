@@ -15,10 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 import static java.lang.Math.max;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
@@ -34,6 +30,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
+import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +43,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
 import org.streamingalgorithms.randomcutforest.MultiVisitorFactory;
 import org.streamingalgorithms.randomcutforest.config.Config;

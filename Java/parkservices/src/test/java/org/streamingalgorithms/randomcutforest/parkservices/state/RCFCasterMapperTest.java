@@ -22,7 +22,6 @@ import java.util.Random;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.parkservices.ForecastDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.RCFCaster;

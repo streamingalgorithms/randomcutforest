@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.examples.summarization;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static java.lang.Math.abs;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 
 import java.util.Arrays;
 import java.util.Random;

@@ -15,13 +15,13 @@
 
 package org.streamingalgorithms.randomcutforest.store;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_INITIAL_ACCEPT_FRACTION;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE_COEFFICIENT_IN_TIME_DECAY;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_STORE_SEQUENCE_INDEXES_ENABLED;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.ArrayList;
 import java.util.Optional;

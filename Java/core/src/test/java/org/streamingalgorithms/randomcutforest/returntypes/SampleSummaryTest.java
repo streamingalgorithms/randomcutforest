@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,7 +26,6 @@ import java.util.Random;
 import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 import org.streamingalgorithms.randomcutforest.util.Weighted;

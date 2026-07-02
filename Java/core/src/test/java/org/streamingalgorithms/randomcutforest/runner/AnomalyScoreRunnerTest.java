@@ -27,7 +27,6 @@ import java.util.Collections;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 
 public class AnomalyScoreRunnerTest {

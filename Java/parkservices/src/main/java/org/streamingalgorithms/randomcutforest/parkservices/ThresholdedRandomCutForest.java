@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_BOUNDING_BOX_CACHE_FRACTION;
@@ -33,8 +35,6 @@ import static org.streamingalgorithms.randomcutforest.parkservices.threshold.Bas
 import static org.streamingalgorithms.randomcutforest.parkservices.threshold.BasicThresholder.DEFAULT_Z_FACTOR;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.DEFAULT_START_NORMALIZATION;
 import static org.streamingalgorithms.randomcutforest.preprocessor.Preprocessor.DEFAULT_STOP_NORMALIZATION;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 import java.util.ArrayList;
 import java.util.Arrays;

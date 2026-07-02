@@ -37,12 +37,13 @@ import org.streamingalgorithms.randomcutforest.config.IDynamicConfig;
  * not to accept a new point, then this step is not invoked). The reason for
  * this two-step process is because sampler update steps may be interleaved with
  * model update steps in
- * {@link org.streamingalgorithms.randomcutforest.executor.IUpdatable#update} (see
- * {@link org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree#update}, for
- * example). In particular, if a new point is accepted into the sampler whose
- * value is equal to an existing point in the sample, then the model may choose
- * to increment the count on the existing point rather than allocate new storage
- * for the duplicate point.
+ * {@link org.streamingalgorithms.randomcutforest.executor.IUpdatable#update}
+ * (see
+ * {@link org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree#update},
+ * for example). In particular, if a new point is accepted into the sampler
+ * whose value is equal to an existing point in the sample, then the model may
+ * choose to increment the count on the existing point rather than allocate new
+ * storage for the duplicate point.
  * </p>
  *
  * @param <P> The point type.

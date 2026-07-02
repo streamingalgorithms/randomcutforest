@@ -23,9 +23,9 @@ import lombok.Data;
 
 /**
  * A class for storing the state of a
- * {@link org.streamingalgorithms.randomcutforest.store.PointStore}. Depending on which kind
- * of point store was serialized, one of the fields {@code doubleData} or
- * {@code floatData} will be null.
+ * {@link org.streamingalgorithms.randomcutforest.store.PointStore}. Depending
+ * on which kind of point store was serialized, one of the fields
+ * {@code doubleData} or {@code floatData} will be null.
  */
 @Data
 public class PointStoreState implements Serializable {

@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.summarization;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static java.lang.Math.exp;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
 import java.util.Arrays;

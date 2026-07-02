@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.store;
 
+import static java.lang.Math.max;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.iterativeClustering;
-import static java.lang.Math.max;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -15,12 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
+import static java.lang.Math.max;
+import static java.util.stream.Collectors.toCollection;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
-import static java.lang.Math.max;
-import static java.util.stream.Collectors.toCollection;
 
 import java.util.ArrayList;
 import java.util.Arrays;

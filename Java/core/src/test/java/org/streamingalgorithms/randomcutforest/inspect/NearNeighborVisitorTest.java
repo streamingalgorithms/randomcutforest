@@ -15,7 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.inspect;
 
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -33,7 +33,6 @@ import java.util.stream.Collector;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.NodeView;

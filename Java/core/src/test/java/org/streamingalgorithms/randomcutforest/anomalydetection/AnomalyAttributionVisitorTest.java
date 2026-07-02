@@ -15,9 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScalarNormalizerFunction;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,11 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScalarNormalizerFunction;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;

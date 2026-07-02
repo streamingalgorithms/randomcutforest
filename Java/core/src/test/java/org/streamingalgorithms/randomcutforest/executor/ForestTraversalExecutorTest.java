@@ -15,7 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
-import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +26,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.util.Arrays;
 import java.util.List;
@@ -39,7 +39,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.provider.ArgumentsSource;
-
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;

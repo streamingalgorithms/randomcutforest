@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.examples.dynamicinference;
 
+import static java.lang.Math.PI;
 import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.generate;
 import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
-import static java.lang.Math.PI;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;

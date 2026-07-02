@@ -21,6 +21,7 @@ import org.streamingalgorithms.randomcutforest.examples.Example;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**

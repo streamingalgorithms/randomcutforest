@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.util;
 
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
-import static java.lang.Math.min;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;

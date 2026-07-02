@@ -15,9 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.parkservices;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
-import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
-import static org.streamingalgorithms.randomcutforest.parkservices.PredictorCorrector.DEFAULT_SAMPLING_SUPPORT;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,12 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
+import static org.streamingalgorithms.randomcutforest.parkservices.PredictorCorrector.DEFAULT_SAMPLING_SUPPORT;
 
 import java.util.Arrays;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
-
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.parkservices.state.predictorcorrector.PredictorCorrectorMapper;
