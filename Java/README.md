@@ -5,7 +5,9 @@ for anomaly detection, density estimation, imputation, and forecast. The goal of
 is to be easy to use and to strike a balance between efficiency and extensibility. Please do not forget 
 to look into the ParkServices package that provide many augmented functionalities such as explicit determination 
 of anomaly grade based on the first hand understanding of the core algorithm. Please also see randomcutforest-examples 
-for a few detailed examples and extensions. Please do not hesitate to creat an issue for any discussion item.
+for a few detailed examples and extensions. Please do not hesitate to create an issue for any discussion item.
+
+The core algorithm is described in Guha, Mishra, Roy, and Schrijvers, "Robust Random Cut Forest Based Anomaly Detection on Streams," ICML 2016 ([PDF][rcf-paper]).
 
 ## Basic operations
 
@@ -38,7 +40,8 @@ RandomCutForest forest = RandomCutForest.builder()
 ```
 
 Typical usage of a forest is to compute a statistic on an input data point and then update the forest with that point 
-in a loop.
+in a loop. Note that in more recent versions float[] is supported and can be beneficial, the core library operates 
+on single precision.
 
 ```java
 Supplier<double[]> input = ...;
@@ -106,7 +109,7 @@ to [Weighted Random Sampling (2005;  Efraimidis, Spirakis)](http://citeseerx.ist
 
 1. Checkout this package from our GitHub repository.
 1. Install [Apache Maven](https://maven.apache.org/) by following the directions on that site.
-1. Set your `JAVA_HOME` environment variable to a JDK version 8 or greater.
+1. Set your `JAVA_HOME` environment variable to a JDK version 21 or greater.
 
 ## Build
 
@@ -133,12 +136,9 @@ algorithms and their hyperparameters. After building the project you can invoke
 an example CLI application by adding the core jar file to your classpath.
 
 In the example below we train and score a Random Cut Forest model on the
-three-dimensional data shown in Figure 3 in the original RCF paper.
-([PDF][rcf-paper]) These example data can be
-found at `../example-data/rcf-paper.csv`:
+three-dimensional data shown the original repo.
 
 ```text
-$ tail data/example.csv
 -5.0074,-0.0038,-0.0237
 -5.0029,0.0170,-0.0057
 -4.9975,-0.0102,-0.0065
@@ -157,8 +157,7 @@ vector data point, scores the data point, and then updates the model with this
 point. The program output appends a column of anomaly scores to the input:
 
 ```text
-$ java -cp core/target/randomcutforest-core-4.4.0.jar com.amazon.randomcutforest.runner.AnomalyScoreRunner < ../example-data/rcf-paper.csv > example_output.csv
-$ tail example_output.csv
+$ java -cp core/target/randomcutforest-core-4.4.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner < ../"some_example.csv" > "some_example_output.csv"
 -5.0029,0.0170,-0.0057,0.8129401629464965
 -4.9975,-0.0102,-0.0065,0.6591046054520615
 4.9878,0.0136,-0.0087,0.8552217070518414
@@ -176,25 +175,25 @@ read additional usage instructions, including options for setting model
 hyperparameters, using the `--help` flag:
 
 ```text
-$ java -cp core/target/randomcutforest-core-4.4.0.jar com.amazon.randomcutforest.runner.AnomalyScoreRunner --help
-Usage: java -cp target/random-cut-forest-4.4.0.jar com.amazon.randomcutforest.runner.AnomalyScoreRunner [options] < input_file > output_file
+$ java -cp core/target/randomcutforest-core-4.4.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner --help
+Usage: java -cp randomcutforest-core-1.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner [options] < input_file > output_file
 
 Compute scalar anomaly scores from the input rows and append them to the output rows.
 
 Options:
-        --delimiter, -d: The character or string used as a field delimiter. (default: ,)
-        --header-row: Set to 'true' if the data contains a header row. (default: false)
-        --number-of-trees, -n: Number of trees to use in the forest. (default: 100)
-        --random-seed: Random seed to use in the Random Cut Forest (default: 42)
-        --sample-size, -s: Number of points to keep in sample for each tree. (default: 256)
-        --shingle-cyclic, -c: Set to 'true' to use cyclic shingles instead of linear shingles. (default: false)
-        --shingle-size, -g: Shingle size to use. (default: 1)
-        --window-size, -w: Window size of the sample or 0 for no window. (default: 0)
+	--delimiter, -d: The character or string used as a field delimiter. (default: ,)
+	--header-row: Set to 'true' if the data contains a header row. (default: false)
+	--number-of-trees, -n: Number of trees to use in the forest. (default: 100)
+	--random-seed: Random seed to use in the Random Cut Forest (default: 42)
+	--sample-size, -s: Number of points to keep in sample for each tree. (default: 256)
+	--shingle-cyclic, -c: Set to 'true' to use cyclic shingles instead of linear shingles. (default: false)
+	--shingle-size, -g: Shingle size to use. (default: 1)
+	--window-size, -w: Window size of the sample or 0 for no window. (default: 0)
 
-        --help, -h: Print this help message and exit.
+	--help, -h: Print this help message and exit.
 ```
 
-Other CLI applications are available in the `com.amazon.randomcutforest.runner`
+Other CLI applications are available in the `org.streamingalgorithms.randomcutforest.runner`
 package.
 
 ## Testing
@@ -216,7 +215,7 @@ suite before creating a pull request. Functional tests can be excluded from Mave
 ```
 
 In the core library we have 90% line coverage with the full test suite, and 80% line coverage when running the unit 
-tests only (i.e., when excluding functional tests). Our goal is to reach 100% unit test coverage, and we welcome (and 
+tests only (i.e., when excluding functional tests). We welcome (and 
 encourage!) test contributions. After running tests with Maven, you can see the test coverage broken out by class by 
 opening `target/site/jacoco/index.html` in a web browser.
 
@@ -249,4 +248,4 @@ benchmark methods will be executed.
 % java -jar benchmark/target/randomcutforest-benchmark-4.4.0-jar-with-dependencies.jar RandomCutForestBenchmark\.updateAndGetAnomalyScore
 ```
 
-[rcf-paper]: http://proceedings.mlr.press/v48/guha16.pdf
+[rcf-paper]: https://proceedings.mlr.press/v48/guha16.pdf

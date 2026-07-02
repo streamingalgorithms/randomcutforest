@@ -68,7 +68,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>com.amazon.randomcutforest.examples.Main</mainClass>
+                            <mainClass>org.streamingalgorithms.randomcutforest.examples.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

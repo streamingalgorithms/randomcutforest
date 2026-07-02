@@ -1,39 +1,45 @@
-# Random Cut Forest by AWS
+# Random Cut Forest
 
-This repository contains implementations of the Random Cut Forest (RCF) probabilistic data structure.
-RCFs were originally developed at Amazon to use in a nonparametric anomaly detection algorithm for
-streaming data. Later new algorithms based on RCFs were developed for density estimation, imputation,
-and forecasting.
+This repository contains implementations of the Random Cut Forest (RCF)
+probabilistic data structure. RCFs were originally developed for use in a
+nonparametric anomaly detection algorithm for streaming data. Later algorithms
+based on RCFs were developed for density estimation, imputation, and forecasting.
 
-The different directories correspond to equivalent implementations in different languages, and bindings to
-to those base implementations, using language specific features for greater flexibility of use. 
+This project is a fork of
+[random-cut-forest-by-aws](https://github.com/aws/random-cut-forest-by-aws),
+originally developed at Amazon and released under the Apache 2.0 license. It is
+maintained independently under the streamingalgorithms organization and is not
+affiliated with or endorsed by Amazon or AWS.
 
-RandomCutForest in the randomcutforest-core package provides an estimation (say anomaly score, or extrapolation over a forecast horizon)
-and using that raw estimation can be challenging. The randomcutforest-parkservices package provides
-several capabilities (ThresholdedRandomCutForest, RCFCaster, respectively) for distilling the scores to a determination of
-a potential anomaly or calibrated forecast respectively.
-The package randomcutforest-examples showcases several example scenarios for using the repository. 
-They also provide examples for some of the parameter settings. Many of these examples are built in tests.
+The different directories correspond to implementations in different languages,
+with language-specific bindings for greater flexibility of use.
 
-## Documentation
+The `randomcutforest-core` package provides raw estimation (such as an anomaly
+score, or extrapolation over a forecast horizon). The `randomcutforest-parkservices`
+package builds on that with higher-level capabilities — `ThresholdedRandomCutForest`
+and `RCFCaster` — for turning raw scores into anomaly determinations or calibrated
+forecasts. The `randomcutforest-examples` package showcases example scenarios and
+parameter settings, many of which are built as tests.
 
-* Guha, S., Mishra, N., Roy, G., & Schrijvers, O. (2016, June). Robust random cut forest based anomaly detection on streams. In *International conference on machine learning* (pp. 2712-2721).
+## References
+
+* Guha, S., Mishra, N., Roy, G., & Schrijvers, O. (2016, June). Robust random cut
+  forest based anomaly detection on streams. In *International Conference on
+  Machine Learning* (pp. 2712-2721).
 
 ## Code of Conduct
 
-This project has adopted an [Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Security
 
-## Security issue notifications
+Please do not report security issues in public issues. See [SECURITY.md](SECURITY.md).
 
-If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public GitHub issue.
+## License
 
-
-## Licensing
-
-See the [LICENSE](./LICENSE) file for our project's licensing. We will ask you to confirm the licensing of your contribution.
-
+Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE).
 
 ## Copyright
 
-Copyright 2019-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2019 Amazon.com, Inc. or its affiliates.
+Copyright 2026 The streamingalgorithms authors.
