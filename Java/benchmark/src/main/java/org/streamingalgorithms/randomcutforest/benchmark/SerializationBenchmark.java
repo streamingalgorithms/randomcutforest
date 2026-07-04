@@ -1,5 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark;
-
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -14,6 +12,8 @@ package org.streamingalgorithms.randomcutforest.benchmark;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
+package org.streamingalgorithms.randomcutforest.benchmark;
 
 import java.util.concurrent.TimeUnit;
 
@@ -85,14 +85,21 @@ public class SerializationBenchmark {
     private Object snapshotState; // toState(snapshotModel), fixed
     private byte[] snapshotWire; // encode(snapshotState), fixed (wire codecs only)
 
+    private boolean skip;
+
     @Setup(Level.Trial)
     public void setUp() {
         Models.Prepared p = Models.prepare(model, dataset, cacheFraction, 99L);
         kind = p.kind;
         codec = Codec.of(codecId);
+        skip = (model == Models.Kind.CASTER && dataset == Datasets.Id.D1)
+                || (codec.treeMode() == Models.TreeMode.REBUILD && model != Models.Kind.RCF);
+        if (skip) {
+            return; // don't build anything
+        }
         stateClass = Models.stateClass(kind);
         snapshotModel = p.model;
-        snapshotState = Models.toState(kind, snapshotModel);
+        snapshotState = Models.toState(kind, snapshotModel, codec.treeMode());
         if (!codec.isControl()) {
             snapshotWire = codec.encode(snapshotState);
         }
@@ -100,15 +107,18 @@ public class SerializationBenchmark {
 
     @Benchmark
     public void roundTrip(Blackhole bh) {
+        if (skip) {
+            return;
+        }
         if (codec.isControl()) {
-            Object m = Models.toModel(kind, snapshotState); // decode-free control: mapper only
-            Object st = Models.toState(kind, m);
+            Object m = Models.toModel(kind, snapshotState, codec.treeMode()); // decode-free control: mapper only
+            Object st = Models.toState(kind, m, codec.treeMode());
             bh.consume(m);
             bh.consume(st);
         } else {
             Object st = codec.decode(snapshotWire, stateClass);
-            Object m = Models.toModel(kind, st);
-            Object st2 = Models.toState(kind, m);
+            Object m = Models.toModel(kind, st, codec.treeMode());
+            Object st2 = Models.toState(kind, m, codec.treeMode());
             byte[] wire = codec.encode(st2);
             bh.consume(m);
             bh.consume(wire);

@@ -1,4 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark.operations;
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -13,6 +12,8 @@ package org.streamingalgorithms.randomcutforest.benchmark.operations;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
+package org.streamingalgorithms.randomcutforest.benchmark.operations;
 
 import java.io.IOException;
 
@@ -31,22 +32,11 @@ import tools.jackson.databind.json.JsonMapper;
  * The op4 codec set, generalized so ONE codec instance serves every state type
  * (RandomCutForestState / ThresholdedRandomCutForestState / RCFCasterState) --
  *
- * <p>
- * Two of the six are CONTROLS, not wire formats:
- * <ul>
- * <li>STATE -- mapper round-trip (toState -> toModel) with NO wire, but WITH a
- * periodic JOL size probe (gives the retained-size column). Isolates mapper
- * cost.
- * <li>NONE -- same mapper round-trip with NO probe at all. The purest timing
- * control; the delta STATE - NONE tells you what the JOL probe itself costs.
- * </ul>
- * Controls throw from {@link #encode}/{@link #decode}; drivers branch on
- * {@link #isControl()} and price only the mapper stages for them.
  */
 public interface Codec {
 
     enum Id {
-        PROTOSTUFF, JACKSON2, JACKSON3, FORY, STATE, NONE
+        PROTOSTUFF, JACKSON2, JACKSON3, FORY, STATE, REBUILT
     }
 
     String name();
@@ -55,26 +45,29 @@ public interface Codec {
     default void init() {
     }
 
-    /** State -> wire bytes. */
     byte[] encode(Object state);
 
-    /** Wire bytes -> state of the given type. */
     <S> S decode(byte[] wire, Class<S> type);
 
     default boolean isControl() {
         return false;
     }
 
-    /** STATE probes retained size; NONE does not. Only meaningful for controls. */
+    /** STATE probes retained size. Only meaningful for controls. */
     default boolean probesSize() {
         return false;
+    }
+
+    /** REBUILT uses TreeMode.REBUILD (RCF-only); everyone else uses SAVE. */
+    default Models.TreeMode treeMode() {
+        return Models.TreeMode.SAVE;
     }
 
     static Codec of(Id id) {
         Codec c;
         switch (id) {
         case PROTOSTUFF:
-            c = new ProtostuffCodec();
+            c = new ProtostuffCodec("Protostuff");
             break;
         case JACKSON2:
             c = new Jackson2Codec();
@@ -88,8 +81,13 @@ public interface Codec {
         case STATE:
             c = new Control("State", true);
             break;
-        case NONE:
-            c = new Control("None", false);
+        case REBUILT:
+            c = new ProtostuffCodec("Rebuilt") {
+                @Override
+                public Models.TreeMode treeMode() {
+                    return Models.TreeMode.REBUILD;
+                }
+            };
             break;
         default:
             throw new IllegalStateException("unknown codec " + id);
@@ -103,11 +101,16 @@ public interface Codec {
  * Protostuff runtime schema per state class; the wire format the serialization
  * module already speaks.
  */
-final class ProtostuffCodec implements Codec {
+class ProtostuffCodec implements Codec {
     private final LinkedBuffer buffer = LinkedBuffer.allocate(512);
+    private final String name;
+
+    ProtostuffCodec(String name) {
+        this.name = name;
+    }
 
     public String name() {
-        return "Protostuff";
+        return name;
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })

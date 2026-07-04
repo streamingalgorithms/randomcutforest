@@ -1,5 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark;
-
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -15,8 +13,11 @@ package org.streamingalgorithms.randomcutforest.benchmark;
  * permissions and limitations under the License.
  */
 
+package org.streamingalgorithms.randomcutforest.benchmark;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.streamingalgorithms.randomcutforest.benchmark.operations.Models.TreeMode.SAVE;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -94,12 +95,12 @@ public class SerializationFidelityTest {
                 continue; // Caster needs shingleSize>1
             }
             Models.Prepared original = Models.prepare(kind, DATASET, CACHE, SEED, SAT); // once
-            Object state = Models.toState(kind, original.model); // pristine
+            Object state = Models.toState(kind, original.model, SAVE); // pristine
             int limit = Math.min(CHECK_TUPLES, original.stream.length);
 
             // Score a FRESH model rebuilt from the pristine state, so neither `state`
             // nor original.model is mutated by baseline generation.
-            Object refModel = Models.toModel(kind, state);
+            Object refModel = Models.toModel(kind, state, SAVE);
             double[] ref = new double[limit];
             long ts = original.clock0;
             for (int i = 0; i < limit; i++) {
@@ -140,11 +141,11 @@ public class SerializationFidelityTest {
         Object rebuilt;
         try {
             if (codec.isControl()) {
-                rebuilt = Models.toModel(model, state); // STATE/NONE: mapper-only round-trip
+                rebuilt = Models.toModel(model, state, SAVE); // STATE/NONE: mapper-only round-trip
             } else {
                 byte[] wire = codec.encode(state);
                 Object decoded = codec.decode(wire, Models.stateClass(model));
-                rebuilt = Models.toModel(model, decoded);
+                rebuilt = Models.toModel(model, decoded, SAVE);
             }
         } catch (RuntimeException e) {
             reportOrFail(pair, "round-trip threw " + e.getClass().getSimpleName() + ": " + e.getMessage());

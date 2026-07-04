@@ -1,5 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark;
-
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -14,6 +12,8 @@ package org.streamingalgorithms.randomcutforest.benchmark;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
+package org.streamingalgorithms.randomcutforest.benchmark;
 
 import java.lang.management.ManagementFactory;
 
@@ -43,6 +43,7 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
  * SerializationFidelityTest, not here.
  * ===========================================================================
  * java -Djdk.attach.allowAttachSelf=true -Djol.magicFieldOffset=true \
+ * -XX:+EnableDynamicAgentLoading
  * -XX:StartFlightRecording=filename=proc.jfr,settings=profile \ -cp
  * benchmark/target/benchmarks.jar \
  * org.streamingalgorithms.randomcutforest.benchmark.SerializationColdMain
@@ -73,17 +74,24 @@ public final class SerializationColdMain {
                         System.out.printf("%n==== CASTER | D1 : SKIPPED (needs shingleSize>1) ====%n");
                         continue; // skip all four caches at once
                     }
+
                     System.out.printf("%n==== %-6s | %s | cache=%.2f | %d dims ====%n", kind, dataset, cache,
                             dataset.effectiveDims());
                     Models.Prepared p = Models.prepare(kind, dataset, cache, SEED);
                     // note model is shared across codecs -- DO NOT MUTATE
                     double forestMb = JolBreakdown.of(kind, p.model).wholeMb;
                     for (Codec.Id id : Codec.Id.values()) {
+                        if (id == Codec.Id.REBUILT && kind != Models.Kind.RCF) {
+                            continue; // REBUILD is RCF-only
+                        }
                         try {
                             m.runCell(kind, dataset, cache, p, forestMb, Codec.of(id));
                         } catch (RuntimeException e) {
-                            System.out.printf("%-6s %-10s : FAILED round-trip (%s)%n", kind, id.name(),
-                                    e.getClass().getSimpleName());
+                            Throwable root = e;
+                            while (root.getCause() != null)
+                                root = root.getCause();
+                            System.out.printf("%-6s %-10s : FAILED round-trip (%s: %s)%n", kind, id.name(),
+                                    root.getClass().getSimpleName(), root.getMessage());
                             continue;
                         }
                     }
@@ -95,7 +103,8 @@ public final class SerializationColdMain {
     private void runCell(Models.Kind kind, Datasets.Id dataset, double cache, Models.Prepared p, double forestMb,
             Codec codec) {
         Class<?> stateClass = Models.stateClass(kind);
-        Object snapshotState = Models.toState(kind, p.model);
+        Models.TreeMode tm = codec.treeMode();
+        Object snapshotState = Models.toState(kind, p.model, tm);
         boolean control = codec.isControl();
         byte[] wire = control ? null : codec.encode(snapshotState);
 
@@ -127,7 +136,7 @@ public final class SerializationColdMain {
             // --- toModel ---
             long mb0 = mem.getThreadAllocatedBytes(tid);
             long mt0 = System.nanoTime();
-            Object model = Models.toModel(kind, state);
+            Object model = Models.toModel(kind, state, tm);
             long mt1 = System.nanoTime();
             long mb1 = mem.getThreadAllocatedBytes(tid);
             if (j >= WARM) {
@@ -148,7 +157,7 @@ public final class SerializationColdMain {
             // --- toState ---
             long sb0 = mem.getThreadAllocatedBytes(tid);
             long st0 = System.nanoTime();
-            Object state2 = Models.toState(kind, model);
+            Object state2 = Models.toState(kind, model, tm);
             long st1 = System.nanoTime();
             long sb1 = mem.getThreadAllocatedBytes(tid);
             if (j >= WARM) {

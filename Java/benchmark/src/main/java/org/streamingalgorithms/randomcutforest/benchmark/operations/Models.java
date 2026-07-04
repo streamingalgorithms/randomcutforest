@@ -1,5 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark.operations;
-
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -14,6 +12,8 @@ package org.streamingalgorithms.randomcutforest.benchmark.operations;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
+package org.streamingalgorithms.randomcutforest.benchmark.operations;
 
 import java.util.EnumMap;
 
@@ -47,13 +47,19 @@ public final class Models {
         RCF, TRCF, CASTER
     }
 
+    public enum TreeMode {
+        SAVE, REBUILD
+    }
+
     private static final int NUMBER_OF_TREES = 50;
     private static final int SAMPLE_SIZE = 256;
     private static final int FORECAST_HORIZON = 3;
 
     // Mappers are effectively stateless; share one configured instance each
     // (single-threaded suites).
-    private static final RandomCutForestMapper RCF_MAPPER = configuredRcfMapper();
+
+    private static final RandomCutForestMapper RCF_SAVE = configuredRcfMapper(true);
+    private static final RandomCutForestMapper RCF_REBUILD = configuredRcfMapper(false);
     private static final ThresholdedRandomCutForestMapper TRCF_MAPPER = new ThresholdedRandomCutForestMapper();
     private static final RCFCasterMapper CASTER_MAPPER = new RCFCasterMapper();
 
@@ -173,10 +179,14 @@ public final class Models {
 
     // ---- serialization bridges (used only by the Serialization suite) ----
 
-    public static Object toState(Kind kind, Object model) {
+    public static Object toState(Kind kind, Object model, TreeMode mode) {
+        if (mode == TreeMode.REBUILD && kind != Kind.RCF) {
+            throw new IllegalArgumentException("REBUILD only supported for RCF");
+        }
+        RandomCutForestMapper rcf = (mode == TreeMode.REBUILD) ? RCF_REBUILD : RCF_SAVE;
         switch (kind) {
         case RCF:
-            return RCF_MAPPER.toState((RandomCutForest) model);
+            return rcf.toState((RandomCutForest) model);
         case TRCF:
             return TRCF_MAPPER.toState((ThresholdedRandomCutForest) model);
         case CASTER:
@@ -186,10 +196,14 @@ public final class Models {
         }
     }
 
-    public static Object toModel(Kind kind, Object state) {
+    public static Object toModel(Kind kind, Object state, TreeMode mode) {
+        if (mode == TreeMode.REBUILD && kind != Kind.RCF) {
+            throw new IllegalArgumentException("REBUILD only supported for RCF");
+        }
+        RandomCutForestMapper rcf = (mode == TreeMode.REBUILD) ? RCF_REBUILD : RCF_SAVE;
         switch (kind) {
         case RCF:
-            return RCF_MAPPER.toModel((RandomCutForestState) state);
+            return rcf.toModel((RandomCutForestState) state);
         case TRCF:
             return TRCF_MAPPER.toModel((ThresholdedRandomCutForestState) state);
         case CASTER:
@@ -212,10 +226,11 @@ public final class Models {
         }
     }
 
-    private static RandomCutForestMapper configuredRcfMapper() {
+    private static RandomCutForestMapper configuredRcfMapper(boolean saveTrees) {
         RandomCutForestMapper m = new RandomCutForestMapper();
         m.setSaveExecutorContextEnabled(true);
-        m.setSaveTreeStateEnabled(true);
+        m.setSaveTreeStateEnabled(saveTrees);
         return m;
     }
+
 }

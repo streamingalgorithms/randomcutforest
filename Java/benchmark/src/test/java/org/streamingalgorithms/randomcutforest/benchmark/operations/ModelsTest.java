@@ -1,5 +1,3 @@
-package org.streamingalgorithms.randomcutforest.benchmark.operations;
-
 /*
  * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
@@ -14,6 +12,8 @@ package org.streamingalgorithms.randomcutforest.benchmark.operations;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
+package org.streamingalgorithms.randomcutforest.benchmark.operations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -93,22 +93,33 @@ public class ModelsTest {
     @ParameterizedTest
     @EnumSource(Models.Kind.class)
     public void mapperRoundTripSmokeOnD2(Models.Kind kind) {
-        // Mapper-only round-trip (no codec): toModel(toState(model)) must yield a model
-        // that
-        // still scores finite. Catches a broken mapper wiring WITHOUT any codec -- if
-        // this
-        // fails, the bug is in Models.toState/toModel, not in any Codec.
+        smoke(kind, Models.TreeMode.SAVE);
+    }
+
+    @Test
+    public void rebuildMapperRoundTripSmokeOnD2_rcfOnly() {
+        // REBUILD is RCF-only and lossy-of-structure: trees are reconstructed from
+        // sampler points, so the forest is NOT point-identical to the original.
+        // Fidelity (score equality) therefore can't cover it -- this is the only
+        // place REBUILD's "rebuilt forest still scores sanely" is asserted.
+        smoke(Models.Kind.RCF, Models.TreeMode.REBUILD);
+    }
+
+    private static void smoke(Models.Kind kind, Models.TreeMode mode) {
         Models.Prepared p = MODELS.get(kind);
-        Object state = Models.toState(kind, p.model);
-        assertNotNull(state, kind + ": toState null");
-        Object rebuilt = Models.toModel(kind, state);
-        assertNotNull(rebuilt, kind + ": toModel null");
+        Object state = Models.toState(kind, p.model, mode);
+        assertNotNull(state, kind + "/" + mode + ": toState null");
+        Object rebuilt = Models.toModel(kind, state, mode);
+        assertNotNull(rebuilt, kind + "/" + mode + ": toModel null");
 
         long ts = p.clock0;
+        double sum = 0;
         for (int i = 0; i < 50; i++) {
             double s = Models.processOne(kind, rebuilt, p.stream[i], ts++);
-            assertTrue(Double.isFinite(s), kind + ": rebuilt model non-finite at " + i);
+            assertTrue(Double.isFinite(s), kind + "/" + mode + ": rebuilt non-finite at " + i);
+            sum += s;
         }
+        assertTrue(sum != 0.0, kind + "/" + mode + ": degenerate (all-zero) rebuilt scores");
     }
 
     @ParameterizedTest
