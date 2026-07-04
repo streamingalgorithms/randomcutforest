@@ -20,8 +20,6 @@ import java.util.TreeMap;
 
 import org.streamingalgorithms.randomcutforest.examples.dynamicinference.DynamicDensity;
 import org.streamingalgorithms.randomcutforest.examples.dynamicinference.DynamicNearNeighbor;
-import org.streamingalgorithms.randomcutforest.examples.serialization.JsonExample;
-import org.streamingalgorithms.randomcutforest.examples.serialization.ProtostuffExample;
 
 public class Main {
 
@@ -37,8 +35,6 @@ public class Main {
     public Main() {
         examples = new TreeMap<>();
         maxCommandLength = 0;
-        add(new JsonExample());
-        add(new ProtostuffExample());
         add(new DynamicDensity());
         add(new DynamicNearNeighbor());
     }

@@ -19,38 +19,23 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
 import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
-import org.streamingalgorithms.randomcutforest.preprocessor.IPreprocessor;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
-import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorMapper;
-import org.streamingalgorithms.randomcutforest.state.preprocessor.PreprocessorState;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class RandomCutForestMapperTest {
 
@@ -250,50 +235,4 @@ public class RandomCutForestMapperTest {
         }
     }
 
-    @ParameterizedTest
-    @EnumSource(V2RCFJsonResource.class)
-    public void testJson(V2RCFJsonResource jsonResource) throws JsonProcessingException {
-        RandomCutForestMapper rcfMapper = new RandomCutForestMapper();
-        String json = getStateFromFile(jsonResource.getResource());
-        assertNotNull(json);
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
-        RandomCutForestState state = mapper.readValue(json, RandomCutForestState.class);
-        RandomCutForest forest = rcfMapper.toModel(state);
-        Random r = new Random(0);
-        for (int i = 0; i < 20000; i++) {
-            double[] point = r.ints(forest.getDimensions(), 0, 50).asDoubleStream().toArray();
-            forest.getAnomalyScore(point);
-            forest.update(point, 0L);
-        }
-        assertNotNull(forest);
-    }
-
-    @ParameterizedTest
-    @EnumSource(V2PreProcessorJsonResource.class)
-    public void testPreprocessorJson(V2PreProcessorJsonResource jsonResource) throws JsonProcessingException {
-        PreprocessorMapper preMapper = new PreprocessorMapper();
-        String json = getStateFromFile(jsonResource.getResource());
-        assertNotNull(json);
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
-        PreprocessorState state = mapper.readValue(json, PreprocessorState.class);
-        IPreprocessor preprocessor = preMapper.toModel(state);
-        assertNotNull(preprocessor);
-    }
-
-    private String getStateFromFile(String resourceFile) {
-        try (InputStream is = RandomCutForestMapperTest.class.getResourceAsStream(resourceFile);
-                BufferedReader rr = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            StringBuilder b = new StringBuilder();
-            String line;
-            while ((line = rr.readLine()) != null) {
-                b.append(line);
-            }
-            return b.toString();
-        } catch (IOException e) {
-            fail("Unable to load resource");
-        }
-        return null;
-    }
 }

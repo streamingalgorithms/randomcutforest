@@ -43,9 +43,6 @@ import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
 import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 public class ThresholdedRandomCutForestMapperTest {
 
     @Test
@@ -171,7 +168,7 @@ public class ThresholdedRandomCutForestMapperTest {
     }
 
     @Test
-    public void testRoundTripStandardShingled() throws JsonProcessingException {
+    public void testRoundTripStandardShingled() {
         int sampleSize = 256;
         int baseDimensions = 2;
         int shingleSize = 4;
@@ -202,11 +199,8 @@ public class ThresholdedRandomCutForestMapperTest {
             forest.update(point);
         }
 
-        ObjectMapper jsonMapper = new ObjectMapper();
         ThresholdedRandomCutForestMapper mapper = new ThresholdedRandomCutForestMapper();
-        String json = jsonMapper.writeValueAsString(mapper.toState(second));
-        ThresholdedRandomCutForest third = mapper
-                .toModel(jsonMapper.readValue(json, ThresholdedRandomCutForestState.class));
+        ThresholdedRandomCutForest third = mapper.toModel(mapper.toState(second));
 
         MultiDimDataWithKey testData = ShingledMultiDimDataWithKeys.generateShingledDataWithKey(100, 50, shingleSize,
                 baseDimensions, seed);
@@ -225,7 +219,7 @@ public class ThresholdedRandomCutForestMapperTest {
     }
 
     @Test
-    public void testRoundTripStandardShingledInternal() throws JsonProcessingException {
+    public void testRoundTripStandardShingledInternal() {
         int sampleSize = 256;
         int baseDimensions = 2;
         int shingleSize = 8;
@@ -263,11 +257,8 @@ public class ThresholdedRandomCutForestMapperTest {
             forest.update(point);
         }
 
-        ObjectMapper jsonMapper = new ObjectMapper();
         ThresholdedRandomCutForestMapper mapper = new ThresholdedRandomCutForestMapper();
-        String json = jsonMapper.writeValueAsString(mapper.toState(second));
-        ThresholdedRandomCutForest third = mapper
-                .toModel(jsonMapper.readValue(json, ThresholdedRandomCutForestState.class));
+        ThresholdedRandomCutForest third = mapper.toModel(mapper.toState(second));
 
         MultiDimDataWithKey testData = ShingledMultiDimDataWithKeys.getMultiDimData(100, 50, 100, 5, seed,
                 baseDimensions);

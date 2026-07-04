@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package org.streamingalgorithms.randomcutforest.parkservices.state;
+package org.streamingalgorithms.randomcutforest.serialize.json.v2;
 
 import lombok.Getter;
 

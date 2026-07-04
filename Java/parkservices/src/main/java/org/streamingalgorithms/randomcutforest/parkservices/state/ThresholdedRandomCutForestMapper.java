@@ -64,6 +64,9 @@ public class ThresholdedRandomCutForestMapper
         RCFComputeDescriptor descriptor;
 
         if (state.getLastDescriptorState() == null) {
+            // do not delete -- useful for backward compatibility
+            // across unknown number of versions
+            // these lines had test coverage before refactor
             descriptor = new RCFComputeDescriptor(null, 0L);
             descriptor.setRCFScore(state.getLastAnomalyScore());
             descriptor.setInternalTimeStamp(state.getLastAnomalyTimeStamp());
@@ -85,6 +88,9 @@ public class ThresholdedRandomCutForestMapper
 
         PredictorCorrector predictorCorrector;
         if (state.getPredictorCorrectorState() == null) {
+            // do not delete -- useful for backward compatibility
+            // across unknown number of versions
+            // these lines had test coverage before refactor
             BasicThresholderMapper thresholderMapper = new BasicThresholderMapper();
             BasicThresholder thresholder = thresholderMapper.toModel(state.getThresholderState());
             predictorCorrector = new PredictorCorrector(thresholder, preprocessor.getInputLength());

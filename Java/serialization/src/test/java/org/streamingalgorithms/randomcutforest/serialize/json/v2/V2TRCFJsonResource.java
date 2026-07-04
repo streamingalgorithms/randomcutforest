@@ -13,18 +13,18 @@
  * permissions and limitations under the License.
  */
 
-package org.streamingalgorithms.randomcutforest.state;
+package org.streamingalgorithms.randomcutforest.serialize.json.v2;
 
 import lombok.Getter;
 
 @Getter
-public enum V2RCFJsonResource {
+public enum V2TRCFJsonResource {
 
-    RCF_1("state_1.json"), RCF_2("state_2.json"), RCF_3("state_2.json");
+    TRCF_1("trcf_state_1.json"), TRCF_2("trcf_state_2.json");
 
     private final String resource;
 
-    V2RCFJsonResource(String resource) {
+    V2TRCFJsonResource(String resource) {
         this.resource = resource;
     }
 }
