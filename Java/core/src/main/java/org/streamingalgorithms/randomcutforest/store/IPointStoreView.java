@@ -31,6 +31,10 @@ public interface IPointStoreView<Point> {
 
     float[] getNumericVector(int index);
 
+    void getNumericVectorInto(int index, float[] pointScratch);
+
+    boolean isEqual(int index, float[] pointScratch);
+
     float[] getInternalShingle();
 
     long getNextSequenceIndex();

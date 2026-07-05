@@ -795,18 +795,46 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
      */
     @Override
     public float[] getNumericVector(int index) {
+        float[] answer = new float[dimensions];
+        getNumericVectorInto(index, answer);
+        return answer;
+    }
+
+    @Override
+    public void getNumericVectorInto(int index, float[] answer) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
+        checkArgument(answer != null && answer.length == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
 
         if (!rotationEnabled) {
-            return Arrays.copyOfRange(store, address, address + dimensions);
+            System.arraycopy(store, address, answer, 0, dimensions);
         } else {
-            float[] answer = new float[dimensions];
+            // clearly every cell
             for (int i = 0; i < dimensions; i++) {
                 answer[(address + i) % dimensions] = store[address + i];
             }
-            return answer;
+        }
+    }
+
+    @Override
+    public boolean isEqual(int index, float[] candidate) {
+        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
+        checkArgument(candidate != null && candidate.length == dimensions, "incorrect array for 0-alloc");
+        int address = getLocation(index);
+        checkFeasible(index);
+
+        if (!rotationEnabled) {
+            return Arrays.equals(store, address, address + dimensions, candidate, 0, dimensions);
+        } else {
+            // clearly every cell
+            for (int i = 0; i < dimensions; i++) {
+                if (candidate[(address + i) % dimensions] != store[address + i]) {
+                    return false;
+                }
+                ;
+            }
+            return true;
         }
     }
 

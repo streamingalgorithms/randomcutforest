@@ -77,6 +77,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected float[] boundingBoxData;
     protected float[] pointSum;
     protected HashMap<Integer, List<Long>> sequenceMap;
+    protected final float[] pointScratch;
 
     protected RandomCutTree(Builder<?> builder) {
         pointStoreView = builder.pointStoreView;
@@ -93,6 +94,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         this.centerOfMassEnabled = builder.centerOfMassEnabled;
         this.root = builder.root;
         leafMass = new HashMap<>();
+        pointScratch = new float[dimension];
         int cache_limit = (int) Math.floor(boundingBoxCacheFraction * (numberOfLeaves - 1));
         rangeSumData = new double[cache_limit];
         boundingBoxData = new float[2 * dimension * cache_limit];
@@ -372,7 +374,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     public void addPointToPartialTree(Integer pointIndex, long sequenceIndex) {
 
         checkArgument(root != Null, " a null root is not a partial tree");
-        float[] point = projectToTree(pointStoreView.getNumericVector(pointIndex));
+
+        // note addition/update/delete are single threaded
+        pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
+        float[] point = projectToTree(pointScratch);
         checkArgument(point.length == dimension, () -> " incorrect projection at index " + pointIndex);
 
         Stack<int[]> pathToRoot = nodeStore.getPath(root, point, false);
@@ -390,14 +395,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             return;
         }
         int leafPointIndex = getPointIndex(leafNode);
-        float[] oldPoint = projectToTree(pointStoreView.getNumericVector(leafPointIndex));
-
-        checkArgument(oldPoint.length == dimension && Arrays.equals(point, oldPoint),
+        checkArgument(pointStoreView.isEqual(leafPointIndex, pointScratch),
                 () -> "incorrect state on adding " + pointIndex);
         increaseLeafMass(leafNode);
         nodeStore.manageInternalNodesPartial(pathToRoot);
         addLeaf(leafPointIndex, sequenceIndex);
-        return;
     }
 
     public Integer deletePoint(Integer pointIndex, long sequenceIndex) {
@@ -967,15 +969,27 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     public float[] projectToTree(float[] point) {
-        return Arrays.copyOf(point, point.length);
+        // there is only one tree in the repo and this defensive copy
+        // is perhaps not required and increasing GC
+        // there is a risk of mutation, but the library is mature
+        return point;
+        // return Arrays.copyOf(point, point.length);
     }
 
     public float[] liftFromTree(float[] result) {
-        return Arrays.copyOf(result, result.length);
+        // there is only one tree in the repo and this defensive copy
+        // is perhaps not required and increasing GC
+        // there is a risk of mutation, but the library is mature
+        return result;
+        // return Arrays.copyOf(result, result.length);
     }
 
     public double[] liftFromTree(double[] result) {
-        return Arrays.copyOf(result, result.length);
+        // there is only one tree in the repo and this defensive copy
+        // is perhaps not required and increasing GC
+        // there is a risk of mutation, but the library is mature
+        return result;
+        // return Arrays.copyOf(result, result.length);
     }
 
     public int[] projectMissingIndices(int[] list) {
