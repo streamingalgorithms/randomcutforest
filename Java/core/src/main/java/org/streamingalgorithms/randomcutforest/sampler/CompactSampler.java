@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+
 /**
  * <p>
  * CompactSampler is an implementation of time-based reservoir sampling. When a
@@ -335,6 +337,27 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
             long tmpLong = sequenceIndex[a];
             sequenceIndex[a] = sequenceIndex[b];
             sequenceIndex[b] = tmpLong;
+        }
+    }
+
+    // saved-tree path: topology exists, replay restores it via partial-tree add (no
+    // boxing)
+    public void replayInto(RandomCutTree tree) {
+        reset_weights(); // keep whatever getSample's contract needs
+        for (int i = 0; i < size; i++) {
+            long seq = (sequenceIndex != null) ? sequenceIndex[i] : SEQUENCE_INDEX_NA;
+            tree.addPointToPartialTree(pointIndex[i], seq);
+        }
+    }
+
+    // not-saved path: fresh empty tree, build node-by-node via full add (handles
+    // null root, makes its own random cuts).
+    // The weight isn't read; addPoint takes (index, seq).
+    public void rebuildInto(RandomCutTree tree) {
+        reset_weights();
+        for (int i = 0; i < size; i++) {
+            long seq = (sequenceIndex != null) ? sequenceIndex[i] : SEQUENCE_INDEX_NA;
+            tree.addPoint(pointIndex[i], seq);
         }
     }
 

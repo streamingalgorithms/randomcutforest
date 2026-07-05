@@ -159,6 +159,11 @@ public class NodeStoreMedium extends AbstractNodeStore {
         // mass of root == 0; note capacity = number_of_leaves - 1
     }
 
+    @Override
+    protected void setMassOfInternalNode(int node, int value) {
+        mass[node] = (char) (value % (capacity + 1));
+    }
+
     public void deleteInternalNode(int index) {
         leftIndex[index] = capacity;
         rightIndex[index] = capacity;

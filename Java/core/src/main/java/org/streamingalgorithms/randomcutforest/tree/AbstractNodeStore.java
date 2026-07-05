@@ -85,6 +85,8 @@ public abstract class AbstractNodeStore {
 
     protected abstract void increaseMassOfInternalNode(int node);
 
+    protected abstract void setMassOfInternalNode(int node, int value);
+
     protected void manageInternalNodesPartial(Stack<int[]> path) {
         while (!path.isEmpty()) {
             int index = path.pop()[0];

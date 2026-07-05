@@ -142,6 +142,11 @@ public class NodeStoreLarge extends AbstractNodeStore {
         mass[node] = (mass[node] + 1) % (capacity + 1);
     }
 
+    @Override
+    protected void setMassOfInternalNode(int node, int value) {
+        mass[node] = value % (capacity + 1);
+    }
+
     public void deleteInternalNode(int index) {
         leftIndex[index] = capacity;
         rightIndex[index] = capacity;

@@ -38,6 +38,8 @@ import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+
 /**
  * A Compact Random Cut Tree is a tree data structure whose leaves represent
  * points inserted into the tree and whose interior nodes represent regions of
@@ -72,7 +74,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected double boundingBoxCacheFraction;
     protected int outputAfter;
     protected int dimension;
-    protected final HashMap<Integer, Integer> leafMass;
+    protected final Int2IntOpenHashMap leafMass;
     protected double[] rangeSumData;
     protected float[] boundingBoxData;
     protected float[] pointSum;
@@ -93,17 +95,16 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         this.storeSequenceIndexesEnabled = builder.storeSequenceIndexesEnabled;
         this.centerOfMassEnabled = builder.centerOfMassEnabled;
         this.root = builder.root;
-        leafMass = new HashMap<>();
+        leafMass = new Int2IntOpenHashMap();
+        leafMass.defaultReturnValue(0);
         pointScratch = new float[dimension];
-        int cache_limit = (int) Math.floor(boundingBoxCacheFraction * (numberOfLeaves - 1));
-        rangeSumData = new double[cache_limit];
-        boundingBoxData = new float[2 * dimension * cache_limit];
         if (this.centerOfMassEnabled) {
             pointSum = new float[(numberOfLeaves - 1) * dimension];
         }
         if (this.storeSequenceIndexesEnabled) {
             sequenceMap = new HashMap<>();
         }
+        resizeCache(boundingBoxCacheFraction);
     }
 
     @Override
@@ -389,7 +390,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 root = convertToLeaf(pointIndex);
             } else {
                 nodeStore.assignInPartialTree(savedParent, point, convertToLeaf(pointIndex));
-                nodeStore.manageInternalNodesPartial(pathToRoot);
+                // nodeStore.manageInternalNodesPartial(pathToRoot);
+                // we can do this one-shot in the validateAndReconstruct
                 addLeaf(pointIndex, sequenceIndex);
             }
             return;
@@ -398,7 +400,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         checkArgument(pointStoreView.isEqual(leafPointIndex, pointScratch),
                 () -> "incorrect state on adding " + pointIndex);
         increaseLeafMass(leafNode);
-        nodeStore.manageInternalNodesPartial(pathToRoot);
+        // nodeStore.manageInternalNodesPartial(pathToRoot);
         addLeaf(leafPointIndex, sequenceIndex);
     }
 
@@ -510,19 +512,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     protected int getLeafMass(int index) {
         int y = (index - numberOfLeaves);
-        Integer value = leafMass.get(y);
-        return (value != null) ? value + 1 : 1;
+        int value = leafMass.get(y);
+        return (value != 0) ? value + 1 : 1;
     }
 
     protected void increaseLeafMass(int index) {
         int y = (index - numberOfLeaves);
-        leafMass.merge(y, 1, Integer::sum);
+        leafMass.addTo(y, 1);
     }
 
     protected int decreaseLeafMass(int index) {
         int y = (index - numberOfLeaves);
-        Integer value = leafMass.remove(y);
-        if (value != null) {
+        int value = leafMass.remove(y);
+        if (value != 0) {
             if (value > 1) {
                 leafMass.put(y, (value - 1));
                 return value;
@@ -785,7 +787,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     public void validateAndReconstruct() {
         if (root != Null) {
-            validateAndReconstruct(root);
+            validateAndReconstruct(root, true, true);
         }
     }
 
@@ -797,15 +799,21 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * @param index the node of a tree
      * @return a bounding box of the points
      */
-    public BoundingBox validateAndReconstruct(int index) {
+    public BoundingBox validateAndReconstruct(int index, boolean retainBoxes, boolean rebuildMass) {
+        if (index == Null) {
+            return null;
+        }
+
         if (isLeaf(index)) {
-            return getBox(index);
+            return (retainBoxes) ? null : getBox(index);
         } else {
             checkState(isInternal(index), "illegal state");
-            BoundingBox leftBox = validateAndReconstruct(getLeftChild(index));
-            BoundingBox rightBox = validateAndReconstruct(getRightChild(index));
-            if (leftBox.maxValues[getCutDimension(index)] > getCutValue(index)
-                    || rightBox.minValues[getCutDimension(index)] <= getCutValue(index)) {
+            int left = getLeftChild(index);
+            int right = getRightChild(index);
+            BoundingBox leftBox = validateAndReconstruct(left, retainBoxes, rebuildMass);
+            BoundingBox rightBox = validateAndReconstruct(right, retainBoxes, rebuildMass);
+            if (retainBoxes && (leftBox.getMaxValue(getCutDimension(index)) > getCutValue(index)
+                    || rightBox.getMinValue(getCutDimension(index)) <= getCutValue(index))) {
                 throw new IllegalStateException(" incorrect bounding state at index " + index + " cut value "
                         + getCutValue(index) + "cut dimension " + getCutDimension(index) + " left Box "
                         + leftBox.toString() + " right box " + rightBox.toString());
@@ -813,12 +821,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             if (centerOfMassEnabled) {
                 recomputePointSum(index);
             }
-            rightBox.addBox(leftBox);
-            int idx = translate(index);
-            if (idx != Integer.MAX_VALUE) { // always add irrespective of rangesum
-                copyBoxToData(idx, rightBox);
+            if (rebuildMass) {
+                // post-order fold: same pass, no extra traversal, no up-the-path replay
+                nodeStore.setMassOfInternalNode(index, getMass(left) + getMass(right));
             }
-            return rightBox;
+            if (retainBoxes) {
+                rightBox.addBox(leftBox);
+                int idx = translate(index);
+                if (idx != Integer.MAX_VALUE) { // always add irrespective of rangesum
+                    copyBoxToData(idx, rightBox);
+                }
+                return rightBox;
+            }
+            return null;
         }
     }
 

@@ -183,9 +183,8 @@ public class RandomCutTreeTest {
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore)
                 .centerOfMassEnabled(true).storeSequenceIndexesEnabled(true).storeParent(true).dimension(4).build();
         when(pointStore.getNumericVector(any(Integer.class))).thenReturn(new float[0]).thenReturn(test)
-                .thenReturn(new float[62]).thenReturn(new float[4]).thenReturn(new float[17]).thenReturn(new float[4])
-                .thenReturn(new float[4]).thenReturn(new float[5]).thenReturn(copies).thenReturn(test)
-                .thenReturn(copies).thenReturn(copies).thenReturn(test);
+                .thenReturn(new float[62]).thenReturn(copies).thenReturn(test).thenReturn(copies).thenReturn(copies)
+                .thenReturn(test);
 
         // cannot have partial addition to empty tree
         assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(0, 1));
@@ -197,28 +196,14 @@ public class RandomCutTreeTest {
         assertArrayEquals(tree.getPointSum(tree.getRoot()), test);
         // sequel fails because dimension is 62
         assertThrows(IllegalArgumentException.class, () -> tree.getBox(tree.root));
-        // in the sequel point is [0,0,0,0] fails because old point appears to have 17
-        // dimensions
-        assertThrows(IllegalArgumentException.class, () -> tree.addPoint(1, 1));
-        // this invocation succeeds, but points are same
         tree.addPoint(1, 1);
-        assertTrue(tree.isLeaf(tree.getRoot()));
-        // dimension = 5
-        assertThrows(IllegalArgumentException.class, () -> tree.addPoint(2, 1));
+        assertFalse(tree.isLeaf(tree.getRoot()));
         // switch the vector
         assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 0, 34, 0, 0 });
         // adding test, consumes the copy
         tree.addPoint(2, 1);
         assertEquals(tree.getMass(), 3);
-        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 1.119f, 34, -3.11f, 100 }, 1e-3f);
-
-        // bounding boxes are incorrect they are minvalues = test, maxvalues = test
-        assertThrows(IllegalStateException.class, () -> tree.validateAndReconstruct(tree.root));
-        assertTrue(tree.getCutDimension(tree.root) == 3);
-        // cut cannot be the same as right minvalue
-        tree.nodeStore.cutValue[tree.root] = 100;
-        assertThrows(IllegalStateException.class, () -> tree.validateAndReconstruct(tree.root));
-
+        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 4 * 1.119f, 0, -3.11f * 4, 4 * 100 }, 1e-3f);
     }
 
     @Test

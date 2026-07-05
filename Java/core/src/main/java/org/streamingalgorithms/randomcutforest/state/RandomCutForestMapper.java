@@ -27,12 +27,10 @@ import java.util.stream.Collectors;
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
 import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
-import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.state.sampler.CompactSamplerMapper;
 import org.streamingalgorithms.randomcutforest.state.sampler.CompactSamplerState;
 import org.streamingalgorithms.randomcutforest.state.store.PointStoreMapper;
@@ -243,21 +241,20 @@ public class RandomCutForestMapper
         checkArgument(state.isSaveSamplerStateEnabled(), "samplers are not saved; no forest to reconstruct");
         List<CompactSamplerState> samplerStates = state.getCompactSamplerStates();
         for (int i = 0; i < state.getNumberOfTrees(); i++) {
-            IStreamSampler<Integer> sampler = samplerMapper.toModel(samplerStates.get(i), random.nextLong());
+            CompactSampler sampler = samplerMapper.toModel(samplerStates.get(i), random.nextLong());
 
-            ITree<Integer, float[]> tree;
+            RandomCutTree tree;
             if (treeStates != null) {
                 tree = treeMapper.toModel(treeStates.get(i), context, random.nextLong());
-                sampler.getSample().forEach(s -> tree.addPointToPartialTree(s.getValue(), s.getSequenceIndex()));
-                tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, treeStates.get(i).getBoundingBoxCacheFraction());
-                tree.validateAndReconstruct();
+                sampler.replayInto(tree);
+                tree.validateAndReconstruct(tree.getRoot(), false, true);
             } else {
                 // using boundingBoxCache for the new tree
                 tree = new RandomCutTree.Builder().capacity(state.getSampleSize()).randomSeed(random.nextLong())
                         .pointStoreView(pointStore).boundingBoxCacheFraction(state.getBoundingBoxCacheFraction())
                         .centerOfMassEnabled(state.isCenterOfMassEnabled())
                         .storeSequenceIndexesEnabled(state.isStoreSequenceIndexesEnabled()).build();
-                sampler.getSample().forEach(s -> tree.addPoint(s.getValue(), s.getSequenceIndex()));
+                sampler.rebuildInto(tree);
             }
             components.add(new SamplerPlusTree<>(sampler, tree));
         }
