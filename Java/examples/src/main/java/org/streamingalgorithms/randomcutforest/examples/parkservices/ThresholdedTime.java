@@ -18,12 +18,11 @@ package org.streamingalgorithms.randomcutforest.examples.parkservices;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
-import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
-import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
-import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 public class ThresholdedTime implements Example {
 
@@ -48,7 +47,6 @@ public class ThresholdedTime implements Example {
         int shingleSize = 4;
         int numberOfTrees = 50;
         int sampleSize = 256;
-        Precision precision = Precision.FLOAT_32;
         int dataSize = 4 * sampleSize;
 
         // change this to try different number of attributes,
@@ -58,18 +56,18 @@ public class ThresholdedTime implements Example {
         int count = 0;
 
         int dimensions = baseDimensions * shingleSize;
-        ThresholdedRandomCutForest forest = new ThresholdedRandomCutForest.Builder<>().compact(true)
-                .dimensions(dimensions).randomSeed(0).numberOfTrees(numberOfTrees).shingleSize(shingleSize)
-                .sampleSize(sampleSize).internalShinglingEnabled(true).precision(precision).anomalyRate(0.01)
-                .forestMode(ForestMode.TIME_AUGMENTED).normalizeTime(true).build();
+        ThresholdedRandomCutForest forest = new ThresholdedRandomCutForest.Builder<>().dimensions(dimensions)
+                .randomSeed(0).numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
+                .internalShinglingEnabled(true).anomalyRate(0.01).forestMode(ForestMode.TIME_AUGMENTED)
+                .normalizeTime(true).build();
 
         long seed = new Random().nextLong();
 
         double[] data = new double[] { 1.0 };
 
         System.out.println("seed = " + seed);
-        NormalMixtureTestData normalMixtureTestData = new NormalMixtureTestData(10, 50);
-        MultiDimDataWithKey dataWithKeys = normalMixtureTestData.generateTestDataWithKey(dataSize, 1, 0);
+        NormalMixture normalMixtureTestData = new NormalMixture(10, 50);
+        MultiDimData dataWithKeys = normalMixtureTestData.generateData(dataSize, 1, 0);
 
         /**
          * the anomalies will move from normal -> anomalous -> normal starts from normal
@@ -77,7 +75,7 @@ public class ThresholdedTime implements Example {
         boolean anomalyState = false;
 
         int keyCounter = 0;
-        for (double[] point : dataWithKeys.data) {
+        for (float[] point : dataWithKeys.data) {
 
             long time = (long) (1000L * count + Math.floor(10 * point[0]));
             AnomalyDescriptor result = forest.process(data, time);

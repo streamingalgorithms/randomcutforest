@@ -19,9 +19,8 @@ import java.time.Duration;
 import java.time.Instant;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.examples.Example;
-import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 
 public class DynamicThroughput implements Example {
 
@@ -46,24 +45,23 @@ public class DynamicThroughput implements Example {
         int dimensions = 4;
         int numberOfTrees = 50;
         int sampleSize = 256;
-        Precision precision = Precision.FLOAT_64;
         int dataSize = 10 * sampleSize;
-        NormalMixtureTestData testData = new NormalMixtureTestData();
+        NormalMixture data = new NormalMixture();
         // generate data once to eliminate caching issues
-        testData.generateTestData(dataSize, dimensions);
-        testData.generateTestData(sampleSize, dimensions);
+        data.generateData(dataSize, dimensions, 0);
+        data.generateData(sampleSize, dimensions, 0);
 
         for (int i = 0; i < 5; i++) {
 
-            RandomCutForest forest = RandomCutForest.builder().compact(true).dimensions(dimensions).randomSeed(0)
-                    .numberOfTrees(numberOfTrees).sampleSize(sampleSize).precision(precision).build();
-            RandomCutForest forest2 = RandomCutForest.builder().compact(true).dimensions(dimensions).randomSeed(0)
-                    .numberOfTrees(numberOfTrees).sampleSize(sampleSize).precision(precision).build();
+            RandomCutForest forest = RandomCutForest.builder().dimensions(dimensions).randomSeed(0)
+                    .numberOfTrees(numberOfTrees).sampleSize(sampleSize).build();
+            RandomCutForest forest2 = RandomCutForest.builder().dimensions(dimensions).randomSeed(0)
+                    .numberOfTrees(numberOfTrees).sampleSize(sampleSize).build();
             forest2.setBoundingBoxCacheFraction(i * 0.25);
 
             int anomalies = 0;
 
-            for (double[] point : testData.generateTestData(dataSize, dimensions)) {
+            for (var point : data.generateData(dataSize, dimensions, 0).data) {
                 double score = forest.getAnomalyScore(point);
                 double score2 = forest2.getAnomalyScore(point);
 
@@ -76,7 +74,7 @@ public class DynamicThroughput implements Example {
 
             Instant start = Instant.now();
 
-            for (double[] point : testData.generateTestData(sampleSize, dimensions)) {
+            for (float[] point : data.generateData(sampleSize, dimensions, 0).data) {
                 double score = forest.getAnomalyScore(point);
                 double score2 = forest2.getAnomalyScore(point);
 

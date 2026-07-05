@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
  * You may not use this file except in compliance with the License.
@@ -13,35 +13,35 @@
  * permissions and limitations under the License.
  */
 
-package org.streamingalgorithms.randomcutforest.examples.parkservices;
+package org.streamingalgorithms.randomcutforest.examples;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
 
 import java.util.Arrays;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
-import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
-import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
-import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
-public class ScoringStrategyExample implements Example {
+public class MultiModalExample implements Example {
 
     public static void main(String[] args) throws Exception {
-        new ScoringStrategyExample().run();
+        new MultiModalExample().run();
     }
 
     @Override
     public String command() {
-        return "Scoring_strategy_example";
+        return "multimodal_example";
     }
 
     @Override
     public String description() {
-        return "Scoring Strategy Example";
+        return "MultiModal Analysis Example";
     }
 
     @Override
@@ -61,30 +61,30 @@ public class ScoringStrategyExample implements Example {
         long count = 0;
         int dimensions = baseDimensions * shingleSize;
         TransformMethod transformMethod = TransformMethod.NORMALIZE;
-        ThresholdedRandomCutForest forest = ThresholdedRandomCutForest.builder().compact(true).dimensions(dimensions)
-                .randomSeed(seed).numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
+        ThresholdedRandomCutForest forest = ThresholdedRandomCutForest.builder().dimensions(dimensions).randomSeed(seed)
+                .numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
                 .internalShinglingEnabled(true).scoringStrategy(ScoringStrategy.EXPECTED_INVERSE_DEPTH)
                 .transformMethod(transformMethod).outputAfter(32).initialAcceptFraction(0.125).build();
-        ThresholdedRandomCutForest second = ThresholdedRandomCutForest.builder().compact(true).dimensions(dimensions)
-                .randomSeed(seed).numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
+        ThresholdedRandomCutForest second = ThresholdedRandomCutForest.builder().dimensions(dimensions).randomSeed(seed)
+                .numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
                 .internalShinglingEnabled(true).scoringStrategy(ScoringStrategy.MULTI_MODE)
                 .transformMethod(transformMethod).outputAfter(32).initialAcceptFraction(0.125).build();
-        ThresholdedRandomCutForest third = ThresholdedRandomCutForest.builder().compact(true).dimensions(dimensions)
-                .randomSeed(seed).numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
+        ThresholdedRandomCutForest third = ThresholdedRandomCutForest.builder().dimensions(dimensions).randomSeed(seed)
+                .numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
                 .internalShinglingEnabled(true).scoringStrategy(ScoringStrategy.MULTI_MODE_RECALL)
                 .transformMethod(transformMethod).outputAfter(32).initialAcceptFraction(0.125).build();
 
         System.out.println("seed = " + seed);
         // change the last argument seed for a different run
-        MultiDimDataWithKey dataWithKeys = ShingledMultiDimDataWithKeys.getMultiDimData(dataSize + shingleSize - 1, 50,
-                100, 5, seed, baseDimensions);
+        MultiDimData dataWithKeys = multiDimData(dataSize + shingleSize - 1, 50, 100, 5, seed, baseDimensions, 0.01,
+                true);
 
         int keyCounter = 0;
-        for (double[] point : dataWithKeys.data) {
+        for (float[] point : dataWithKeys.data) {
 
-            AnomalyDescriptor result = forest.process(point, 0L);
-            AnomalyDescriptor multi_mode = second.process(point, 0L);
-            AnomalyDescriptor multi_mode_recall = third.process(point, 0L);
+            AnomalyDescriptor result = forest.process(toDoubleArray(point), 0L);
+            AnomalyDescriptor multi_mode = second.process(toDoubleArray(point), 0L);
+            AnomalyDescriptor multi_mode_recall = third.process(toDoubleArray(point), 0L);
 
             checkArgument(Math.abs(result.getRCFScore() - multi_mode.getRCFScore()) < 1e-10, " error");
             checkArgument(Math.abs(result.getRCFScore() - multi_mode_recall.getRCFScore()) < 1e-10, " error");

@@ -15,16 +15,18 @@
 
 package org.streamingalgorithms.randomcutforest.examples.parkservices;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
+
 import java.util.Arrays;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
 import org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode;
-import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
-import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 public class ThresholdedMultiDimensionalExample implements Example {
 
@@ -119,13 +121,13 @@ public class ThresholdedMultiDimensionalExample implements Example {
         boolean verboseSupression = true;
 
         // change the last argument seed for a different run
-        MultiDimDataWithKey dataWithKeys = ShingledMultiDimDataWithKeys.getMultiDimData(dataSize + shingleSize - 1, 24,
-                amplitude, noise, seed, baseDimensions, anomalyFactor, useSlope);
+        MultiDimData dataWithKeys = multiDimData(dataSize + shingleSize - 1, 24, amplitude, noise, seed, baseDimensions,
+                anomalyFactor, useSlope);
         int keyCounter = 0;
         int count = 0;
-        for (double[] point : dataWithKeys.data) {
+        for (float[] point : dataWithKeys.data) {
 
-            AnomalyDescriptor result = forest.process(point, 0L);
+            AnomalyDescriptor result = forest.process(toDoubleArray(point), 0L);
 
             if (keyCounter < dataWithKeys.changeIndices.length && count == dataWithKeys.changeIndices[keyCounter]) {
                 System.out.println(

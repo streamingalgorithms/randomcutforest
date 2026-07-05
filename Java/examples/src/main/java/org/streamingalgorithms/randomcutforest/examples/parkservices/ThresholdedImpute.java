@@ -15,6 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.examples.parkservices;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
+
 import java.util.Arrays;
 import java.util.Random;
 
@@ -23,10 +26,9 @@ import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
-import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
-import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys;
 
 public class ThresholdedImpute implements Example {
 
@@ -70,8 +72,8 @@ public class ThresholdedImpute implements Example {
         Random noisePRG = new Random(0);
 
         System.out.println("seed = " + seed);
-        MultiDimDataWithKey dataWithKeys = ShingledMultiDimDataWithKeys.getMultiDimData(dataSize + shingleSize - 1, 50,
-                100, 5, seed, baseDimensions);
+        MultiDimData dataWithKeys = multiDimData(dataSize + shingleSize - 1, 50, 100, 5, seed, baseDimensions, 0.01,
+                false);
 
         // as we loop over the data we will be dropping observations with probability
         // 0.2
@@ -83,7 +85,7 @@ public class ThresholdedImpute implements Example {
         // dropped.
 
         int keyCounter = 0;
-        for (double[] point : dataWithKeys.data) {
+        for (float[] point : dataWithKeys.data) {
 
             if (noisePRG.nextDouble() < 0.2 && !((keyCounter < dataWithKeys.changeIndices.length
                     && count == dataWithKeys.changeIndices[keyCounter]))) {
@@ -94,7 +96,7 @@ public class ThresholdedImpute implements Example {
                 }
             } else {
                 long newStamp = 100 * count + 2 * noisePRG.nextInt(10) - 5;
-                AnomalyDescriptor result = forest.process(point, newStamp);
+                AnomalyDescriptor result = forest.process(toDoubleArray(point), newStamp);
 
                 if (keyCounter < dataWithKeys.changeIndices.length && count == dataWithKeys.changeIndices[keyCounter]) {
                     System.out.println("sequence " + (count) + " INPUT " + Arrays.toString(point) + " CHANGE "

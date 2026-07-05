@@ -1,18 +1,3 @@
-/*
- * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License").
- * You may not use this file except in compliance with the License.
- * A copy of the License is located at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
- */
-
 package org.streamingalgorithms.randomcutforest.examples.summarization;
 
 import static java.lang.Math.min;
@@ -33,34 +18,34 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * occurs with probability 2/3 and anothewr where it occurs with probability 1/3
  * (and the character B or '_' occurs with probability 2/3)
  *
- * Clearly, and the following example makes it visual, multicentroid approach is
- * necessary.
+ * Clearly multicentroid approach is necessary.
  *
- * All the strings do not have the same length. Note that the summarization is
- * asked with a maximum of 10 clusters but the algorithm self-adjusts to 2
- * clusters.
  */
-public class RCFStringSummarizeExample implements Example {
+/*
+ * mvn -pl examples -am install -DskipTests java --add-modules
+ * jdk.incubator.vector -jar examples/target/*-jar-with-dependencies.jar
+ * string_summarize
+ */
+public class StringSummarization implements Example {
 
     public static void main(String[] args) throws Exception {
-        new org.streamingalgorithms.randomcutforest.examples.summarization.RCFStringSummarizeExample().run();
+        new StringSummarization().run();
     }
 
     @Override
     public String command() {
-        return "RCF_String_Summarize_Example";
+        return "string_summarize";
     }
 
     @Override
     public String description() {
-        return "Example of using RCF String Summarization, uses multi-centroid approach";
+        return "Example of string summarization using multi-centroid approach";
     }
 
     @Override
     public void run() throws Exception {
 
-        long seed = -8436172895711381300L;
-        new Random().nextLong();
+        long seed = new Random().nextLong();
         System.out.println("String summarization seed : " + seed);
         Random random = new Random(seed);
         int size = 100;
@@ -77,7 +62,7 @@ public class RCFStringSummarizeExample implements Example {
 
         int nextSeed = random.nextInt();
         List<ICluster<String>> summary = Summarizer.multiSummarize(points, 5, 10, 1, false, 0.8,
-                RCFStringSummarizeExample::toyDistance, nextSeed, true, 0.1, 5);
+                StringSummarization::toyDistance, nextSeed, true, 0.1, 5);
         System.out.println();
         for (int i = 0; i < summary.size(); i++) {
             double weight = summary.get(i).getWeight();
@@ -119,20 +104,24 @@ public class RCFStringSummarizeExample implements Example {
         return dist[1][b.length()];
     }
 
-    // colors
     public static final String ANSI_RESET = "\u001B[0m";
-    public static final String ANSI_RED = "\u001B[31m";
-    public static final String ANSI_BLUE = "\u001B[34m";
+    public static final String BG_RED = "\u001B[41m"; // red background
+    public static final String BG_BLUE = "\u001B[44m"; // blue background
 
     public static void printString(String a) {
+        StringBuilder sb = new StringBuilder();
+        char prev = 0;
         for (int i = 0; i < a.length(); i++) {
-            if (a.charAt(i) == '-') {
-                System.out.print(ANSI_RED + a.charAt(i) + ANSI_RESET);
-            } else {
-                System.out.print(ANSI_BLUE + a.charAt(i) + ANSI_RESET);
+            char c = a.charAt(i);
+            String bg = (c == '-') ? BG_RED : BG_BLUE;
+            if (c != prev) { // only emit a code when the run flips
+                sb.append(bg);
+                prev = c;
             }
+            sb.append(' '); // space fills the whole cell -> continuous
         }
-
+        sb.append(ANSI_RESET);
+        System.out.print(sb);
     }
 
     public String getABString(int size, double probabilityOfA, Random random) {
@@ -147,5 +136,4 @@ public class RCFStringSummarizeExample implements Example {
         }
         return stringBuilder.toString();
     }
-
 }

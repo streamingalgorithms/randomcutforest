@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package org.streamingalgorithms.randomcutforest.examples.dynamicinference;
+package org.streamingalgorithms.randomcutforest.examples;
 
 import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
@@ -25,14 +25,14 @@ import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.PredictiveRandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
-import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 
-public class ConditionalPredictive implements Example {
+public class ConditionalPredictiveExample implements Example {
 
     public static void main(String[] args) throws Exception {
-        new ConditionalPredictive().run();
+        new ConditionalPredictiveExample().run();
     }
 
     @Override
@@ -65,7 +65,7 @@ public class ConditionalPredictive implements Example {
         new Random().nextLong();
 
         System.out.println("seed = " + seed);
-        NormalDistribution normal = new NormalDistribution(new Random(seed));
+        NormalMixture.NormalDistribution normal = new NormalMixture.NormalDistribution(new Random(seed));
         Random random = new Random(seed + 10);
 
         String name = "predictive_example";
@@ -121,7 +121,7 @@ public class ConditionalPredictive implements Example {
         return record;
     }
 
-    void fillInValues(float[] record, Random random, NormalDistribution normal) {
+    void fillInValues(float[] record, Random random, NormalMixture.NormalDistribution normal) {
         if (record[0] < 0.5) {
             double next = random.nextDouble();
             record[3] = (float) ((next < 0.5) ? normal.nextDouble(20, 5) : normal.nextDouble(40, 5));
@@ -141,38 +141,6 @@ public class ConditionalPredictive implements Example {
                     record[4] = (float) ((next < 0.7) ? normal.nextDouble(-10, 3) : normal.nextDouble(-30, 5));
                 }
             }
-        }
-    }
-
-    static class NormalDistribution {
-        private final Random rng;
-        private final double[] buffer;
-        private int index;
-
-        NormalDistribution(Random rng) {
-            this.rng = rng;
-            buffer = new double[2];
-            index = 0;
-        }
-
-        double nextDouble() {
-            if (index == 0) {
-                // apply the Box-Muller transform to produce Normal variates
-                double u = rng.nextDouble();
-                double v = rng.nextDouble();
-                double r = Math.sqrt(-2 * Math.log(u));
-                buffer[0] = r * Math.cos(2 * Math.PI * v);
-                buffer[1] = r * Math.sin(2 * Math.PI * v);
-            }
-
-            double result = buffer[index];
-            index = (index + 1) % 2;
-
-            return result;
-        }
-
-        double nextDouble(double mu, double sigma) {
-            return mu + sigma * nextDouble();
         }
     }
 }

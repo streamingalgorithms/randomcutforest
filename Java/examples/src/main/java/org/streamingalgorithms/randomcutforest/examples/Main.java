@@ -18,12 +18,16 @@ package org.streamingalgorithms.randomcutforest.examples;
 import java.util.Map;
 import java.util.TreeMap;
 
-import org.streamingalgorithms.randomcutforest.examples.dynamicinference.DynamicDensity;
-import org.streamingalgorithms.randomcutforest.examples.dynamicinference.DynamicNearNeighbor;
+import org.streamingalgorithms.randomcutforest.examples.parkservices.ThresholdedMultiDimensionalExample;
+import org.streamingalgorithms.randomcutforest.examples.summarization.CentroidSummarize;
+import org.streamingalgorithms.randomcutforest.examples.summarization.MultiSummarize;
+import org.streamingalgorithms.randomcutforest.examples.summarization.StringSummarization;
+import org.streamingalgorithms.randomcutforest.examples.summarization.Summarization;
 
 public class Main {
 
-    public static final String ARCHIVE_NAME = "randomcutforest-examples-1.0.jar";
+    public static final String ARCHIVE_NAME = new java.io.File(
+            Main.class.getProtectionDomain().getCodeSource().getLocation().getPath()).getName();
 
     public static void main(String[] args) throws Exception {
         new Main().run(args);
@@ -34,9 +38,17 @@ public class Main {
 
     public Main() {
         examples = new TreeMap<>();
-        maxCommandLength = 0;
-        add(new DynamicDensity());
-        add(new DynamicNearNeighbor());
+        maxCommandLength = 20;
+        add(new DensityExample());
+        add(new NearNeighborExample());
+        add(new RCFCastExample());
+        add(new ConditionalPredictiveExample());
+        add(new MultiSummarize());
+        add(new Summarization());
+        add(new CentroidSummarize());
+        add(new StringSummarization());
+        add(new MultiModalExample());
+        add(new ThresholdedMultiDimensionalExample());
     }
 
     private void add(Example example) {

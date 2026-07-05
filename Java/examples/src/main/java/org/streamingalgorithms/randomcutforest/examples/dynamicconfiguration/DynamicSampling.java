@@ -16,10 +16,9 @@
 package org.streamingalgorithms.randomcutforest.examples.dynamicconfiguration;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
-import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 public class DynamicSampling implements Example {
 
@@ -44,20 +43,20 @@ public class DynamicSampling implements Example {
         int dimensions = 4;
         int numberOfTrees = 50;
         int sampleSize = 256;
-        Precision precision = Precision.FLOAT_64;
         int dataSize = 4 * sampleSize;
-        NormalMixtureTestData testData = new NormalMixtureTestData();
+        NormalMixture data = new NormalMixture();
 
-        RandomCutForest forest = RandomCutForest.builder().compact(true).dimensions(dimensions).randomSeed(0)
-                .numberOfTrees(numberOfTrees).sampleSize(sampleSize).precision(precision).build();
-        RandomCutForest forest2 = RandomCutForest.builder().compact(true).dimensions(dimensions).randomSeed(0)
-                .numberOfTrees(numberOfTrees).sampleSize(sampleSize).precision(precision).build();
+        RandomCutForest forest = RandomCutForest.builder().dimensions(dimensions).randomSeed(0)
+                .numberOfTrees(numberOfTrees).sampleSize(sampleSize).build();
+        RandomCutForest forest2 = RandomCutForest.builder().dimensions(dimensions).randomSeed(0)
+                .numberOfTrees(numberOfTrees).sampleSize(sampleSize).build();
 
         int first_anomalies = 0;
         int second_anomalies = 0;
         forest2.setTimeDecay(10 * forest2.getTimeDecay());
 
-        for (double[] point : testData.generateTestData(dataSize, dimensions)) {
+        // will vary with seed == 0; use nonzero for deterministic
+        for (var point : data.generateData(dataSize, dimensions, 0).data) {
             if (forest.getAnomalyScore(point) > 1.0) {
                 first_anomalies++;
             }
@@ -71,8 +70,8 @@ public class DynamicSampling implements Example {
         // should be roughly equal
 
         first_anomalies = second_anomalies = 0;
-        testData = new NormalMixtureTestData(-3, 40);
-        for (double[] point : testData.generateTestData(dataSize, dimensions)) {
+        data = new NormalMixture(-3, 40);
+        for (var point : data.generateData(dataSize, dimensions, 0).data) {
             if (forest.getAnomalyScore(point) > 1.0) {
                 first_anomalies++;
             }
@@ -91,9 +90,9 @@ public class DynamicSampling implements Example {
         RandomCutForest copyForest = mapper.toModel(mapper.toState(forest));
         copyForest.setTimeDecay(50 * forest.getTimeDecay());
         // force an adjustment to catch up
-        testData = new NormalMixtureTestData(-10, -40);
+        data = new NormalMixture(-10, -40);
         int forced_change_anomalies = 0;
-        for (double[] point : testData.generateTestData(dataSize, dimensions)) {
+        for (var point : data.generateData(dataSize, dimensions, 0).data) {
             if (forest.getAnomalyScore(point) > 1.0) {
                 first_anomalies++;
             }

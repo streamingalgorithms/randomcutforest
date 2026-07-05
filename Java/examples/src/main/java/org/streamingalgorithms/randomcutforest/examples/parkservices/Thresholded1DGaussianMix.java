@@ -15,15 +15,17 @@
 
 package org.streamingalgorithms.randomcutforest.examples.parkservices;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
-import org.streamingalgorithms.randomcutforest.testutils.MultiDimDataWithKey;
-import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 public class Thresholded1DGaussianMix implements Example {
 
@@ -68,13 +70,13 @@ public class Thresholded1DGaussianMix implements Example {
         System.out.println("Anomalies would correspond to a run, based on a change of state.");
         System.out.println("Each change is normal <-> anomaly;  so after the second change the data is normal");
         System.out.println("seed = " + seed);
-        NormalMixtureTestData normalMixtureTestData = new NormalMixtureTestData(10, 1.0, 50, 2.0, 0.01, 0.1);
-        MultiDimDataWithKey dataWithKeys = normalMixtureTestData.generateTestDataWithKey(dataSize, 1, 0);
+        NormalMixture normalMixtureTestData = new NormalMixture(10, 1.0, 50, 2.0, 0.01, 0.1);
+        MultiDimData dataWithKeys = normalMixtureTestData.generateData(dataSize, 1, 0);
 
         int keyCounter = 0;
-        for (double[] point : dataWithKeys.data) {
+        for (float[] point : dataWithKeys.data) {
 
-            AnomalyDescriptor result = forest.process(point, count);
+            AnomalyDescriptor result = forest.process(toDoubleArray(point), count);
 
             if (keyCounter < dataWithKeys.changeIndices.length
                     && result.getInternalTimeStamp() == dataWithKeys.changeIndices[keyCounter]) {

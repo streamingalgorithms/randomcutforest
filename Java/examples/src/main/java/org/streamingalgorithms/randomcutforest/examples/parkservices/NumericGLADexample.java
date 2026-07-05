@@ -18,21 +18,20 @@ package org.streamingalgorithms.randomcutforest.examples.parkservices;
 import static java.lang.Math.PI;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
-import static org.streamingalgorithms.randomcutforest.testutils.ExampleDataSets.rotateClockWise;
+import static org.streamingalgorithms.randomcutforest.examples.datasets.Fan.rotateClockWise;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.GlobalLocalAnomalyDetector;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.GenericAnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
-import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 
 /**
  * The following example demonstrates clustering based anomaly detection for
@@ -108,7 +107,7 @@ public class NumericGLADexample implements Example {
         double range = 10.0;
         int numberOfFans = 3;
         // corresponds to number of clusters
-        double[][] data = shiftedEllipse(dataSize, 7, range / 2, numberOfFans);
+        float[][] data = shiftedEllipse(dataSize, 7, range / 2, numberOfFans);
         int truePos = 0;
         int falsePos = 0;
         int falseNeg = 0;
@@ -150,19 +149,19 @@ public class NumericGLADexample implements Example {
                 float[] vec;
                 if (noiseGen.nextDouble() < 0.005) {
                     injected = true;
-                    double[] candAnomaly = new double[2];
+                    float[] candAnomaly = new float[2];
                     // generate points along x axis
-                    candAnomaly[0] = (range / 2 * noiseGen.nextDouble() + range / 2);
-                    candAnomaly[1] = 0.1 * (2.0 * noiseGen.nextDouble() - 1.0);
+                    candAnomaly[0] = (float) (range / 2 * noiseGen.nextDouble() + range / 2);
+                    candAnomaly[1] = (float) (0.1 * (2.0 * noiseGen.nextDouble() - 1.0));
                     int antiFan = noiseGen.nextInt(numberOfFans);
                     // rotate to be 90-180 degrees away -- these are decidedly anomalous
-                    vec = toFloatArray(rotateClockWise(candAnomaly,
-                            -2 * PI * (degree + 180 * (1 + 2 * antiFan) / numberOfFans) / 360));
+                    vec = rotateClockWise(candAnomaly,
+                            -2 * PI * (degree + 180 * (1 + 2 * antiFan) / numberOfFans) / 360);
                     if (printAnomalies) {
                         file.append(vec[0] + " " + vec[1] + " " + 0.0 + "\n");
                     }
                 } else {
-                    vec = toFloatArray(rotateClockWise(data[index], -2 * PI * degree / 360));
+                    vec = rotateClockWise(data[index], -2 * PI * degree / 360);
                     if (printData) {
                         file.append(vec[0] + " " + vec[1] + " " + 0.0 + "\n");
                     }
@@ -218,9 +217,9 @@ public class NumericGLADexample implements Example {
         }
     }
 
-    public double[][] shiftedEllipse(int dataSize, int seed, double shift, int fans) {
-        NormalMixtureTestData generator = new NormalMixtureTestData(0.0, 1.0, 0.0, 1.0, 0.0, 1.0);
-        double[][] data = generator.generateTestData(dataSize, 2, seed);
+    public float[][] shiftedEllipse(int dataSize, int seed, double shift, int fans) {
+        NormalMixture generator = new NormalMixture(0.0, 1.0, 0.0, 1.0, 0.0, 1.0);
+        float[][] data = generator.generateData(dataSize, 2, seed).data;
         Random prg = new Random(0);
         for (int i = 0; i < dataSize; i++) {
             int nextFan = prg.nextInt(fans);
