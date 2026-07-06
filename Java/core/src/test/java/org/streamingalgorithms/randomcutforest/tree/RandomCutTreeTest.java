@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
@@ -646,21 +645,19 @@ public class RandomCutTreeTest {
     // spoofs the cut (using a changing box) to hit illegal state
     @Test
     public void cutTest1() {
-        BoundingBox box1 = mock(BoundingBox.class);
-        when(box1.getDimensions()).thenReturn(1);
-        when(box1.copy()).thenReturn(new BoundingBox(new float[1], new float[1]));
-        when(box1.getMinValue(anyInt())).thenReturn(0.0).thenReturn(0.0).thenReturn(1.0);
-        assertDoesNotThrow(() -> tree.randomCut(1.2, new float[] { 1.0f }, box1));
+        // point lies outside the box, factor > 1 forces fall-through to cleanup()
+        BoundingBox box = new BoundingBox(new float[] { 0.0f }, new float[] { 0.0f });
+        Cut cut = assertDoesNotThrow(() -> tree.randomCut(1.2, new float[] { 1.0f }, box));
+        assertEquals(0, cut.getDimension());
+        assertEquals(Math.nextAfter(1.0f, 0.0f), cut.getValue(), EPSILON);
     }
 
-    // spoofs the cut (usina a changing box) to hit illegal state
     @Test
     public void cutTest2() {
-        BoundingBox box1 = mock(BoundingBox.class);
-        when(box1.getDimensions()).thenReturn(1);
-        when(box1.copy()).thenReturn(new BoundingBox(new float[1], new float[1]));
-        when(box1.getMinValue(anyInt())).thenReturn(0.0).thenReturn(0.0).thenReturn(1.0);
-        assertDoesNotThrow(() -> tree.randomCut(1.5, new float[] { 1.0f }, box1));
+        BoundingBox box = new BoundingBox(new float[] { 0.0f }, new float[] { 0.0f });
+        Cut cut = assertDoesNotThrow(() -> tree.randomCut(1.5, new float[] { 1.0f }, box));
+        assertEquals(0, cut.getDimension());
+        assertEquals(Math.nextAfter(1.0f, 0.0f), cut.getValue(), EPSILON);
     }
 
     @Test

@@ -169,7 +169,7 @@ public class BoundingBox implements IBoundingBoxView {
      * @param dimension the dimension for which we need the max value
      * @return the max value of the specified dimension
      */
-    public double getMaxValue(final int dimension) {
+    public float getMaxValue(final int dimension) {
         return maxValues[dimension];
     }
 
@@ -179,7 +179,7 @@ public class BoundingBox implements IBoundingBoxView {
      * @param dimension the dimension for which we need the min value
      * @return the min value of the specified dimension
      */
-    public double getMinValue(final int dimension) {
+    public float getMinValue(final int dimension) {
         return minValues[dimension];
     }
 

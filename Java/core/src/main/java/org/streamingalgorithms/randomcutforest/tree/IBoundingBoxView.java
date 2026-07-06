@@ -23,9 +23,9 @@ public interface IBoundingBoxView {
 
     double getRange(int i);
 
-    double getMinValue(int i);
+    float getMinValue(int i);
 
-    double getMaxValue(int i);
+    float getMaxValue(int i);
 
     // duplicates
     IBoundingBoxView copy();

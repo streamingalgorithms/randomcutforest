@@ -31,6 +31,7 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
@@ -175,23 +176,26 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      *               gap computed must be non-zero (and nextAfter is defined)
      * @return A new Cut corresponding to a random cut in the bounding box.
      */
-    protected Cut randomCut(double factor, float[] point, BoundingBox box, SeparationOracle oracle) {
+    protected Cut randomCut(double factor, float[] point, BoundingBox box, SeparationOracle oracle, boolean union) {
         double range = 0.0;
-
+        // box cannot be null -- it can be a single point
+        float[] minValues = box.minValues;
+        float[] maxValues = box.maxValues;
+        int dim = minValues.length;
         if (oracle == null) {
             // this is the hot path but we are avoiding allocation
-            for (int i = 0; i < box.getDimensions(); i++) {
-                float minValue = (float) box.getMinValue(i);
-                float maxValue = (float) box.getMaxValue(i);
-                if (point != null) {
-                    if (point[i] < minValue) {
-                        minValue = point[i];
-                    } else if (point[i] > maxValue) {
-                        maxValue = point[i];
-                    }
+            if (union) {
+                for (int i = 0; i < dim; i++) {
+                    double minValue = min(minValues[i], point[i]);
+                    double maxValue = max(maxValues[i], point[i]);
+                    cutScratch[i] = maxValue - minValue;
+                    range += cutScratch[i];
                 }
-                cutScratch[i] = maxValue - minValue;
-                range += cutScratch[i];
+            } else {
+                for (int i = 0; i < dim; i++) {
+                    cutScratch[i] = maxValues[i] - (double) minValues[i];
+                }
+                range = box.getRangeSum();
             }
         } else {
             range = oracle.computeGap(box, cutScratch);
@@ -202,21 +206,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         double breakPoint = factor * range;
 
-        for (int i = 0; i < box.getDimensions(); i++) {
-            float minValue = (float) box.getMinValue(i);
-            float maxValue = (float) box.getMaxValue(i);
-            if (point != null) {
-                if (point[i] < minValue) {
-                    minValue = point[i];
-                } else if (point[i] > maxValue) {
-                    maxValue = point[i];
-                }
-            }
+        for (int i = 0; i < dim; i++) {
+            double gap = cutScratch[i];
+
             // the invariant we must maintain is that if the float values
             // are not the same then the gap must be non-zeor
             // double gap = maxValue - minValue;
-            double gap = cutScratch[i];
             if (breakPoint <= gap && gap > 0) {
+                float minValue = minValues[i];
+                float maxValue = maxValues[i];
+                if (union) {
+                    minValue = min(minValue, point[i]);
+                    maxValue = max(maxValue, point[i]);
+                }
                 float cutValue = (float) (minValue + breakPoint);
 
                 // Random cuts have to take a value in the half-open interval [minValue,
@@ -230,6 +232,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             }
             breakPoint -= gap;
         }
+        return cleanup(factor, box, point, oracle);
+    }
+
+    private Cut cleanup(double factor, BoundingBox box, float[] point, SeparationOracle oracle) {
 
         // if we are here then factor is likely almost 1 and we have floating point
         // issues. we will randomize between the first and the last non-zero ranges
@@ -250,7 +256,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 }
             }
         } else {
-            for (int i = box.getDimensions() - 1; i >= 0; i--) {
+            for (int i = merged.getDimensions() - 1; i >= 0; i--) {
                 float minValue = (float) merged.getMinValue(i);
                 float maxValue = (float) merged.getMaxValue(i);
                 if (maxValue > minValue) {
@@ -265,7 +271,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     protected Cut randomCut(double factor, float[] point, BoundingBox box) {
-        return randomCut(factor, point, box, null);
+        return randomCut(factor, point, box, null, true);
+    }
+
+    protected Cut randomCut(double factor, BoundingBox box) {
+        return randomCut(factor, null, box, null, false);
     }
 
     /**
@@ -323,7 +333,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 }
                 while (true) {
                     double factor = rng.nextDouble();
-                    Cut cut = randomCut(factor, point, currentBox, null);
+                    Cut cut = randomCut(factor, point, currentBox, null, true);
                     int dim = cut.getDimension();
                     float value = (float) cut.getValue();
 
@@ -444,7 +454,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         Random ring = new Random(getRandomSeed());
         double factor = ring.nextDouble();
-        Cut cut = randomCut(factor, null, box, vecBuild);
+        Cut cut = randomCut(factor, null, box, vecBuild, false);
 
         // stable in-place partition of [start, end):
         // lefts compacted into [start, mid); rights buffered in order, then written
@@ -467,8 +477,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         int leftCount = mid - start;
         int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch);
         int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch);
-        nodeStore.addRecord(firstFree, Math.min(leftIndex, numberOfLeaves - 1),
-                Math.min(rightIndex, numberOfLeaves - 1), (float) cut.getValue(), cut.getDimension());
+        nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
+                (float) cut.getValue(), cut.getDimension());
+        int idx = translate(firstFree);
+        if (idx != Integer.MAX_VALUE) {
+            copyBoxToData(idx, box);
+        }
         return firstFree;
     }
 
@@ -721,7 +735,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             int mid = base + dimension;
             double rangeSum = 0;
             for (int i = 0; i < dimension; i++) {
-                boundingBoxData[base + i] = Math.min(boundingBoxData[base + i], point[i]);
+                boundingBoxData[base + i] = min(boundingBoxData[base + i], point[i]);
             }
             for (int i = 0; i < dimension; i++) {
                 boundingBoxData[mid + i] = max(boundingBoxData[mid + i], point[i]);
