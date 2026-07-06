@@ -166,8 +166,7 @@ public class RandomCutTreeTest {
         when(pointStore.getNumericVector(any(Integer.class))).thenReturn(new float[] { 0 }).thenReturn(new float[3])
                 .thenReturn(new float[3]);
         tree.addPoint(0, 1);
-        // fails vor dimension
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 1));
+
         assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(2, 1));
         // wrong sequence index
         assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 2));
@@ -177,33 +176,27 @@ public class RandomCutTreeTest {
 
     @Test
     public void testConfigAdd() {
-        PointStore pointStore = mock(PointStore.class);
+        PointStore pointStore = PointStore.builder().shingleSize(1).capacity(20).dimensions(4).build();
         float[] test = new float[] { 1.119f, 0f, -3.11f, 100f };
         float[] copies = new float[] { 0, 17, 0, 0 };
+        pointStore.add(test, 0);
+        pointStore.add(copies, 1);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore)
                 .centerOfMassEnabled(true).storeSequenceIndexesEnabled(true).storeParent(true).dimension(4).build();
-        when(pointStore.getNumericVector(any(Integer.class))).thenReturn(new float[0]).thenReturn(test)
-                .thenReturn(new float[62]).thenReturn(copies).thenReturn(test).thenReturn(copies).thenReturn(copies)
-                .thenReturn(test);
 
         // cannot have partial addition to empty tree
         assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(0, 1));
         // the following does not consume any points
         tree.addPoint(0, 1);
-        // consumes from pointstore but gets 0 length vector
-        assertThrows(IllegalArgumentException.class, () -> tree.getPointSum(tree.getRoot()));
-        // passes, consumes pointstore
         assertArrayEquals(tree.getPointSum(tree.getRoot()), test);
-        // sequel fails because dimension is 62
-        assertThrows(IllegalArgumentException.class, () -> tree.getBox(tree.root));
         tree.addPoint(1, 1);
         assertFalse(tree.isLeaf(tree.getRoot()));
         // switch the vector
-        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 0, 34, 0, 0 });
+        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 1.119f, 17, -3.11f, 100 });
         // adding test, consumes the copy
-        tree.addPoint(2, 1);
+        tree.addPoint(1, 1);
         assertEquals(tree.getMass(), 3);
-        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 4 * 1.119f, 0, -3.11f * 4, 4 * 100 }, 1e-3f);
+        assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 1.119f, 34, -3.11f, 100 }, 1e-3f);
     }
 
     @Test
@@ -228,30 +221,27 @@ public class RandomCutTreeTest {
 
     @Test
     public void testCut() {
-        PointStore pointStore = mock(PointStore.class);
+        PointStore pointStore = PointStore.builder().shingleSize(1).capacity(20).dimensions(1).build();
+        pointStore.add(new float[1], 0);
+        pointStore.add(new float[] { 1 }, 1);
+        pointStore.add(new float[] { 2 }, 2);
         Random random = mock(Random.class);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore).random(random)
                 .storeSequenceIndexesEnabled(true).storeParent(true).dimension(1).build();
-        when(pointStore.getNumericVector(any(Integer.class))).thenReturn(new float[1]).thenReturn(new float[] { 1 })
-                .thenReturn(new float[] { 0 }).thenReturn(new float[] { 0 }).thenReturn(new float[] { 2 })
-                .thenReturn(new float[] { 1 }).thenReturn(new float[0]).thenReturn(new float[] { 2 })
-                .thenReturn(new float[] { 1 }).thenReturn(new float[1]);
-        // testing the cut assumptions -- the values should not be 1 or larger, but is
-        // useful for testing
-        when(random.nextDouble()).thenReturn(1.2).thenReturn(1.5).thenReturn(1.5).thenReturn(0.0);
+
+        when(random.nextDouble()).thenReturn(1.2).thenReturn(1.5).thenReturn(0.0);
         // following does not query pointstore
         tree.addPoint(0, 1);
         // following tries to add [0.0], and discovers point index 0 is [1.0]
         tree.addPoint(1, 1);
         assertTrue(tree.getCutValue(tree.getRoot()) == (double) Math.nextAfter(1.0f, 0.0));
 
-        assertThrows(IllegalArgumentException.class, () -> tree.addPoint(1, 2)); // copy
-        tree.addPoint(1, 2); // passes
+        tree.addPoint(2, 2); // passes -- because we have alist
         assertTrue(tree.getRoot() == 0);
         assertTrue(tree.getCutValue(0) == (double) Math.nextAfter(1.0f, 0.0));
         assertTrue(tree.getCutValue(1) == (double) Math.nextAfter(2.0f, 1.0));
-        assertFalse(tree.checkStrictlyContains(1, new float[] { 2 }));
-        assertTrue(tree.checkStrictlyContains(1, new float[] { 1.001f }));
+        assertTrue(tree.getBox(1).contains(new float[] { 2 }));
+        assertTrue(tree.getBox(1).contains(new float[] { 1.001f }));
     }
 
     /**
@@ -657,16 +647,20 @@ public class RandomCutTreeTest {
     @Test
     public void cutTest1() {
         BoundingBox box1 = mock(BoundingBox.class);
+        when(box1.getDimensions()).thenReturn(1);
+        when(box1.copy()).thenReturn(new BoundingBox(new float[1], new float[1]));
         when(box1.getMinValue(anyInt())).thenReturn(0.0).thenReturn(0.0).thenReturn(1.0);
-        assertThrows(IllegalStateException.class, () -> tree.randomCut(1.2, new float[] { 1.0f }, box1));
+        assertDoesNotThrow(() -> tree.randomCut(1.2, new float[] { 1.0f }, box1));
     }
 
     // spoofs the cut (usina a changing box) to hit illegal state
     @Test
     public void cutTest2() {
         BoundingBox box1 = mock(BoundingBox.class);
+        when(box1.getDimensions()).thenReturn(1);
+        when(box1.copy()).thenReturn(new BoundingBox(new float[1], new float[1]));
         when(box1.getMinValue(anyInt())).thenReturn(0.0).thenReturn(0.0).thenReturn(1.0);
-        assertThrows(IllegalStateException.class, () -> tree.randomCut(1.5, new float[] { 1.0f }, box1));
+        assertDoesNotThrow(() -> tree.randomCut(1.5, new float[] { 1.0f }, box1));
     }
 
     @Test

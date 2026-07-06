@@ -18,6 +18,7 @@ package org.streamingalgorithms.randomcutforest.state;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
+import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -240,6 +241,8 @@ public class RandomCutForestMapper
         CompactSamplerMapper samplerMapper = new CompactSamplerMapper();
         checkArgument(state.isSaveSamplerStateEnabled(), "samplers are not saved; no forest to reconstruct");
         List<CompactSamplerState> samplerStates = state.getCompactSamplerStates();
+        int[] indexList = null;
+        int[] outputList = null;
         for (int i = 0; i < state.getNumberOfTrees(); i++) {
             CompactSampler sampler = samplerMapper.toModel(samplerStates.get(i), random.nextLong());
 
@@ -247,14 +250,20 @@ public class RandomCutForestMapper
             if (treeStates != null) {
                 tree = treeMapper.toModel(treeStates.get(i), context, random.nextLong());
                 sampler.replayInto(tree);
-                tree.validateAndReconstruct(tree.getRoot(), false, true);
+                if (tree.getRoot() != Null) {
+                    tree.validateAndReconstruct(tree.getRoot(), false, true, tree.isCenterOfMassEnabled());
+                }
             } else {
                 // using boundingBoxCache for the new tree
                 tree = new RandomCutTree.Builder().capacity(state.getSampleSize()).randomSeed(random.nextLong())
                         .pointStoreView(pointStore).boundingBoxCacheFraction(state.getBoundingBoxCacheFraction())
                         .centerOfMassEnabled(state.isCenterOfMassEnabled())
                         .storeSequenceIndexesEnabled(state.isStoreSequenceIndexesEnabled()).build();
-                sampler.rebuildInto(tree);
+                if (indexList == null || indexList.length != tree.getNumberOfLeaves()) {
+                    indexList = new int[tree.getNumberOfLeaves()];
+                    outputList = new int[tree.getNumberOfLeaves()];
+                }
+                sampler.rebuildInto(tree, indexList, outputList);
             }
             components.add(new SamplerPlusTree<>(sampler, tree));
         }

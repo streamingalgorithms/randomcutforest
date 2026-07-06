@@ -38,8 +38,6 @@ public interface ITree<PointReference, Point> extends ITraversable, IDynamicConf
 
     PointReference addPoint(PointReference point, long sequenceIndex);
 
-    void addPointToPartialTree(PointReference point, long sequenceIndex);
-
     void validateAndReconstruct();
 
     PointReference deletePoint(PointReference point, long sequenceIndex);

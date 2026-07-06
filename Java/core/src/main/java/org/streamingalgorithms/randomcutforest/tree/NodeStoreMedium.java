@@ -129,6 +129,15 @@ public class NodeStoreMedium extends AbstractNodeStore {
         }
     }
 
+    @Override
+    protected void addRecord(int node, int left, int right, float cut, int cutD) {
+        checkArgument(isInternal(node), "error in record");
+        leftIndex[node] = left;
+        rightIndex[node] = right;
+        cutValue[node] = cut;
+        cutDimension[node] = (char) cutD;
+    }
+
     public int getLeftIndex(int index) {
         return leftIndex[index];
     }

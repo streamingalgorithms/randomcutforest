@@ -168,6 +168,15 @@ public class NodeStoreSmall extends AbstractNodeStore {
         mass[node] = (byte) (value % (capacity + 1));
     }
 
+    @Override
+    protected void addRecord(int node, int left, int right, float cut, int cutD) {
+        checkArgument(isInternal(node), "error in record");
+        leftIndex[node] = (char) left;
+        rightIndex[node] = (char) right;
+        cutValue[node] = cut;
+        cutDimension[node] = (byte) cutD;
+    }
+
     public void deleteInternalNode(int index) {
         leftIndex[index] = (char) capacity;
         rightIndex[index] = (char) capacity;

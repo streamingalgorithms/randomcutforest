@@ -353,12 +353,16 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
     // not-saved path: fresh empty tree, build node-by-node via full add (handles
     // null root, makes its own random cuts).
     // The weight isn't read; addPoint takes (index, seq).
-    public void rebuildInto(RandomCutTree tree) {
+    public void rebuildInto(RandomCutTree tree, int[] indexList, int[] outputList) {
         reset_weights();
-        for (int i = 0; i < size; i++) {
-            long seq = (sequenceIndex != null) ? sequenceIndex[i] : SEQUENCE_INDEX_NA;
-            tree.addPoint(pointIndex[i], seq);
+        if (indexList.length != size && size > 0) {
+            indexList = new int[size];
+            outputList = new int[size];
         }
+        for (int i = 0; i < size; i++) {
+            indexList[i] = i;
+        }
+        tree.makeTree(size, indexList, outputList, pointIndex, sequenceIndex, null);
     }
 
     public static class Builder<T extends Builder<T>> extends AbstractStreamSampler.Builder<T> {

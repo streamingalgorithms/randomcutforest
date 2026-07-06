@@ -87,6 +87,8 @@ public abstract class AbstractNodeStore {
 
     protected abstract void setMassOfInternalNode(int node, int value);
 
+    protected abstract void addRecord(int node, int left, int right, float cut, int dim);
+
     protected void manageInternalNodesPartial(Stack<int[]> path) {
         while (!path.isEmpty()) {
             int index = path.pop()[0];

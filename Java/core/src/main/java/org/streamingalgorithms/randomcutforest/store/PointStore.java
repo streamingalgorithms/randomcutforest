@@ -35,6 +35,8 @@ import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
 import org.streamingalgorithms.randomcutforest.util.ArrayUtils;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
+import lombok.Getter;
+
 public abstract class PointStore implements IPointStore<Integer, float[]> {
 
     public static int INFEASIBLE_POINTSTORE_INDEX = -1;
@@ -55,10 +57,12 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     /**
      * enable rotation of shingles; use a cyclic buffer instead of sliding window
      */
+    @Getter
     boolean rotationEnabled;
     /**
      * last seen timestamp for internal shingling
      */
+    @Getter
     protected long nextSequenceIndex;
 
     /**
@@ -72,6 +76,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     /**
      * first location where new data can be safely copied;
      */
+    @Getter
     int startOfFreeSegment;
     /**
      * overall dimension of the point (after shingling)
@@ -80,6 +85,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     /**
      * shingle size, if known. Setting shingle size = 1 rules out overlapping
      */
+    @Getter
     int shingleSize;
     /**
      * number of original dimensions which are shingled to produce and overall point
@@ -92,15 +98,18 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     /**
      * maximum capacity
      */
+    @Getter
     int capacity;
     /**
      * current capacity of store (number of shingled points)
      */
+    @Getter
     int currentStoreCapacity;
 
     /**
      * enabling internal shingling
      */
+    @Getter
     boolean internalShinglingEnabled;
 
     abstract void setInfeasiblePointstoreLocationIndex(int index);
@@ -277,36 +286,10 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     }
 
     /**
-     * maximum capacity, in number of points of size dimensions
-     */
-    public int getCapacity() {
-        return capacity;
-    }
-
-    /**
      * capacity of the indices
      */
     public int getIndexCapacity() {
         return indexManager.getCapacity();
-    }
-
-    /**
-     * used in mapper
-     *
-     * @return gets the shingle size (if known, otherwise is 1)
-     */
-    public int getShingleSize() {
-        return shingleSize;
-    }
-
-    /**
-     * gets the current store capacity in the number of points with dimension many
-     * values
-     *
-     * @return capacity in number of points
-     */
-    public int getCurrentStoreCapacity() {
-        return currentStoreCapacity;
     }
 
     /**
@@ -333,33 +316,6 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
             }
         }
         return newarray;
-    }
-
-    /**
-     * useful in mapper to not copy
-     *
-     * @return the length of the prefix
-     */
-    public int getStartOfFreeSegment() {
-        return startOfFreeSegment;
-    }
-
-    /**
-     * used in mapper
-     *
-     * @return if shingling is performed internally
-     */
-    public boolean isInternalShinglingEnabled() {
-        return internalShinglingEnabled;
-    }
-
-    /**
-     * used in mapper and in extrapolation
-     *
-     * @return the last timestamp seen
-     */
-    public long getNextSequenceIndex() {
-        return nextSequenceIndex;
     }
 
     /**
@@ -832,7 +788,26 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
                 if (candidate[(address + i) % dimensions] != store[address + i]) {
                     return false;
                 }
-                ;
+            }
+            return true;
+        }
+    }
+
+    @Override
+    public boolean leftOf(int index, float cutValue, int dim) {
+        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
+        checkArgument(dim < dimensions, "incorrect dimension");
+        int address = getLocation(index);
+        checkFeasible(index);
+
+        if (!rotationEnabled) {
+            return store[address + dim] <= cutValue;
+        } else {
+            // optimize some day
+            for (int i = 0; i < dimensions; i++) {
+                if ((address + i) % dimensions == dim) {
+                    return store[address + i] <= cutValue;
+                }
             }
             return true;
         }

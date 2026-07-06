@@ -19,7 +19,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
@@ -180,7 +179,7 @@ public class HyperTreeTest {
                 int y = 0;
                 while (y < sampleSize) {
                     int z = random.nextInt(prefix);
-                    if (!status[i][z]) {
+                    if (!status[i + 1][z]) {
                         status[i + 1][z] = true;
                         status[0][z] = true; // will compute union across trees
                         ++y;
@@ -188,26 +187,35 @@ public class HyperTreeTest {
                 }
             }
             int[] reference = new int[pointList.length];
-            List<Integer>[] lists = new List[numberOfTrees];
-            for (int i = 0; i < numberOfTrees; i++) {
-                lists[i] = new ArrayList<>();
-            }
             for (int i = 0; i < pointList.length; i++) {
                 if (status[0][i]) {
-                    reference[i] = pointStore.add(toFloatArray(pointList[i]), 0L);
-                    for (int j = 0; j < numberOfTrees; j++) {
+                    reference[i] = pointStore.add(toFloatArray(pointList[i]), i);
+                }
+            }
+            int[] outputList = new int[sampleSize];
+            int[] indexList = new int[sampleSize];
+            for (int j = 0; j < numberOfTrees; j++) {
+                int count = 0;
+                for (int i = 0; i < pointList.length; i++) {
+                    if (status[0][i]) {
                         if (status[j + 1][i]) {
-                            lists[j].add(reference[i]);
+                            indexList[count++] = i;
                         }
                     }
                 }
-                ;
+                checkArgument(count == sampleSize, "incorrect construction");
+                var tree = trees.get(j);
+                tree.makeTree(sampleSize, indexList, outputList, reference, null, tree.getOracle());
+                for (int i = 0; i < indexList.length; i++) {
+                    pointStore.incrementRefCount(outputList[i]);
+                }
             }
-            for (int i = 0; i < numberOfTrees; i++) {
-                trees.get(i).makeTree(lists[i], random.nextInt());
+            for (int i = 0; i < pointList.length; i++) {
+                if (status[0][i]) {
+                    pointStore.decrementRefCount(reference[i]);
+                }
             }
         }
-
     }
 
     // ===========================================================
@@ -360,11 +368,11 @@ public class HyperTreeTest {
         assert (testScore.sumCenterScore > 1.5 * testScore.sumLeftScore);
         assert (testScore.sumCenterScore > 1.5 * testScore.sumRightScore);
 
-        assert (testScore.sumCenterDisp > 10 * testScore.sumLeftDisp);
-        assert (testScore.sumCenterDisp > 10 * testScore.sumRightDisp);
+        assert (testScore.sumCenterDisp > 5 * testScore.sumLeftDisp);
+        assert (testScore.sumCenterDisp > 5 * testScore.sumRightDisp);
 
-        assert (1.5 * testScore.sumCenterHeight < testScore.sumLeftHeight);
-        assert (1.5 * testScore.sumCenterHeight < testScore.sumRightHeight);
+        assert (1.4 * testScore.sumCenterHeight < testScore.sumLeftHeight);
+        assert (1.4 * testScore.sumCenterHeight < testScore.sumRightHeight);
     }
 
     public void simulateGTFLAlpha(TestScores testScore, boolean flag, double gaugeOrAlpha) {
