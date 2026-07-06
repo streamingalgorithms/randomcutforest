@@ -15,11 +15,11 @@
 
 package org.streamingalgorithms.randomcutforest.state.tree;
 
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
-import org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore;
+import org.streamingalgorithms.randomcutforest.tree.NodeStore;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 
 import lombok.Getter;
@@ -35,9 +35,9 @@ public class RandomCutTreeMapper
 
         int dimension = (state.getDimensions() != 0) ? state.getDimensions() : context.getPointStore().getDimensions();
         context.setDimension(dimension);
-        AbstractNodeStoreMapper nodeStoreMapper = new AbstractNodeStoreMapper();
+        NodeStoreMapper nodeStoreMapper = new NodeStoreMapper();
         nodeStoreMapper.setRoot(state.getRoot());
-        AbstractNodeStore nodeStore = nodeStoreMapper.toModel(state.getNodeStoreState(), context);
+        NodeStore nodeStore = nodeStoreMapper.toModel(state.getNodeStoreState(), context);
 
         // boundingBoxcache is set
         int newRoot = nodeStore.isLeaf(state.getRoot()) ? nodeStore.getCapacity() : state.getRoot();
@@ -55,7 +55,7 @@ public class RandomCutTreeMapper
         CompactRandomCutTreeState state = new CompactRandomCutTreeState();
         state.setVersion(Version.V3_0);
         int root = model.getRoot();
-        AbstractNodeStoreMapper nodeStoreMapper = new AbstractNodeStoreMapper();
+        NodeStoreMapper nodeStoreMapper = new NodeStoreMapper();
         nodeStoreMapper.setRoot(root);
         state.setNodeStoreState(nodeStoreMapper.toState(model.getNodeStore()));
         // the compression of nodeStore would change the root

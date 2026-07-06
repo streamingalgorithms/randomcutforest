@@ -18,10 +18,9 @@ package org.streamingalgorithms.randomcutforest.tree;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Stack;
 
-import org.streamingalgorithms.randomcutforest.store.IndexIntervalManager;
+import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
 /**
  * A fixed-size buffer for storing interior tree nodes. An interior node is
@@ -38,7 +37,7 @@ import org.streamingalgorithms.randomcutforest.store.IndexIntervalManager;
  * Nodes.
  *
  */
-public class NodeStoreLarge extends AbstractNodeStore {
+public class NodeStoreLarge extends NodeStore {
 
     private final int[] parentIndex;
     private final int[] leftIndex;
@@ -46,47 +45,55 @@ public class NodeStoreLarge extends AbstractNodeStore {
     public final int[] cutDimension;
     private final int[] mass;
 
-    public NodeStoreLarge(AbstractNodeStore.Builder builder) {
-        super(builder);
+    public NodeStoreLarge(int capacity, boolean storeParent) {
+        super(capacity, null);
         mass = new int[capacity];
-        Arrays.fill(mass, 0);
-        if (builder.storeParent) {
-            parentIndex = new int[capacity];
-            Arrays.fill(parentIndex, capacity);
-        } else {
-            parentIndex = null;
+        parentIndex = storeParent ? newSentinelParents() : null;
+        leftIndex = new int[capacity];
+        rightIndex = new int[capacity];
+        cutDimension = new int[capacity];
+        Arrays.fill(leftIndex, capacity);
+        Arrays.fill(rightIndex, capacity);
+    }
+
+    public NodeStoreLarge(int capacity, int root, boolean storeParent, byte[] cutValuesData, int[] packedLeft,
+            int[] packedRight, int[] packedCutDim, int size, boolean compressed) {
+        super(capacity, ArrayPacking.unpackFloats(cutValuesData, capacity)); // adopts the unpacked cutValue float[]
+        mass = new int[capacity];
+        parentIndex = storeParent ? newSentinelParents() : null;
+
+        leftIndex = ArrayPacking.unpackInts(packedLeft, capacity, compressed);
+        rightIndex = ArrayPacking.unpackInts(packedRight, capacity, compressed);
+        cutDimension = ArrayPacking.unpackInts(packedCutDim, capacity, compressed);
+
+        if (compressed) {
+            reverseBits(size, leftIndex, rightIndex, capacity); // 0/1 bits -> node numbers, before parent loop
         }
-        if (builder.leftIndex == null) {
-            leftIndex = new int[capacity];
-            rightIndex = new int[capacity];
-            cutDimension = new int[capacity];
-            Arrays.fill(leftIndex, capacity);
-            Arrays.fill(rightIndex, capacity);
-        } else {
-            leftIndex = Arrays.copyOf(builder.leftIndex, builder.leftIndex.length);
-            rightIndex = Arrays.copyOf(builder.rightIndex, builder.rightIndex.length);
-            cutDimension = Arrays.copyOf(builder.cutDimension, builder.cutDimension.length);
-            BitSet bits = new BitSet(capacity);
-            if (builder.root != Null) {
-                bits.set(builder.root);
-            }
-            for (int i = 0; i < leftIndex.length; i++) {
-                if (isInternal(leftIndex[i])) {
-                    bits.set(leftIndex[i]);
-                    if (parentIndex != null) {
-                        parentIndex[leftIndex[i]] = i;
-                    }
-                }
-            }
-            for (int i = 0; i < rightIndex.length; i++) {
-                if (isInternal(rightIndex[i])) {
-                    bits.set(rightIndex[i]);
-                    if (parentIndex != null) {
-                        parentIndex[rightIndex[i]] = i;
-                    }
-                }
-            }
-            freeNodeManager = new IndexIntervalManager(capacity, capacity, bits);
+        buildFreeList(root);
+        if (parentIndex != null) {
+            buildParents(root);
+        }
+    }
+
+    private int[] newSentinelParents() {
+        int[] p = new int[capacity];
+        Arrays.fill(p, capacity);
+        return p;
+    }
+
+    protected void setParentIndex(int node, int parent) {
+        parentIndex[node] = parent;
+    }
+
+    // shares NodeStoreMedium's int[] reflation semantics
+    protected static void reverseBits(int size, int[] leftIndex, int[] rightIndex, int capacity) {
+        int nodeCounter = 1;
+        for (int i = 0; i < size; i++) {
+            leftIndex[i] = (leftIndex[i] != 0) ? nodeCounter++ : capacity;
+            rightIndex[i] = (rightIndex[i] != 0) ? nodeCounter++ : capacity;
+        }
+        for (int i = size; i < leftIndex.length; i++) {
+            leftIndex[i] = rightIndex[i] = capacity;
         }
     }
 

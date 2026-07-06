@@ -18,7 +18,7 @@ package org.streamingalgorithms.randomcutforest.state;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import java.util.ArrayList;
 import java.util.List;

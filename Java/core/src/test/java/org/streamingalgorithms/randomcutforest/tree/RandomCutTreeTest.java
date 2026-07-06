@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -629,7 +629,7 @@ public class RandomCutTreeTest {
             tree.deletePoint(list.remove(0).getValue(), 0L);
         }
 
-        AbstractNodeStore nodeStore = tree.getNodeStore();
+        NodeStore nodeStore = tree.getNodeStore();
 
         for (int i = 0; i < 25; i++) {
             if (!tree.isLeaf(tree.getLeftChild(tree.getRoot()))) {

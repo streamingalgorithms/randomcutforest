@@ -27,7 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import java.util.Arrays;
 

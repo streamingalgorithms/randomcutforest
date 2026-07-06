@@ -36,8 +36,9 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.sampler.CompactSampler.SEQUENCE_INDEX_NA;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.DEFAULT_STORE_PARENT;
-import static org.streamingalgorithms.randomcutforest.tree.AbstractNodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.DEFAULT_STORE_PARENT;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,7 +80,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected int root;
     protected IPointStoreView<float[]> pointStoreView;
     protected int numberOfLeaves;
-    protected AbstractNodeStore nodeStore;
+    protected NodeStore nodeStore;
     protected double boundingBoxCacheFraction;
     protected int outputAfter;
     protected int dimension;
@@ -107,8 +108,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         outputAfter = builder.outputAfter.orElse(max(1, numberOfLeaves / 4));
         dimension = (builder.dimension != 0) ? builder.dimension : pointStoreView.getDimensions();
         nodeStore = (builder.nodeStore != null) ? builder.nodeStore
-                : AbstractNodeStore.builder().capacity(numberOfLeaves - 1).storeParent(builder.storeParent)
-                        .dimension(dimension).build();
+                : nodeStore(numberOfLeaves - 1, dimension, builder.storeParent);
+
         this.boundingBoxCacheFraction = builder.boundingBoxCacheFraction;
         this.storeSequenceIndexesEnabled = builder.storeSequenceIndexesEnabled;
         this.centerOfMassEnabled = builder.centerOfMassEnabled;
@@ -1167,7 +1168,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return randomSeed;
     }
 
-    public AbstractNodeStore getNodeStore() {
+    public NodeStore getNodeStore() {
         return nodeStore;
     }
 
@@ -1181,7 +1182,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         protected Optional<Integer> outputAfter = Optional.empty();
         protected int dimension;
         protected IPointStoreView<float[]> pointStoreView;
-        protected AbstractNodeStore nodeStore;
+        protected NodeStore nodeStore;
         protected int root = Null;
         protected boolean storeParent = DEFAULT_STORE_PARENT;
 
@@ -1200,7 +1201,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             return (T) this;
         }
 
-        public T nodeStore(AbstractNodeStore nodeStore) {
+        public T nodeStore(NodeStore nodeStore) {
             this.nodeStore = nodeStore;
             return (T) this;
         }

@@ -16,30 +16,14 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toCharArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toIntArray;
 
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Stack;
 
-import org.streamingalgorithms.randomcutforest.store.IndexIntervalManager;
+import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
-/**
- * A fixed-size buffer for storing interior tree nodes. An interior node is
- * defined by its location in the tree (parent and child nodes), its random cut,
- * and its bounding box. The NodeStore class uses arrays to store these field
- * values for a collection of nodes. An index in the store can be used to look
- * up the field values for a particular node.
- *
- * The internal nodes (handled by this store) corresponds to [0..capacity]. The
- * mass of the nodes is cyclic, i.e., mass % (capacity + 1) -- therefore, in
- * presence of duplicates there would be nodes which are free, and they would
- * have mass 0 == (capacity + 1). But those nodes would not be reachable by the
- * code below.
- *
- */
-public class NodeStoreMedium extends AbstractNodeStore {
+public class NodeStoreMedium extends NodeStore {
 
     private final char[] parentIndex;
     private final int[] leftIndex;
@@ -47,49 +31,63 @@ public class NodeStoreMedium extends AbstractNodeStore {
     public final char[] cutDimension;
     private final char[] mass;
 
-    public NodeStoreMedium(AbstractNodeStore.Builder builder) {
-        super(builder);
+    public NodeStoreMedium(int capacity, boolean storeParent) {
+        super(capacity, null);
         mass = new char[capacity];
-        Arrays.fill(mass, (char) 0);
-        if (builder.storeParent) {
-            parentIndex = new char[capacity];
-            Arrays.fill(parentIndex, (char) capacity);
-        } else {
-            parentIndex = null;
+        parentIndex = storeParent ? newSentinelParents() : null;
+        leftIndex = new int[capacity];
+        rightIndex = new int[capacity];
+        cutDimension = new char[capacity];
+        Arrays.fill(leftIndex, capacity);
+        Arrays.fill(rightIndex, capacity);
+    }
+
+    // size > 0
+    public NodeStoreMedium(int capacity, int root, boolean storeParent, byte[] cutValuesData, int[] packedLeft,
+            int[] packedRight, int[] packedCutDim, int size, boolean compressed) {
+        super(capacity, ArrayPacking.unpackFloats(cutValuesData, capacity)); // adopts the unpacked cutValue float[]
+        mass = new char[capacity];
+        parentIndex = storeParent ? newSentinelParents() : null;
+
+        leftIndex = ArrayPacking.unpackInts(packedLeft, capacity, compressed);
+        rightIndex = ArrayPacking.unpackInts(packedRight, capacity, compressed);
+        cutDimension = new char[capacity];
+        ArrayPacking.unpackInts(packedCutDim, cutDimension, capacity, compressed);
+
+        if (compressed) {
+            reverseBits(size, leftIndex, rightIndex, capacity); // 0/1 bits -> node numbers, before parent loop
         }
-        if (builder.leftIndex == null) {
-            leftIndex = new int[capacity];
-            rightIndex = new int[capacity];
-            cutDimension = new char[capacity];
-            Arrays.fill(leftIndex, capacity);
-            Arrays.fill(rightIndex, capacity);
-        } else {
-            leftIndex = Arrays.copyOf(builder.leftIndex, builder.leftIndex.length);
-            rightIndex = Arrays.copyOf(builder.rightIndex, builder.rightIndex.length);
-            cutDimension = toCharArray(builder.cutDimension);
-            BitSet bits = new BitSet(capacity);
-            if (builder.root != Null) {
-                bits.set(builder.root);
-            }
-            for (int i = 0; i < leftIndex.length; i++) {
-                if (isInternal(leftIndex[i])) {
-                    bits.set(leftIndex[i]);
-                    if (parentIndex != null) {
-                        parentIndex[leftIndex[i]] = (char) i;
-                    }
-                }
-            }
-            for (int i = 0; i < rightIndex.length; i++) {
-                if (isInternal(rightIndex[i])) {
-                    bits.set(rightIndex[i]);
-                    if (parentIndex != null) {
-                        parentIndex[rightIndex[i]] = (char) i;
-                    }
-                }
-            }
-            freeNodeManager = new IndexIntervalManager(capacity, capacity, bits);
-            // need to set up parents using the root
+        buildFreeList(root);
+        if (parentIndex != null) {
+            buildParents(root);
         }
+
+    }
+
+    private char[] newSentinelParents() {
+        char[] p = new char[capacity];
+        Arrays.fill(p, (char) capacity);
+        return p;
+    }
+
+    /**
+     * int[] reflation. Serialized child arrays hold 0/1 (internal/leaf); this
+     * assigns breadth-first node numbers to internal slots and the capacity
+     * sentinel elsewhere. entries [0,size) reflated, [size,capacity) sentinel.
+     */
+    protected static void reverseBits(int size, int[] leftIndex, int[] rightIndex, int capacity) {
+        int nodeCounter = 1;
+        for (int i = 0; i < size; i++) {
+            leftIndex[i] = (leftIndex[i] != 0) ? nodeCounter++ : capacity;
+            rightIndex[i] = (rightIndex[i] != 0) ? nodeCounter++ : capacity;
+        }
+        for (int i = size; i < leftIndex.length; i++) {
+            leftIndex[i] = rightIndex[i] = capacity;
+        }
+    }
+
+    protected void setParentIndex(int node, int parent) {
+        parentIndex[node] = (char) parent;
     }
 
     @Override

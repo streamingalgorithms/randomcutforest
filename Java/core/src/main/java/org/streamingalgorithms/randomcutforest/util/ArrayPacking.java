@@ -459,4 +459,82 @@ public class ArrayPacking {
 
         return result;
     }
+
+    /**
+     * Unpack into a caller-provided char[] (no int[] intermediate). Values must fit
+     * in char (unsigned 16-bit); callers guarantee this by store-width dispatch
+     * (Small store: node indices and sentinel are LT capacity LT 256).
+     * Byte-identical decode to {@link #unpackInts(int[], int, boolean)}; only the
+     * store type differs.
+     */
+    public static void unpackInts(int[] packedArray, char[] out, int length, boolean decompress) {
+        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+        checkNotNull(out, "output cannot be null");
+        checkArgument(length >= 0, "incorrect length parameter");
+        checkArgument(out.length >= length, "output buffer too small");
+        if (packedArray.length < 3 || !decompress) {
+            int n = Math.min(length, packedArray.length); // <-- bound by packed length
+            for (int i = 0; i < n; i++) {
+                out[i] = (char) packedArray[i];
+            }
+            // out[n..length) stays zero (new char[]), matching Arrays.copyOf padding
+            return;
+        }
+        int min = packedArray[0];
+        int max = packedArray[1];
+        if (min == max) {
+            int n = Math.min(packedArray[2], length);
+            for (int i = 0; i < n; i++) {
+                out[i] = (char) min;
+            }
+            return;
+        }
+        long base = ((long) max - min + 1);
+        int packNum = logMax(base);
+        int count = 0;
+        for (int i = 3; i < packedArray.length; i++) {
+            long code = packedArray[i];
+            for (int j = 0; j < packNum && count < Math.min(packedArray[2], length); j++) {
+                out[count++] = (char) (min + code % base);
+                code = (code / base);
+            }
+        }
+    }
+
+    /**
+     * Unpack into a caller-provided byte[] (unsigned, values 0..255). Used for the
+     * Small store's cutDimension. Byte-identical decode to the int path.
+     */
+    public static void unpackInts(int[] packedArray, byte[] out, int length, boolean decompress) {
+        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+        checkNotNull(out, "output cannot be null");
+        checkArgument(length >= 0, "incorrect length parameter");
+        checkArgument(out.length >= length, "output buffer too small");
+        if (packedArray.length < 3 || !decompress) {
+            int n = Math.min(length, packedArray.length); // <-- bound by packed length
+            for (int i = 0; i < n; i++) {
+                out[i] = (byte) packedArray[i];
+            }
+            return;
+        }
+        int min = packedArray[0];
+        int max = packedArray[1];
+        if (min == max) {
+            int n = Math.min(packedArray[2], length);
+            for (int i = 0; i < n; i++) {
+                out[i] = (byte) min;
+            }
+            return;
+        }
+        long base = ((long) max - min + 1);
+        int packNum = logMax(base);
+        int count = 0;
+        for (int i = 3; i < packedArray.length; i++) {
+            long code = packedArray[i];
+            for (int j = 0; j < packNum && count < Math.min(packedArray[2], length); j++) {
+                out[count++] = (byte) (min + code % base);
+                code = (code / base); // was coerced into (int) for some reason?
+            }
+        }
+    }
 }
