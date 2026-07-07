@@ -15,8 +15,12 @@
 
 package org.streamingalgorithms.randomcutforest.state.tree;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
+
+import java.nio.ByteBuffer;
 
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
@@ -63,10 +67,7 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
         state.setPartialTreeStateEnabled(true);
         state.setPrecision(Precision.FLOAT_32.name());
 
-        // REMOVED: int[] leftIndex = model.getLeftIndex(); (bulk widen-copy)
-        // REMOVED: int[] rightIndex = model.getRightIndex();
-        // REMOVED: int[] cutDimension = model.getCutDimension();
-        float[] cutValues = model.getCutValues(); // float[], no widen; kept
+        float[] cutValues = model.getCutValues();
 
         int[] map = new int[capacity];
         int size = model.reorderNodesInBreadthFirstOrder(map, root, capacity);
@@ -76,23 +77,52 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
         boolean check = root != Null && root < capacity;
         state.setCanonicalAndNotALeaf(check);
         if (check) {
-            int[] reorderedLeftArray = new int[size];
-            int[] reorderedRightArray = new int[size];
-            int[] reorderedCutDimension = new int[size];
-            float[] reorderedCutValue = new float[size];
-            for (int i = 0; i < size; i++) {
-                int m = map[i];
-                reorderedLeftArray[i] = (model.getLeftIndex(m) < capacity) ? 1 : 0;
-                reorderedRightArray[i] = (model.getRightIndex(m) < capacity) ? 1 : 0;
-                reorderedCutDimension[i] = model.getCutDimension(m);
-                reorderedCutValue[i] = cutValues[m];
-            }
-            state.setLeftIndex(ArrayPacking.pack(reorderedLeftArray, state.isCompressed()));
-            state.setRightIndex(ArrayPacking.pack(reorderedRightArray, state.isCompressed()));
-            state.setCutDimension(ArrayPacking.pack(reorderedCutDimension, state.isCompressed()));
-            state.setCutValueData(ArrayPacking.pack(reorderedCutValue));
+            boolean compress = state.isCompressed();
+            state.setLeftIndex(
+                    ArrayPacking.moveAndPack(map, size, compress, m -> (model.getLeftIndex(m) < capacity) ? 1 : 0));
+            state.setRightIndex(
+                    ArrayPacking.moveAndPack(map, size, compress, m -> (model.getRightIndex(m) < capacity) ? 1 : 0));
+            state.setCutDimension(ArrayPacking.moveAndPack(map, size, compress, model::getCutDimension));
+            state.setCutValueData(moveAndPack(map, cutValues, size));
         }
+        // if (check) {
+        // int[] reorderedLeftArray = new int[size];
+        // int[] reorderedRightArray = new int[size];
+        // int[] reorderedCutDimension = new int[size];
+        // float[] reorderedCutValue = new float[size];
+        // for (int i = 0; i < size; i++) {
+        // int m = map[i];
+        // reorderedLeftArray[i] = (model.getLeftIndex(m) < capacity) ? 1 : 0;
+        // reorderedRightArray[i] = (model.getRightIndex(m) < capacity) ? 1 : 0;
+        // reorderedCutDimension[i] = model.getCutDimension(m);
+        // reorderedCutValue[i] = cutValues[m];
+        // }
+        // state.setLeftIndex(ArrayPacking.pack(reorderedLeftArray,
+        // state.isCompressed()));
+        // state.setRightIndex(ArrayPacking.pack(reorderedRightArray,
+        // state.isCompressed()));
+        // state.setCutDimension(ArrayPacking.pack(reorderedCutDimension,
+        // state.isCompressed()));
+        // state.setCutValueData(ArrayPacking.pack(reorderedCutValue));
+        // }
         return state;
+    }
+
+    /**
+     * Gather-and-marshal floats to bytes. Equivalent to pack(g) where g[i] =
+     * source[map[i]], without the intermediate float[]. Byte-identical to
+     * pack(float[]) (same big-endian ByteBuffer, same order).
+     */
+    public static byte[] moveAndPack(int[] map, float[] source, int size) {
+        checkNotNull(map, "map must not be null");
+        checkNotNull(source, "source must not be null");
+        checkArgument(0 <= size && size <= map.length, "size must be between 0 and map.length");
+
+        ByteBuffer buf = ByteBuffer.allocate(size * Float.BYTES);
+        for (int i = 0; i < size; i++) {
+            buf.putFloat(source[map[i]]);
+        }
+        return buf.array();
     }
 
 }

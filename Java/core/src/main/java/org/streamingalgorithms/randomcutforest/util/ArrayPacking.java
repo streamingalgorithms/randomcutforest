@@ -21,6 +21,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.function.IntUnaryOperator;
 
 public class ArrayPacking {
 
@@ -536,5 +537,91 @@ public class ArrayPacking {
                 code = (code / base); // was coerced into (int) for some reason?
             }
         }
+    }
+
+    public static void unpackInts(int[] packedArray, int[] out, int length, boolean decompress) {
+        // same body as the char[]/byte[] overloads, writing (int) values into out,
+        // bounded by length, leaving out[n..length) as-is (zero for a fresh array)
+        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+        checkNotNull(out, "output cannot be null");
+        checkArgument(length >= 0, "incorrect length parameter");
+        checkArgument(out.length >= length, "output buffer too small");
+        if (packedArray.length < 3 || !decompress) {
+            int n = Math.min(length, packedArray.length); // <-- bound by packed length
+            for (int i = 0; i < n; i++) {
+                out[i] = packedArray[i];
+            }
+            return;
+        }
+        int min = packedArray[0];
+        int max = packedArray[1];
+        if (min == max) {
+            int n = Math.min(packedArray[2], length);
+            for (int i = 0; i < n; i++) {
+                out[i] = min;
+            }
+            return;
+        }
+        long base = ((long) max - min + 1);
+        int packNum = logMax(base);
+        int count = 0;
+        for (int i = 3; i < packedArray.length; i++) {
+            long code = packedArray[i];
+            for (int j = 0; j < packNum && count < Math.min(packedArray[2], length); j++) {
+                out[count++] = (int) (min + code % base);
+                code = (code / base); // was coerced into (int) for some reason?
+            }
+        }
+    }
+
+    /**
+     * Gather-and-pack without the intermediate array. Equivalent to pack(g,
+     * compress) where g[i] = valueOfNode.applyAsInt(map[i]) for i in [0,size).
+     *
+     * valueOfNode is called up to twice per element (min/max pass, then encode
+     * pass), so it MUST be a pure, side-effect-free read of immutable state.
+     */
+    public static int[] moveAndPack(int[] map, int size, boolean compress, IntUnaryOperator valueOfNode) {
+        checkNotNull(map, "map must not be null");
+        checkNotNull(valueOfNode, "valueOfNode must not be null");
+        checkArgument(0 <= size && size <= map.length, "size must be between 0 and map.length");
+
+        if (!compress || size < 3) {
+            int[] out = new int[size];
+            for (int i = 0; i < size; i++) {
+                out[i] = valueOfNode.applyAsInt(map[i]);
+            }
+            return out; // matches Arrays.copyOf(reordered, size)
+        }
+
+        int min = valueOfNode.applyAsInt(map[0]);
+        int max = min;
+        for (int i = 1; i < size; i++) {
+            int v = valueOfNode.applyAsInt(map[i]);
+            if (v < min)
+                min = v;
+            if (v > max)
+                max = v;
+        }
+        long base = (long) max - min + 1;
+        if (base == 1) {
+            return new int[] { min, max, size };
+        }
+        int packNum = logMax(base);
+        int[] output = new int[3 + (int) Math.ceil(1.0 * size / packNum)];
+        output[0] = min;
+        output[1] = max;
+        output[2] = size;
+        int len = 0, used = 0;
+        while (len < size) {
+            long code = 0;
+            int reach = Math.min(len + packNum - 1, size - 1);
+            for (int i = reach; i >= len; i--) {
+                code = base * code + (valueOfNode.applyAsInt(map[i]) - min);
+            }
+            output[3 + used++] = (int) code;
+            len += packNum;
+        }
+        return output;
     }
 }
