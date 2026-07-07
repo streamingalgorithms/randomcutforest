@@ -18,7 +18,6 @@ package org.streamingalgorithms.randomcutforest.tree;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
-import java.util.Stack;
 
 import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
@@ -96,35 +95,9 @@ public class NodeStoreSmall extends NodeStore {
     }
 
     protected void setParentIndex(int node, int parent) {
-        parentIndex[node] = (byte) parent;
-    }
-
-    @Override
-    public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
-            int childMassIfLeaf, int cutDimension, float cutValue, BoundingBox box) {
-        int index = freeNodeManager.takeIndex();
-        this.cutValue[index] = cutValue;
-        this.cutDimension[index] = (byte) cutDimension;
-        if (leftOf(cutValue, cutDimension, point)) {
-            this.leftIndex[index] = (char) (pointIndex + capacity + 1);
-            this.rightIndex[index] = (char) childIndex;
-        } else {
-            this.rightIndex[index] = (char) (pointIndex + capacity + 1);
-            this.leftIndex[index] = (char) childIndex;
+        if (parentIndex != null) {
+            parentIndex[node] = (byte) parent;
         }
-        this.mass[index] = (byte) ((((childMassIfLeaf > 0) ? childMassIfLeaf : getMass(childIndex)) + 1)
-                % (capacity + 1));
-        int parentIndex = (pathToRoot.size() == 0) ? Null : pathToRoot.lastElement()[0];
-        if (this.parentIndex != null) {
-            this.parentIndex[index] = (byte) parentIndex;
-            if (!isLeaf(childIndex)) {
-                this.parentIndex[childIndex] = (byte) (index);
-            }
-        }
-        if (parentIndex != Null) {
-            spliceEdge(parentIndex, childIndex, index);
-        }
-        return index;
     }
 
     @Override
@@ -220,24 +193,5 @@ public class NodeStoreSmall extends NodeStore {
     public int getCutDimension(int index) {
         return cutDimension[index] & 0xff;
     }
-
-    // public int[] getCutDimension() {
-    // return toIntArray(cutDimension);
-    // }
-
-    // public int[] getLeftIndex() {
-    // return toIntArray(leftIndex);
-    // }
-
-    // public int[] getRightIndex() {
-    // return toIntArray(rightIndex);
-    // }
-
-    /**
-     * char[] reflation for the Small store. The serialized child arrays store 0/1
-     * (internal/leaf); this assigns breadth-first node numbers to the internal
-     * slots and writes the capacity sentinel elsewhere. entries [0,size) are
-     * reflated, [size,capacity) set to sentinel.
-     */
 
 }

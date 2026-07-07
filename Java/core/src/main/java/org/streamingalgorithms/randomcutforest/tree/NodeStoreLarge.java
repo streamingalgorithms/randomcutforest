@@ -18,7 +18,6 @@ package org.streamingalgorithms.randomcutforest.tree;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
-import java.util.Stack;
 
 import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
@@ -82,7 +81,9 @@ public class NodeStoreLarge extends NodeStore {
     }
 
     protected void setParentIndex(int node, int parent) {
-        parentIndex[node] = parent;
+        if (parentIndex != null) {
+            parentIndex[node] = parent;
+        }
     }
 
     // shares NodeStoreMedium's int[] reflation semantics
@@ -95,34 +96,6 @@ public class NodeStoreLarge extends NodeStore {
         for (int i = size; i < leftIndex.length; i++) {
             leftIndex[i] = rightIndex[i] = capacity;
         }
-    }
-
-    @Override
-    public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
-            int childMassIfLeaf, int cutDimension, float cutValue, BoundingBox box) {
-        int index = freeNodeManager.takeIndex();
-        this.cutValue[index] = cutValue;
-        this.cutDimension[index] = (byte) cutDimension;
-        if (leftOf(cutValue, cutDimension, point)) {
-            this.leftIndex[index] = (pointIndex + capacity + 1);
-            this.rightIndex[index] = childIndex;
-        } else {
-            this.rightIndex[index] = (pointIndex + capacity + 1);
-            this.leftIndex[index] = childIndex;
-        }
-        this.mass[index] = (((childMassIfLeaf > 0) ? childMassIfLeaf : getMass(childIndex)) + 1) % (capacity + 1);
-
-        int parentIndex = (pathToRoot.size() == 0) ? Null : pathToRoot.lastElement()[0];
-        if (this.parentIndex != null) {
-            this.parentIndex[index] = parentIndex;
-            if (!isLeaf(childIndex)) {
-                this.parentIndex[childIndex] = (index);
-            }
-        }
-        if (parentIndex != Null) {
-            spliceEdge(parentIndex, childIndex, index);
-        }
-        return index;
     }
 
     public int getLeftIndex(int index) {
@@ -212,18 +185,6 @@ public class NodeStoreLarge extends NodeStore {
     public int getCutDimension(int index) {
         return cutDimension[index];
     }
-
-    // public int[] getCutDimension() {
-    // return Arrays.copyOf(cutDimension, cutDimension.length);
-    // }
-
-    // public int[] getLeftIndex() {
-    // return Arrays.copyOf(leftIndex, leftIndex.length);
-    // }
-
-    // public int[] getRightIndex() {
-    // return Arrays.copyOf(rightIndex, rightIndex.length);
-    // }
 
     public int getParentIndex(int index) {
         checkArgument(parentIndex != null, "incorrect call");

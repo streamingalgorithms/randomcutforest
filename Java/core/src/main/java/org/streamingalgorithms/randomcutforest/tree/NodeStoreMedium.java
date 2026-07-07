@@ -18,7 +18,6 @@ package org.streamingalgorithms.randomcutforest.tree;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
-import java.util.Stack;
 
 import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
@@ -86,35 +85,9 @@ public class NodeStoreMedium extends NodeStore {
     }
 
     protected void setParentIndex(int node, int parent) {
-        parentIndex[node] = (char) parent;
-    }
-
-    @Override
-    public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
-            int childMassIfLeaf, int cutDimension, float cutValue, BoundingBox box) {
-        int index = freeNodeManager.takeIndex();
-        this.cutValue[index] = cutValue;
-        this.cutDimension[index] = (char) cutDimension;
-        if (leftOf(cutValue, cutDimension, point)) {
-            this.leftIndex[index] = (pointIndex + capacity + 1);
-            this.rightIndex[index] = childIndex;
-        } else {
-            this.rightIndex[index] = (pointIndex + capacity + 1);
-            this.leftIndex[index] = childIndex;
+        if (parentIndex != null) {
+            parentIndex[node] = (char) parent;
         }
-        this.mass[index] = (char) ((((childMassIfLeaf > 0) ? childMassIfLeaf : getMass(childIndex)) + 1)
-                % (capacity + 1));
-        int parentIndex = (pathToRoot.size() == 0) ? Null : pathToRoot.lastElement()[0];
-        if (this.parentIndex != null) {
-            this.parentIndex[index] = (char) parentIndex;
-            if (!isLeaf(childIndex)) {
-                this.parentIndex[childIndex] = (char) (index);
-            }
-        }
-        if (parentIndex != Null) {
-            spliceEdge(parentIndex, childIndex, index);
-        }
-        return index;
     }
 
     @Override
@@ -210,17 +183,5 @@ public class NodeStoreMedium extends NodeStore {
     public int getCutDimension(int index) {
         return cutDimension[index];
     }
-
-    // public int[] getCutDimension() {
-    // return toIntArray(cutDimension);
-    // }
-
-    // public int[] getLeftIndex() {
-    // return Arrays.copyOf(leftIndex, leftIndex.length);
-    // }
-
-    // public int[] getRightIndex() {
-    // return Arrays.copyOf(rightIndex, rightIndex.length);
-    // }
 
 }

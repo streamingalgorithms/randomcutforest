@@ -19,7 +19,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.BitSet;
 import java.util.Stack;
-import java.util.concurrent.ArrayBlockingQueue;
 
 import org.streamingalgorithms.randomcutforest.store.IndexIntervalManager;
 
@@ -133,9 +132,6 @@ public abstract class NodeStore {
         }
     }
 
-    protected abstract int addNode(Stack<int[]> pathToRoot, float[] point, long sendex, int pointIndex, int childIndex,
-            int childMassIfLeaf, int cutDimension, float cutValue, BoundingBox box);
-
     public boolean isLeaf(int index) {
         return index > capacity;
     }
@@ -174,6 +170,28 @@ public abstract class NodeStore {
             }
         }
         return answer;
+    }
+
+    public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
+            int childMassIfLeaf, int cutDimension, float cutValue, BoundingBox box) {
+        int index = freeNodeManager.takeIndex();
+        if (leftOf(cutValue, cutDimension, point)) {
+            addRecord(index, pointIndex + capacity + 1, childIndex, cutValue, cutDimension);
+        } else {
+            addRecord(index, childIndex, pointIndex + capacity + 1, cutValue, cutDimension);
+        }
+        setMassOfInternalNode(index,
+                (((childMassIfLeaf > 0) ? childMassIfLeaf : getMass(childIndex)) + 1) % (capacity + 1));
+        int parentIndex = (pathToRoot.isEmpty()) ? Null : pathToRoot.lastElement()[0];
+        setParentIndex(index, parentIndex); // may be ignored
+        if (!isLeaf(childIndex)) {
+            setParentIndex(childIndex, index);
+        }
+
+        if (parentIndex != Null) {
+            spliceEdge(parentIndex, childIndex, index);
+        }
+        return index;
     }
 
     public abstract void deleteInternalNode(int index);
@@ -270,28 +288,5 @@ public abstract class NodeStore {
             }
         }
         return tail; // == number of nodes visited == old currentNode
-    }
-
-    public int reorderNodesInBreadthFirstOrderA(int[] map, int root, int capacity) {
-        if ((root != Null) && (root < capacity)) {
-            int currentNode = 0;
-            ArrayBlockingQueue<Integer> nodeQueue = new ArrayBlockingQueue<>(capacity);
-            nodeQueue.add(root);
-            while (!nodeQueue.isEmpty()) {
-                int head = nodeQueue.poll();
-                int leftChild = getLeftIndex(head); // was leftIndex[head]
-                if (leftChild < capacity) {
-                    nodeQueue.add(leftChild);
-                }
-                int rightChild = getRightIndex(head); // was rightIndex[head]
-                if (rightChild < capacity) {
-                    nodeQueue.add(rightChild);
-                }
-                map[currentNode] = head;
-                currentNode++;
-            }
-            return currentNode;
-        }
-        return 0;
     }
 }
