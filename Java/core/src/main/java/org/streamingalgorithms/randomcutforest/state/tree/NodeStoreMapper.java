@@ -85,26 +85,6 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
             state.setCutDimension(ArrayPacking.moveAndPack(map, size, compress, model::getCutDimension));
             state.setCutValueData(moveAndPack(map, cutValues, size));
         }
-        // if (check) {
-        // int[] reorderedLeftArray = new int[size];
-        // int[] reorderedRightArray = new int[size];
-        // int[] reorderedCutDimension = new int[size];
-        // float[] reorderedCutValue = new float[size];
-        // for (int i = 0; i < size; i++) {
-        // int m = map[i];
-        // reorderedLeftArray[i] = (model.getLeftIndex(m) < capacity) ? 1 : 0;
-        // reorderedRightArray[i] = (model.getRightIndex(m) < capacity) ? 1 : 0;
-        // reorderedCutDimension[i] = model.getCutDimension(m);
-        // reorderedCutValue[i] = cutValues[m];
-        // }
-        // state.setLeftIndex(ArrayPacking.pack(reorderedLeftArray,
-        // state.isCompressed()));
-        // state.setRightIndex(ArrayPacking.pack(reorderedRightArray,
-        // state.isCompressed()));
-        // state.setCutDimension(ArrayPacking.pack(reorderedCutDimension,
-        // state.isCompressed()));
-        // state.setCutValueData(ArrayPacking.pack(reorderedCutValue));
-        // }
         return state;
     }
 

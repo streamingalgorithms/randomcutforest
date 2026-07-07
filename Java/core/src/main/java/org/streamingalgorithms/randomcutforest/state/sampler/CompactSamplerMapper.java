@@ -44,15 +44,12 @@ public class CompactSamplerMapper implements IStateMapper<CompactSampler, Compac
     @Override
     public CompactSampler toModel(CompactSamplerState state, long seed) {
         float[] weight = new float[state.getCapacity()];
-        // int[] pointIndex = new int[state.getCapacity()];
         long[] sequenceIndex;
 
         int size = state.getSize();
         System.arraycopy(state.getWeight(), 0, weight, 0, size);
         int[] pointIndex = new int[state.getCapacity()];
         ArrayPacking.unpackInts(state.getPointIndex(), pointIndex, size, state.isCompressed());
-        // System.arraycopy(ArrayPacking.unpackInts(state.getPointIndex(),
-        // state.isCompressed()), 0, pointIndex, 0, size);
         if (state.isStoreSequenceIndicesEnabled()) {
             sequenceIndex = new long[state.getCapacity()];
             System.arraycopy(state.getSequenceIndex(), 0, sequenceIndex, 0, size);

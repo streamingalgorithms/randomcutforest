@@ -1,4 +1,19 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file has substantially modified from the original which had this notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -28,10 +43,15 @@ import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackSh
 
 import java.util.Arrays;
 import java.util.Random;
+import java.util.function.IntUnaryOperator;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 public class ArrayPackingTest {
@@ -296,5 +316,107 @@ public class ArrayPackingTest {
         assertDoesNotThrow(() -> unpackFloats(newArray, 1));
         assertThrows(IllegalArgumentException.class, () -> unpackFloats(newArray, -1));
         assertThrows(IllegalArgumentException.class, () -> unpackDoubles(newArray, -1));
+    }
+
+    /**
+     * The invariant: moveAndPack == pack(gather(map, provider), compress), byte for
+     * byte.
+     */
+    private static void assertEquivalent(int[] map, int size, boolean compress, IntUnaryOperator provider) {
+        int[] gathered = new int[size];
+        for (int i = 0; i < size; i++) {
+            gathered[i] = provider.applyAsInt(map[i]);
+        }
+        int[] expected = ArrayPacking.pack(gathered, size, compress);
+        int[] actual = ArrayPacking.moveAndPack(map, size, compress, provider);
+        assertArrayEquals(expected, actual, () -> "size=" + size + " compress=" + compress + "\n exp="
+                + Arrays.toString(expected) + "\n act=" + Arrays.toString(actual));
+    }
+
+    // ---- branch: !compress and size < 3 both take the copyOf path ----
+
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 1, 2, 3, 5, 17, 256, 1000 })
+    void identityProvider_matchesPack_bothModes(int size) {
+        int[] map = shuffledIdentity(size, 42);
+        assertEquivalent(map, size, true, m -> m); // compressed
+        assertEquivalent(map, size, false, m -> m); // stored (copyOf path)
+    }
+
+    // ---- branch: base == 1 (all values equal) — the all-ones child-bit case ----
+
+    @ParameterizedTest
+    @ValueSource(ints = { 3, 4, 255, 256, 999 })
+    void constantProvider_hitsBaseOnePath(int size) {
+        int[] map = shuffledIdentity(size, 7);
+        assertEquivalent(map, size, true, m -> 1); // every element 1 -> {1,1,size}
+        assertEquivalent(map, size, true, m -> 0);
+        assertEquivalent(map, size, true, m -> -13); // negative constant, base still 1
+    }
+
+    // ---- branch: real mapper-shaped providers (child bit, cut dimension) ----
+
+    @ParameterizedTest
+    @MethodSource("mapperShapedCases")
+    void mapperShapedProviders_matchPack(int size, int capacity, IntUnaryOperator provider) {
+        int[] map = shuffledIdentity(Math.max(size, capacity), 99);
+        assertEquivalent(map, size, true, provider);
+    }
+
+    static Stream<Arguments> mapperShapedCases() {
+        Random r = new Random(1234);
+        // childBit: 1 if node's (fake) child index < capacity else 0 — mixed 0/1 ->
+        // base 2
+        int[] leftIdx = IntStream.range(0, 4096).map(i -> r.nextInt(8192)).toArray();
+        int cap = 4096;
+        IntUnaryOperator childBit = m -> (leftIdx[m] < cap) ? 1 : 0;
+        // cutDimension: small non-negative range -> narrow base
+        IntUnaryOperator cutDim = m -> m % 100;
+        return Stream.of(Arguments.of(300, cap, childBit), Arguments.of(1000, cap, childBit),
+                Arguments.of(300, cap, cutDim), Arguments.of(4096, cap, cutDim));
+    }
+
+    // ---- size < map.length: the real call passes new int[capacity] but packs only
+    // `size` ----
+
+    @Test
+    void packsOnlyFirstSize_ignoresTail() {
+        int capacity = 512;
+        int size = 300;
+        int[] map = shuffledIdentity(capacity, 5); // length capacity, BFS count 300
+        assertEquivalent(map, size, true, m -> (m * 31) & 0xFF);
+    }
+
+    // ---- randomized differential fuzz across value ranges (drives varied
+    // base/packNum) ----
+
+    @Test
+    void randomizedDifferential() {
+        Random r = new Random(20240607L);
+        for (int trial = 0; trial < 2000; trial++) {
+            int size = r.nextInt(600);
+            int[] map = shuffledIdentity(size, r.nextLong());
+            int span = 1 << (1 + r.nextInt(20)); // 2 .. ~1M -> exercises many packNum values
+            int lo = r.nextInt(2001) - 1000;
+            IntUnaryOperator provider = m -> lo + (Math.abs(m * 2654435761L % span) == 0 ? 0 : (int) (m % span));
+            boolean compress = r.nextBoolean();
+            assertEquivalent(map, size, compress, provider);
+        }
+    }
+
+    /**
+     * map of the given length whose entries are a shuffle of [0,length): a valid
+     * node-id permutation.
+     */
+    private static int[] shuffledIdentity(int length, long seed) {
+        int[] a = IntStream.range(0, length).toArray();
+        Random r = new Random(seed);
+        for (int i = length - 1; i > 0; i--) {
+            int j = r.nextInt(i + 1);
+            int t = a[i];
+            a[i] = a[j];
+            a[j] = t;
+        }
+        return a;
     }
 }
