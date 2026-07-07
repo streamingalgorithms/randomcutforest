@@ -251,8 +251,28 @@ public abstract class NodeStore {
      *
      * The algorithm renumbers the nodes in BFS ordering.
      */
-
     public int reorderNodesInBreadthFirstOrder(int[] map, int root, int capacity) {
+        if (root == Null || root >= capacity) {
+            return 0;
+        }
+        int head = 0; // read cursor
+        int tail = 0; // write cursor
+        map[tail++] = root;
+        while (head < tail) {
+            int node = map[head++];
+            int leftChild = getLeftIndex(node);
+            if (leftChild < capacity) {
+                map[tail++] = leftChild;
+            }
+            int rightChild = getRightIndex(node);
+            if (rightChild < capacity) {
+                map[tail++] = rightChild;
+            }
+        }
+        return tail; // == number of nodes visited == old currentNode
+    }
+
+    public int reorderNodesInBreadthFirstOrderA(int[] map, int root, int capacity) {
         if ((root != Null) && (root < capacity)) {
             int currentNode = 0;
             ArrayBlockingQueue<Integer> nodeQueue = new ArrayBlockingQueue<>(capacity);

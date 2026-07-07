@@ -213,17 +213,17 @@ public class NodeStoreLarge extends NodeStore {
         return cutDimension[index];
     }
 
-    public int[] getCutDimension() {
-        return Arrays.copyOf(cutDimension, cutDimension.length);
-    }
+    // public int[] getCutDimension() {
+    // return Arrays.copyOf(cutDimension, cutDimension.length);
+    // }
 
-    public int[] getLeftIndex() {
-        return Arrays.copyOf(leftIndex, leftIndex.length);
-    }
+    // public int[] getLeftIndex() {
+    // return Arrays.copyOf(leftIndex, leftIndex.length);
+    // }
 
-    public int[] getRightIndex() {
-        return Arrays.copyOf(rightIndex, rightIndex.length);
-    }
+    // public int[] getRightIndex() {
+    // return Arrays.copyOf(rightIndex, rightIndex.length);
+    // }
 
     public int getParentIndex(int index) {
         checkArgument(parentIndex != null, "incorrect call");

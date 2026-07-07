@@ -16,7 +16,6 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toIntArray;
 
 import java.util.Arrays;
 import java.util.Stack;
@@ -70,6 +69,23 @@ public class NodeStoreSmall extends NodeStore {
         buildFreeList(root);
         if (parentIndex != null) {
             buildParents(root);
+        }
+    }
+
+    /**
+     * char[] reflation for the Small store. The serialized child arrays store 0/1
+     * (internal/leaf); this assigns breadth-first node numbers to the internal
+     * slots and writes the capacity sentinel elsewhere. entries [0,size) are
+     * reflated, [size,capacity) set to sentinel.
+     */
+    protected static void reverseBits(int size, char[] leftIndex, char[] rightIndex, int capacity) {
+        int nodeCounter = 1;
+        for (int i = 0; i < size; i++) {
+            leftIndex[i] = (leftIndex[i] != 0) ? (char) nodeCounter++ : (char) capacity;
+            rightIndex[i] = (rightIndex[i] != 0) ? (char) nodeCounter++ : (char) capacity;
+        }
+        for (int i = size; i < leftIndex.length; i++) {
+            leftIndex[i] = rightIndex[i] = (char) capacity;
         }
     }
 
@@ -205,17 +221,17 @@ public class NodeStoreSmall extends NodeStore {
         return cutDimension[index] & 0xff;
     }
 
-    public int[] getCutDimension() {
-        return toIntArray(cutDimension);
-    }
+    // public int[] getCutDimension() {
+    // return toIntArray(cutDimension);
+    // }
 
-    public int[] getLeftIndex() {
-        return toIntArray(leftIndex);
-    }
+    // public int[] getLeftIndex() {
+    // return toIntArray(leftIndex);
+    // }
 
-    public int[] getRightIndex() {
-        return toIntArray(rightIndex);
-    }
+    // public int[] getRightIndex() {
+    // return toIntArray(rightIndex);
+    // }
 
     /**
      * char[] reflation for the Small store. The serialized child arrays store 0/1
@@ -223,14 +239,5 @@ public class NodeStoreSmall extends NodeStore {
      * slots and writes the capacity sentinel elsewhere. entries [0,size) are
      * reflated, [size,capacity) set to sentinel.
      */
-    protected static void reverseBits(int size, char[] leftIndex, char[] rightIndex, int capacity) {
-        int nodeCounter = 1;
-        for (int i = 0; i < size; i++) {
-            leftIndex[i] = (leftIndex[i] != 0) ? (char) nodeCounter++ : (char) capacity;
-            rightIndex[i] = (rightIndex[i] != 0) ? (char) nodeCounter++ : (char) capacity;
-        }
-        for (int i = size; i < leftIndex.length; i++) {
-            leftIndex[i] = rightIndex[i] = (char) capacity;
-        }
-    }
+
 }

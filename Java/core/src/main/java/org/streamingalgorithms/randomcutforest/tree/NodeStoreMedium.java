@@ -16,7 +16,6 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toIntArray;
 
 import java.util.Arrays;
 import java.util.Stack;
@@ -212,16 +211,16 @@ public class NodeStoreMedium extends NodeStore {
         return cutDimension[index];
     }
 
-    public int[] getCutDimension() {
-        return toIntArray(cutDimension);
-    }
+    // public int[] getCutDimension() {
+    // return toIntArray(cutDimension);
+    // }
 
-    public int[] getLeftIndex() {
-        return Arrays.copyOf(leftIndex, leftIndex.length);
-    }
+    // public int[] getLeftIndex() {
+    // return Arrays.copyOf(leftIndex, leftIndex.length);
+    // }
 
-    public int[] getRightIndex() {
-        return Arrays.copyOf(rightIndex, rightIndex.length);
-    }
+    // public int[] getRightIndex() {
+    // return Arrays.copyOf(rightIndex, rightIndex.length);
+    // }
 
 }
