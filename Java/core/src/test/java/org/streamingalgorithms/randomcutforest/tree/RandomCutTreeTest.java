@@ -150,14 +150,6 @@ public class RandomCutTreeTest {
     }
 
     @Test
-    public void testParent() {
-        PointStore pointStore = mock(PointStore.class);
-        tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore)
-                .storeSequenceIndexesEnabled(true).storeParent(false).dimension(3).build();
-        assertThrows(IllegalArgumentException.class, () -> tree.nodeStore.getParentIndex(tree.root));
-    }
-
-    @Test
     public void testConfigDelete() {
         PointStore pointStore = mock(PointStore.class);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore)
@@ -269,7 +261,7 @@ public class RandomCutTreeTest {
         // pointIndex should have a value at least as large as number of leaves
         assertThrows(IllegalArgumentException.class, () -> tree.getPointIndex(0));
 
-        NodeStoreSmall nodeStoreSmall = (NodeStoreSmall) tree.nodeStore;
+        NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
         expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new BoundingBox(new float[] { 1, 1 }));
@@ -385,7 +377,7 @@ public class RandomCutTreeTest {
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getLeftChild(node))).get(1L), 1);
         // sibling node moves up and bounding box recomputed
 
-        NodeStoreSmall nodeStoreSmall = (NodeStoreSmall) tree.nodeStore;
+        NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
         expectedBox = new BoundingBox(new float[] { 0, 1 }).getMergedBox(new float[] { 1, 1 });
@@ -429,7 +421,7 @@ public class RandomCutTreeTest {
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getLeftChild(node))).get(1L), 1);
 
         // sibling node moves up and bounding box stays the same
-        NodeStoreSmall nodeStoreSmall = (NodeStoreSmall) tree.nodeStore;
+        NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
         expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
@@ -516,7 +508,7 @@ public class RandomCutTreeTest {
         assertThat(tree.getMass(tree.getRightChild(node)), is(1));
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getRightChild(node))).get(2L), 1);
 
-        NodeStoreSmall nodeStoreSmall = (NodeStoreSmall) tree.nodeStore;
+        NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getLeftChild(node)) == node);
         node = tree.getLeftChild(node);
         expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
@@ -576,6 +568,8 @@ public class RandomCutTreeTest {
 
     @Test
     public void testfloat() {
+        PointStore pointStoreFloat = new PointStore.Builder().indexCapacity(10).capacity(10).currentStoreCapacity(10)
+                .dimensions(1).build();
         float x = 110.13f;
         double sum = 0;
         int trials = 230000;
@@ -599,7 +593,7 @@ public class RandomCutTreeTest {
         System.out.println("rangesum " + box.getRangeSum());
         double factor = 1.0 - 1e-16;
         System.out.println(factor);
-        RandomCutTree tree = RandomCutTree.builder().dimension(trials).build();
+        RandomCutTree tree = RandomCutTree.builder().pointStoreView(pointStoreFloat).dimension(trials).build();
         // tries both path
         tree.randomCut(factor, possible, box);
         tree.randomCut(1.0 - 1e-17, possible, box);

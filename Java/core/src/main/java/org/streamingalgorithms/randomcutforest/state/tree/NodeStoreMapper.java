@@ -51,8 +51,10 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
     public NodeStore toModel(NodeStoreState state, CompactRandomCutTreeContext context, long seed) {
         int capacity = state.getCapacity();
 
+        long leafRefBound = context.getPointStore().getCapacity() + capacity;
+
         if (root == Null || root >= capacity) {
-            return nodeStore(capacity, context.getDimension(), storeParent);
+            return nodeStore(capacity, context.getDimension(), leafRefBound, storeParent);
         }
 
         // PASS-THROUGH: every encoded array is forwarded packed; the concrete node
@@ -60,7 +62,7 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
         // no unpacking, no reverseBits -- it only routes state -> store.
         // note size cannot be 0 if the root is nontrivial
 
-        return NodeStore.from(capacity, 0, context.getDimension(), storeParent, state.getCutValueData(),
+        return NodeStore.from(capacity, 0, context.getDimension(), leafRefBound, storeParent, state.getCutValueData(),
                 state.getLeftIndex(), state.getRightIndex(), state.getCutDimension(), state.getSize(),
                 state.isCompressed());
     }
@@ -68,7 +70,7 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
     @Override
     public NodeStoreState toState(NodeStore model) {
         NodeStoreState state = new NodeStoreState();
-        int capacity = model.getCapacity();
+        int capacity = model.getCapacity(); // this is number of leaves - 1
         state.setVersion(Version.V3_0);
         state.setCapacity(capacity);
         state.setCompressed(true);

@@ -109,7 +109,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         outputAfter = builder.outputAfter.orElse(max(1, numberOfLeaves / 4));
         dimension = (builder.dimension != 0) ? builder.dimension : pointStoreView.getDimensions();
         nodeStore = (builder.nodeStore != null) ? builder.nodeStore
-                : nodeStore(numberOfLeaves - 1, dimension, builder.storeParent);
+                : NodeStore.nodeStore(numberOfLeaves - 1, dimension, pointStoreView.getCapacity() + numberOfLeaves - 1L,
+                        builder.storeParent);
 
         this.boundingBoxCacheFraction = builder.boundingBoxCacheFraction;
         this.storeSequenceIndexesEnabled = builder.storeSequenceIndexesEnabled;

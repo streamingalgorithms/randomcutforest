@@ -81,6 +81,13 @@
                 <artifactId>powermock-api-easymock</artifactId>
                 <version>2.0.7</version>
             </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.11.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -105,7 +112,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.6</version>
                 <configuration>
-                    <argLine>@{argLine} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} -ea --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
