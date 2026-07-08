@@ -91,7 +91,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected HashMap<Integer, List<Long>> sequenceMap;
     protected final float[] pointScratch;
     protected final int[] nodeScratch;
-    protected final double[] cutScratch;
+    protected final double[] attributionScratch;
+    protected final Cut cutScratch;
 
     // the following is a separation oracle that takes a bounding box and generates
     // a cut
@@ -118,7 +119,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         leafMass.defaultReturnValue(0);
         pointScratch = new float[dimension];
         nodeScratch = new int[numberOfLeaves]; // cannot be -1
-        cutScratch = new double[dimension];
+        attributionScratch = new double[dimension];
+        cutScratch = new Cut(0, 0);
         if (this.centerOfMassEnabled) {
             pointSum = new float[(numberOfLeaves - 1) * dimension];
         }
@@ -175,9 +177,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      *               use Max - Min in that coordinate, widened to double; the
      *               invariant must be that iff the float gap is non-zero then the
      *               gap computed must be non-zero (and nextAfter is defined)
-     * @return A new Cut corresponding to a random cut in the bounding box.
+     * @param output Cut corresponding to a random cut in the bounding box.
      */
-    protected Cut randomCut(double factor, float[] point, BoundingBox box, SeparationOracle oracle, boolean union) {
+    protected void randomCut(double factor, float[] point, BoundingBox box, SeparationOracle oracle, boolean union,
+            Cut output) {
         double range = 0.0;
         // box cannot be null -- it can be a single point
         float[] minValues = box.minValues;
@@ -189,17 +192,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 for (int i = 0; i < dim; i++) {
                     double minValue = min(minValues[i], point[i]);
                     double maxValue = max(maxValues[i], point[i]);
-                    cutScratch[i] = maxValue - minValue;
-                    range += cutScratch[i];
+                    attributionScratch[i] = maxValue - minValue;
+                    range += attributionScratch[i];
                 }
             } else {
                 for (int i = 0; i < dim; i++) {
-                    cutScratch[i] = maxValues[i] - (double) minValues[i];
+                    attributionScratch[i] = maxValues[i] - (double) minValues[i];
                 }
                 range = box.getRangeSum();
             }
         } else {
-            range = oracle.computeGap(box, cutScratch);
+            range = oracle.computeGap(box, attributionScratch);
         }
 
         checkArgument(range > 0, () -> " the union is a single point " + Arrays.toString(point)
@@ -208,7 +211,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         double breakPoint = factor * range;
 
         for (int i = 0; i < dim; i++) {
-            double gap = cutScratch[i];
+            double gap = attributionScratch[i];
 
             // the invariant we must maintain is that if the float values
             // are not the same then the gap must be non-zeor
@@ -229,14 +232,26 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                     cutValue = Math.nextAfter((float) maxValue, minValue);
                 }
 
-                return new Cut(i, cutValue);
+                output.set(i, cutValue);
+                return;
             }
             breakPoint -= gap;
         }
-        return cleanup(factor, box, point, oracle);
+        cleanup(factor, box, point, output);
     }
 
-    private Cut cleanup(double factor, BoundingBox box, float[] point, SeparationOracle oracle) {
+    /**
+     * Cleanup fires for anomalous distributions -- it ignores all ranges and
+     * performs a nontrivial cut in the first dimension it can cut in, starting
+     * evenly from 0 or the box dimension-1
+     * 
+     * @param factor random seed to control/reproduce behavior
+     * @param box    the pathological box in question
+     * @param point  can be null, non-null points are unioned
+     * @param output the output cut
+     * @return
+     */
+    private void cleanup(double factor, BoundingBox box, float[] point, Cut output) {
 
         // if we are here then factor is likely almost 1 and we have floating point
         // issues. we will randomize between the first and the last non-zero ranges
@@ -253,7 +268,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 float maxValue = (float) merged.getMaxValue(i);
                 if (maxValue > minValue) {
                     double cutValue = Math.nextAfter((float) maxValue, minValue);
-                    return new Cut(i, cutValue);
+                    output.set(i, cutValue);
+                    return;
                 }
             }
         } else {
@@ -262,7 +278,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 float maxValue = (float) merged.getMaxValue(i);
                 if (maxValue > minValue) {
                     double cutValue = Math.nextAfter((float) maxValue, minValue);
-                    return new Cut(i, cutValue);
+                    output.set(i, cutValue);
+                    return;
                 }
             }
         }
@@ -271,12 +288,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 + ", point " + Arrays.toString(point) + " box " + box.toString());
     }
 
+    // the following is just for testing and not to disturb the 100s of tests
     protected Cut randomCut(double factor, float[] point, BoundingBox box) {
-        return randomCut(factor, point, box, null, true);
+        Cut output = new Cut(0, 0);
+        randomCut(factor, point, box, null, true, output);
+        return output;
     }
 
-    protected Cut randomCut(double factor, BoundingBox box) {
-        return randomCut(factor, null, box, null, false);
+    protected void randomCut(double factor, BoundingBox box, Cut output) {
+        randomCut(factor, null, box, null, false, output);
     }
 
     /**
@@ -334,9 +354,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 }
                 while (true) {
                     double factor = rng.nextDouble();
-                    Cut cut = randomCut(factor, point, currentBox, null, true);
-                    int dim = cut.getDimension();
-                    float value = (float) cut.getValue();
+                    randomCut(factor, point, currentBox, null, true, cutScratch);
+                    int dim = cutScratch.getDimension();
+                    float value = (float) cutScratch.getValue();
 
                     boolean separation = ((point[dim] <= value && value < currentBox.getMinValue(dim)
                             || point[dim] > value && value >= currentBox.getMaxValue(dim)));
@@ -389,8 +409,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
-    public void makeTree(int size, int[] indexList, int[] outputList, int[] pointList, long[] sequenceIndex,
-            SeparationOracle oracle) {
+    public void makeTree(int size, BoundingBox scratch, int[] indexList, int[] outputList, int[] pointList,
+            long[] sequenceIndex, SeparationOracle oracle) {
         // this function allows a public call, which may be useful someday
         // that day is today ....
         if (size > 0 && size <= numberOfLeaves) {
@@ -398,10 +418,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             checkArgument(outputList.length <= size, "incorrect output buffer");
             checkArgument(sequenceIndex == null || (pointList.length == sequenceIndex.length), "mismatched input");
 
-            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch);
+            Cut scratchCut = new Cut(0, 0);
+            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratch, scratchCut);
             // the cuts are specififed; now build tree
             // note the contents of the indexList will be permuted.
-            for (int i = 0; i < indexList.length; i++) {
+            for (int i = 0; i < size; i++) {
                 long seq = (sequenceIndex != null) ? sequenceIndex[indexList[i]] : SEQUENCE_INDEX_NA;
                 checkArgument(outputList[i] == addPointToPartialTree(pointList[indexList[i]], seq),
                         "error in construction");
@@ -424,26 +445,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the outputList is populated such that chosen[i] correponds to the inserted
     // point (which is revealed only after insertion)
     int makeTreeInt(int[] chosen, int[] output, int start, int end, int[] pointList, int firstFree,
-            SeparationOracle vecBuild, int[] scratch) {
+            SeparationOracle vecBuild, int[] scratch, BoundingBox boxScratch, Cut cutScratch) {
 
         if (end - start == 0)
             return Null;
+        pointStoreView.getNumericVectorInto(pointList[chosen[start]], pointScratch);
+        boxScratch.setAs(pointScratch);
 
-        BoundingBox box = null;
-        for (int i = start; i < end; i++) {
+        for (int i = start + 1; i < end; i++) {
             pointStoreView.getNumericVectorInto(pointList[chosen[i]], pointScratch);
-            if (box == null) {
-                box = new BoundingBox(pointScratch, pointScratch);
-            } else {
-                box.addPoint(pointScratch);
-            }
+            boxScratch.addPoint(pointScratch);
         }
 
-        if (box == null) {
-            return Null;
-        }
-
-        if (box.getRangeSum() <= 0) {
+        if (boxScratch.getRangeSum() <= 0) {
             int rep = pointList[chosen[start]];
             // all of these points are now the same as rep
             // note chosen is not changed,
@@ -455,8 +469,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         Random ring = new Random(getRandomSeed());
         double factor = ring.nextDouble();
-        Cut cut = randomCut(factor, null, box, vecBuild, false);
-
+        randomCut(factor, null, boxScratch, vecBuild, false, cutScratch);
+        float cutValue = (float) cutScratch.getValue();
+        int cutDimension = cutScratch.getDimension();
         // stable in-place partition of [start, end):
         // lefts compacted into [start, mid); rights buffered in order, then written
         // into [mid, end)
@@ -464,7 +479,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         int r = 0;
         for (int j = start; j < end; j++) {
             int v = chosen[j];
-            if (pointStoreView.leftOf(pointList[v], (float) cut.getValue(), cut.getDimension())) {
+            if (pointStoreView.leftOf(pointList[v], cutValue, cutDimension)) {
                 chosen[write++] = v;
             } else {
                 scratch[r++] = v;
@@ -474,16 +489,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         for (int k = 0; k < r; k++) {
             chosen[mid + k] = scratch[k];
         }
-
-        int leftCount = mid - start;
-        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch);
-        int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch);
-        nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
-                (float) cut.getValue(), cut.getDimension());
         int idx = translate(firstFree);
         if (idx != Integer.MAX_VALUE) {
-            copyBoxToData(idx, box);
+            copyBoxToData(idx, boxScratch);
         }
+        int leftCount = mid - start;
+        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch, boxScratch,
+                cutScratch);
+        int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch,
+                boxScratch, cutScratch);
+        nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
+                cutValue, cutDimension);
         return firstFree;
     }
 

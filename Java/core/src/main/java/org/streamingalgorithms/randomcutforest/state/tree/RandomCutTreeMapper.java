@@ -19,6 +19,7 @@ import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
+import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.NodeStore;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 
@@ -30,12 +31,31 @@ import lombok.Setter;
 public class RandomCutTreeMapper
         implements IContextualStateMapper<RandomCutTree, CompactRandomCutTreeState, CompactRandomCutTreeContext> {
 
+    private NodeStoreMapper nodeStoreMapper = new NodeStoreMapper();
+    private BoundingBox scatchBox;
+    private int[] indexList;
+    private int[] outputList;
+
+    public void setBox(int dimension) {
+        if (scatchBox == null || scatchBox.getDimensions() != dimension) {
+            scatchBox = new BoundingBox(dimension);
+        }
+    }
+
+    public void setSamplerSize(int size) {
+        if (indexList == null || indexList.length < size) {
+            indexList = new int[size];
+        }
+        if (outputList == null || outputList.length < size) {
+            outputList = new int[size];
+        }
+    }
+
     @Override
     public RandomCutTree toModel(CompactRandomCutTreeState state, CompactRandomCutTreeContext context, long seed) {
 
         int dimension = (state.getDimensions() != 0) ? state.getDimensions() : context.getPointStore().getDimensions();
         context.setDimension(dimension);
-        NodeStoreMapper nodeStoreMapper = new NodeStoreMapper();
         nodeStoreMapper.setRoot(state.getRoot());
         NodeStore nodeStore = nodeStoreMapper.toModel(state.getNodeStoreState(), context);
 
@@ -55,7 +75,6 @@ public class RandomCutTreeMapper
         CompactRandomCutTreeState state = new CompactRandomCutTreeState();
         state.setVersion(Version.V3_0);
         int root = model.getRoot();
-        NodeStoreMapper nodeStoreMapper = new NodeStoreMapper();
         nodeStoreMapper.setRoot(root);
         state.setNodeStoreState(nodeStoreMapper.toState(model.getNodeStore()));
         // the compression of nodeStore would change the root

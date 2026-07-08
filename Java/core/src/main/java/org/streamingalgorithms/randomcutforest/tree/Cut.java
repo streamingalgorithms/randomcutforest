@@ -22,8 +22,8 @@ package org.streamingalgorithms.randomcutforest.tree;
  */
 public class Cut {
 
-    private final int dimension;
-    private final double value;
+    private int dimension;
+    private double value;
 
     /**
      * Create a new Cut with the given dimension and value.
@@ -32,6 +32,10 @@ public class Cut {
      * @param value     The spatial value of the cut.
      */
     public Cut(int dimension, double value) {
+        this.set(dimension, value);
+    }
+
+    public void set(int dimension, double value) {
         this.dimension = dimension;
         this.value = value;
     }

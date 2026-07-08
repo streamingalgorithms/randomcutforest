@@ -20,6 +20,8 @@ import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
 import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.bitEncode;
 import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPack;
 
+import java.util.Arrays;
+
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
@@ -35,6 +37,15 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
 
     private int root;
     private boolean storeParent;
+    int[] nodeMap;
+
+    void setMap(int capacity) {
+        if (nodeMap == null) {
+            nodeMap = new int[capacity];
+        } else if (nodeMap.length < capacity) {
+            nodeMap = Arrays.copyOf(nodeMap, capacity);
+        }
+    }
 
     @Override
     public NodeStore toModel(NodeStoreState state, CompactRandomCutTreeContext context, long seed) {
@@ -66,8 +77,9 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
 
         float[] cutValues = model.getCutValues();
 
-        int[] map = new int[capacity];
-        int size = model.reorderNodesInBreadthFirstOrder(map, root, capacity);
+        setMap(capacity);
+
+        int size = model.reorderNodesInBreadthFirstOrder(nodeMap, root, capacity);
         // note that the point of this is that reorder is not inplace -- the
         // original nodestore is unaffected
         state.setSize(size); // (A) BFS count -- the value kept when check==false
@@ -75,10 +87,10 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
         state.setCanonicalAndNotALeaf(check);
         if (check) {
             boolean compress = state.isCompressed();
-            state.setLeftIndex(bitEncode(size, compress, m -> (model.getLeftIndex(map[m]) < capacity) ? 1 : 0));
-            state.setRightIndex(bitEncode(size, compress, m -> (model.getRightIndex(map[m]) < capacity) ? 1 : 0));
-            state.setCutDimension(moveAndPack(map, size, compress, model::getCutDimension));
-            state.setCutValueData(moveAndPack(map, cutValues, size));
+            state.setLeftIndex(bitEncode(size, compress, m -> (model.getLeftIndex(nodeMap[m]) < capacity) ? 1 : 0));
+            state.setRightIndex(bitEncode(size, compress, m -> (model.getRightIndex(nodeMap[m]) < capacity) ? 1 : 0));
+            state.setCutDimension(moveAndPack(nodeMap, size, compress, model::getCutDimension));
+            state.setCutValueData(moveAndPack(nodeMap, cutValues, size));
         }
         return state;
     }
