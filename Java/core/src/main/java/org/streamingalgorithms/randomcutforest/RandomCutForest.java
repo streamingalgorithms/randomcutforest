@@ -31,6 +31,7 @@ import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
 
 import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyAttributionVisitor;
@@ -232,11 +233,6 @@ public class RandomCutForest {
      * Number of threads to use in the thread pool if parallel execution is enabled.
      */
     protected final int threadPoolSize;
-    /**
-     * A string to define an "execution mode" that can be used to set multiple
-     * configuration options. This field is not currently in use.
-     */
-    protected String executionMode;
 
     protected IStateCoordinator<?, float[]> stateCoordinator;
     protected ComponentList<?, float[]> components;
@@ -358,7 +354,6 @@ public class RandomCutForest {
         centerOfMassEnabled = builder.centerOfMassEnabled;
         parallelExecutionEnabled = builder.parallelExecutionEnabled;
         boundingBoxCacheFraction = builder.boundingBoxCacheFraction;
-        builder.directLocationMapEnabled = builder.directLocationMapEnabled || shingleSize == 1;
         inputDimensions = (internalShinglingEnabled) ? dimensions / shingleSize : dimensions;
         pointStoreCapacity = max(sampleSize * numberOfTrees + 1, 2 * sampleSize);
         initialPointStoreSize = builder.initialPointStoreSize.orElse(2 * sampleSize);
@@ -806,6 +801,34 @@ public class RandomCutForest {
         return traversalExecutor.traverseForestMulti(point, visitorFactory, collector);
     }
 
+    // the following functions are provided to enable double[] compatibility
+    // the RCF internally is single precision, because we cannot convincingly
+    // separate
+    // probability outcomes in single vs double precision in reasonable settings
+    private <R> R asFloat(double[] p, Function<float[], R> fn) {
+        return fn.apply(toFloatArray(p));
+    }
+
+    private double[] asFloatArray(double[] p, UnaryOperator<float[]> fn) {
+        return toDoubleArray(fn.apply(toFloatArray(p)));
+    }
+
+    public double getAnomalyScore(double[] p) {
+        return asFloat(p, this::getAnomalyScore);
+    }
+
+    public DiVector getAnomalyAttribution(double[] p) {
+        return asFloat(p, this::getAnomalyAttribution);
+    }
+
+    public double getApproximateAnomalyScore(double[] p) {
+        return asFloat(p, this::getApproximateAnomalyScore);
+    }
+
+    public DensityOutput getSimpleDensity(double[] p) {
+        return asFloat(p, this::getSimpleDensity);
+    }
+
     /**
      * Compute an anomaly score for the given point. The point being scored is
      * compared with the points in the sample to compute a measure of how anomalous
@@ -819,11 +842,6 @@ public class RandomCutForest {
      * @param point The point being scored.
      * @return an anomaly score for the given point.
      */
-    @Deprecated
-    public double getAnomalyScore(double[] point) {
-        return getAnomalyScore(toFloatArray(point));
-    }
-
     public double getAnomalyScore(float[] point) {
         if (!isOutputReady()) {
             return 0.0;
@@ -850,10 +868,6 @@ public class RandomCutForest {
      * @param point input point q
      * @return anomaly score with early stopping with z=0.1
      */
-    @Deprecated
-    public double getApproximateAnomalyScore(double[] point) {
-        return getApproximateAnomalyScore(toFloatArray(point));
-    }
 
     public double getApproximateAnomalyScore(float[] point) {
         if (!isOutputReady()) {
@@ -884,10 +898,6 @@ public class RandomCutForest {
      * @param point The point being scored.
      * @return an anomaly score for the given point.
      */
-    public DiVector getAnomalyAttribution(double[] point) {
-        return getAnomalyAttribution(toFloatArray(point));
-    }
-
     public DiVector getAnomalyAttribution(float[] point) {
         // this will return the same (modulo floating point summation) L1Norm as
         // getAnomalyScore
@@ -943,11 +953,6 @@ public class RandomCutForest {
      * @param point The point where the density estimate is made.
      * @return A density estimate.
      */
-    @Deprecated
-    public DensityOutput getSimpleDensity(double[] point) {
-        return getSimpleDensity(toFloatArray(point));
-    }
-
     public DensityOutput getSimpleDensity(float[] point) {
 
         // density estimation should use sufficiently larger number of samples
@@ -962,7 +967,6 @@ public class RandomCutForest {
                 (tree, x) -> x.lift(tree::liftFromTree));
         Collector<InterpolationMeasure, ?, InterpolationMeasure> collector = InterpolationMeasure.collector(dimensions,
                 0, numberOfTrees);
-        DensityOutput a = new DensityOutput(traverseForest(transformToShingledPoint(point), visitorFactory, collector));
         return new DensityOutput(traverseForest(transformToShingledPoint(point), visitorFactory, collector));
     }
 
@@ -1683,8 +1687,9 @@ public class RandomCutForest {
             return new DiVector(dimensions);
         }
 
-        VisitorFactory<DiVector> visitorFactory = new VisitorFactory<>((tree, y) -> new DynamicAttributionVisitor(y,
-                tree.getMass(), ignoreLeafMassThreshold, seen, unseen, newDamp),
+        VisitorFactory<DiVector> visitorFactory = new VisitorFactory<>(
+                (tree, y) -> new DynamicAttributionVisitor(tree.projectToTree(y), tree.getMass(),
+                        ignoreLeafMassThreshold, seen, unseen, newDamp),
                 (tree, x) -> x.lift(tree::liftFromTree));
 
         ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,
