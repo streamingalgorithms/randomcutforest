@@ -22,19 +22,16 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.iterativeClustering;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Optional;
-import java.util.Vector;
+import java.util.*;
 import java.util.function.BiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
+import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 import org.streamingalgorithms.randomcutforest.util.ArrayUtils;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import lombok.Getter;
 
 public abstract class PointStore implements IPointStore<Integer, float[]> {
@@ -72,7 +69,8 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
      */
     protected byte[] refCount;
 
-    protected HashMap<Integer, Integer> refCountMap;
+    private final Int2IntOpenHashMap refCountMap;
+
     /**
      * first location where new data can be safely copied;
      */
@@ -132,19 +130,19 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     public int decrementRefCount(int index) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         checkArgument((refCount[index] & 0xff) > 0, " cannot decrement index");
-        Integer value = refCountMap.remove(index);
-        if (value == null) {
+        int value = refCountMap.remove(index); // 0 if absent (drv), else the stored overflow (>=1)
+        if (value == 0) { // was absent
             if ((refCount[index] & 0xff) == 1) {
                 indexManager.releaseIndex(index);
                 refCount[index] = (byte) 0;
                 setInfeasiblePointstoreLocationIndex(index);
                 return 0;
             } else {
-                int newVal = (byte) ((refCount[index] & 0xff) - 1);
+                int newVal = ((refCount[index] & 0xff) - 1);
                 refCount[index] = (byte) newVal;
                 return newVal;
             }
-        } else {
+        } else { // overflow entry existed
             if (value > 1) {
                 refCountMap.put(index, value - 1);
             }
@@ -264,19 +262,19 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     public int incrementRefCount(int index) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         checkArgument((refCount[index] & 0xff) > 0, " not in use");
-        Integer value = refCountMap.remove(index);
-        if (value == null) {
+        int value = refCountMap.remove(index); // 0 if absent
+        if (value == 0) { // was absent
             if ((refCount[index] & 0xff) == 255) {
                 refCountMap.put(index, 1);
                 return 256;
             } else {
-                int newVal = (byte) ((refCount[index] & 0xff) + 1);
+                int newVal = ((refCount[index] & 0xff) + 1);
                 refCount[index] = (byte) newVal;
                 return newVal;
             }
-        } else {
+        } else { // overflow existed
             refCountMap.put(index, value + 1);
-            return value + 1;
+            return (refCount[index] & 0xff) + value + 1;
         }
     }
 
@@ -306,14 +304,15 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
      *
      * @return the array of counts referring to different points
      */
+
+    public int[] getPackedRefCount(boolean compress) {
+        return ArrayEncoder.pack(refCount, refCount.length, compress);
+    }
+
     public int[] getRefCount() {
         int[] newarray = new int[refCount.length];
         for (int i = 0; i < refCount.length; i++) {
-            newarray[i] = refCount[i] & 0xff;
-            Integer value = refCountMap.get(i);
-            if (value != null) {
-                newarray[i] += value;
-            }
+            newarray[i] = (refCount[i] & 0xff) + refCountMap.get(i); // primitive get, 0 if absent
         }
         return newarray;
     }
@@ -345,21 +344,34 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
 
     }
 
+    // PointStore — abstract, each subclass gathers from its own native location
+    // array
+    public abstract int[] getPackedLocation(boolean compress);
+
     public void compact() {
-        Vector<Integer[]> reverseReference = new Vector<>();
-        for (int i = 0; i < locationListLength(); i++) {
+        int live = 0;
+        int len = locationListLength();
+        for (int i = 0; i < len; i++) {
             int locn = getLocation(i);
-            if (locn < currentStoreCapacity * dimensions && locn >= 0) {
-                reverseReference.add(new Integer[] { locn, i });
+            if (locn >= 0 && locn < currentStoreCapacity * dimensions)
+                live++;
+        }
+        long[] ref = new long[live];
+        int n = 0;
+        for (int i = 0; i < len; i++) {
+            int locn = getLocation(i);
+            if (locn >= 0 && locn < currentStoreCapacity * dimensions) {
+                ref[n++] = ((long) locn << 32) | (i & 0xFFFFFFFFL);
             }
         }
-        reverseReference.sort((o1, o2) -> o1[0].compareTo(o2[0]));
+        Arrays.sort(ref);
+
         int freshStart = 0;
         int jStatic = 0;
         int jDynamic = 0;
-        int jEnd = reverseReference.size();
+        int jEnd = live;
         while (jStatic < jEnd) {
-            int blockStart = reverseReference.get(jStatic)[0];
+            int blockStart = (int) (ref[jStatic] >>> 32);
             int blockEnd = blockStart + dimensions;
             int initial = 0;
             if (rotationEnabled) {
@@ -368,7 +380,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
             int k = jStatic + 1;
             jDynamic = jStatic + 1;
             while (k < jEnd) {
-                int newElem = reverseReference.get(k)[0];
+                int newElem = (int) (ref[k] >>> 32);
                 if (blockEnd >= newElem) {
                     k += 1;
                     jDynamic += 1;
@@ -386,9 +398,9 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
                 assert (!rotationEnabled || freshStart % dimensions == i % dimensions);
 
                 if (jStatic < jEnd) {
-                    int locn = reverseReference.get(jStatic)[0];
+                    int locn = (int) (ref[jStatic] >>> 32);
                     if (i == locn) {
-                        int newIdx = reverseReference.get(jStatic)[1];
+                        int newIdx = (int) ref[jStatic];
                         setLocation(newIdx, freshStart);
                         jStatic += 1;
                     }
@@ -411,12 +423,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
      * @return number of copies of the point managed by the store
      */
     public int getRefCount(int i) {
-        int val = refCount[i] & 0xff;
-        Integer value = refCountMap.get(i);
-        if (value != null) {
-            val += value;
-        }
-        return val;
+        return (refCount[i] & 0xff) + refCountMap.get(i); // 0 if absent
     }
 
     @Override
@@ -431,6 +438,24 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     public abstract int size();
 
     public abstract int[] getLocationList();
+
+    public int[] getPackedDuplicates(boolean compress) {
+        int n = refCountMap.size();
+        if (n == 0) {
+            return ArrayEncoder.pack(new int[0], 0, compress);
+        }
+        // collect keys, sort ascending -> matches the old peel loop's index order,
+        // so the packed bytes are byte-identical to the pre-refactor duplicateRefs.
+        int[] keys = refCountMap.keySet().toIntArray(); // fastutil primitive extract
+        Arrays.sort(keys);
+        int[] dup = new int[2 * n];
+        int k = 0;
+        for (int idx : keys) {
+            dup[k++] = idx;
+            dup[k++] = refCountMap.get(idx); // primitive get, excess for this index
+        }
+        return ArrayEncoder.pack(dup, 2 * n, compress);
+    }
 
     /**
      * transforms a point to a shingled point if internal shingling is turned on
@@ -534,9 +559,11 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         protected float[] store = null;
         protected double[] knownShingle = null;
         protected int[] locationList = null;
-        protected int[] refCount = null;
+        protected byte[] refCountBytes = null;
+        protected Int2IntOpenHashMap overflow = null;
         protected long nextTimeStamp = 0;
         protected int startOfFreeSegment = 0;
+        protected int[] refCount = null;
 
         // dimension of the points being stored
         public T dimensions(int dimensions) {
@@ -609,8 +636,18 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
 
         // count of the points being tracked
         // used for serialization
+        public T refCountBytes(byte[] refCountBytes) {
+            this.refCountBytes = refCountBytes;
+            return (T) this;
+        }
+
         public T refCount(int[] refCount) {
             this.refCount = refCount;
+            return (T) this;
+        }
+
+        public T overflow(Int2IntOpenHashMap overflow) {
+            this.overflow = overflow;
             return (T) this;
         }
 
@@ -657,10 +694,13 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         /**
          * the following checks are due to mappers (kept for future)
          */
-        if (builder.refCount != null || builder.locationList != null || builder.knownShingle != null) {
-            checkArgument(builder.refCount != null, "reference count must be present");
+        if (builder.refCountBytes != null || builder.locationList != null || builder.knownShingle != null
+                || builder.refCount != null) {
+            checkArgument(builder.refCountBytes != null || builder.refCount != null, "reference count must be present");
             checkArgument(builder.locationList != null, "location list must be present");
-            checkArgument(builder.refCount.length == builder.indexCapacity, "incorrect reference count length");
+            int length = (builder.refCountBytes != null) ? builder.refCountBytes.length
+                    : (builder.refCount != null) ? builder.refCount.length : 0;
+            checkArgument(length == builder.indexCapacity, "incorrect reference count length");
             // following may change if IndexManager is dynamically resized as well
             checkArgument(builder.locationList.length == builder.indexCapacity, " incorrect length of locations");
             checkArgument(
@@ -675,9 +715,8 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         this.rotationEnabled = builder.internalRotationEnabled;
         this.baseDimension = this.dimensions / this.shingleSize;
         this.capacity = builder.capacity;
-        this.refCountMap = new HashMap<>();
 
-        if (builder.refCount == null) {
+        if (builder.refCountBytes == null && builder.refCount == null) {
             int size = (int) builder.initialPointStoreSize.orElse(builder.capacity);
             currentStoreCapacity = size;
             this.indexManager = new IndexIntervalManager(size);
@@ -688,14 +727,27 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
                 internalShingle = new float[dimensions];
             }
             store = new float[currentStoreCapacity * dimensions];
+            this.refCountMap = new Int2IntOpenHashMap();
+            this.refCountMap.defaultReturnValue(0);
         } else {
-            this.refCount = new byte[builder.refCount.length];
-            for (int i = 0; i < refCount.length; i++) {
-                if (builder.refCount[i] >= 0 && builder.refCount[i] <= 255) {
-                    refCount[i] = (byte) builder.refCount[i];
-                } else if (builder.refCount[i] > 255) {
-                    refCount[i] = (byte) 255;
-                    refCountMap.put(i, builder.refCount[i] - 255);
+            if (builder.overflow == null) {
+                this.refCountMap = new Int2IntOpenHashMap();
+                this.refCountMap.defaultReturnValue(0);
+            } else {
+                this.refCountMap = builder.overflow;
+                this.refCountMap.defaultReturnValue(0);
+            }
+            if (builder.refCount == null) {
+                this.refCount = builder.refCountBytes;
+            } else {
+                this.refCount = new byte[builder.refCount.length];
+                for (int i = 0; i < builder.refCount.length; i++) {
+                    if (builder.refCount[i] > 255) {
+                        this.refCount[i] = (byte) 255;
+                        this.refCountMap.put(i, builder.refCount[i] - 255);
+                    } else {
+                        this.refCount[i] = (byte) (builder.refCount[i]);
+                    }
                 }
             }
             this.startOfFreeSegment = builder.startOfFreeSegment;
@@ -706,8 +758,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
                         ? Arrays.copyOf(toFloatArray(builder.knownShingle), dimensions)
                         : new float[dimensions];
             }
-
-            indexManager = new IndexIntervalManager(builder.refCount, builder.indexCapacity);
+            indexManager = new IndexIntervalManager(this.refCount, builder.indexCapacity);
             store = (builder.store == null) ? new float[currentStoreCapacity * dimensions] : builder.store;
         }
     }

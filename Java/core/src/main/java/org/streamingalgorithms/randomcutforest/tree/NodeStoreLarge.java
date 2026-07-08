@@ -16,10 +16,11 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.unpackFloats;
 
 import java.util.Arrays;
 
-import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
+import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 
 /**
  * A fixed-size buffer for storing interior tree nodes. An interior node is
@@ -57,13 +58,13 @@ public class NodeStoreLarge extends NodeStore {
 
     public NodeStoreLarge(int capacity, int root, boolean storeParent, byte[] cutValuesData, int[] packedLeft,
             int[] packedRight, int[] packedCutDim, int size, boolean compressed) {
-        super(capacity, ArrayPacking.unpackFloats(cutValuesData, capacity)); // adopts the unpacked cutValue float[]
+        super(capacity, unpackFloats(cutValuesData, capacity)); // adopts the unpacked cutValue float[]
         mass = new int[capacity];
         parentIndex = storeParent ? newSentinelParents() : null;
 
-        leftIndex = ArrayPacking.unpackInts(packedLeft, capacity, compressed);
-        rightIndex = ArrayPacking.unpackInts(packedRight, capacity, compressed);
-        cutDimension = ArrayPacking.unpackInts(packedCutDim, capacity, compressed);
+        leftIndex = ArrayEncoder.unpackInts(packedLeft, capacity, compressed);
+        rightIndex = ArrayEncoder.unpackInts(packedRight, capacity, compressed);
+        cutDimension = ArrayEncoder.unpackInts(packedCutDim, capacity, compressed);
 
         if (compressed) {
             reverseBits(size, leftIndex, rightIndex, capacity); // 0/1 bits -> node numbers, before parent loop

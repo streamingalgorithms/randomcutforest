@@ -16,6 +16,7 @@
 package org.streamingalgorithms.randomcutforest.store;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPackLive;
 
 import java.util.Arrays;
 
@@ -91,5 +92,10 @@ public class PointStoreSmall extends PointStore {
             answer[i] = locationList[i];
         }
         return answer;
+    }
+
+    public int[] getPackedLocation(boolean compress) {
+        return moveAndPackLive(refCount, locationList.length, compress, i -> locationList[i]); // raw
+                                                                                               // already
     }
 }

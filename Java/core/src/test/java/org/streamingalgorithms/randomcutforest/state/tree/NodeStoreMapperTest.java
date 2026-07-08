@@ -16,6 +16,8 @@
 package org.streamingalgorithms.randomcutforest.state.tree;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPack;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.pack;
 
 import java.util.Random;
 import java.util.stream.IntStream;
@@ -23,7 +25,6 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
 class NodeStoreMapperTest {
 
@@ -32,8 +33,8 @@ class NodeStoreMapperTest {
         for (int i = 0; i < size; i++) {
             gathered[i] = source[map[i]];
         }
-        byte[] expected = ArrayPacking.pack(gathered); // reference marshal
-        byte[] actual = NodeStoreMapper.moveAndPack(map, source, size);
+        byte[] expected = pack(gathered); // reference marshal
+        byte[] actual = moveAndPack(map, source, size);
         assertArrayEquals(expected, actual);
     }
 

@@ -16,6 +16,7 @@
 package org.streamingalgorithms.randomcutforest.store;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPackLive;
 
 import java.util.Arrays;
 
@@ -50,7 +51,7 @@ public class PointStoreLarge extends PointStore {
     public PointStoreLarge(PointStore.Builder builder) {
         super(builder);
         if (builder.locationList != null) {
-            locationList = Arrays.copyOf(builder.locationList, builder.locationList.length);
+            locationList = builder.locationList;
         } else {
             locationList = new int[currentStoreCapacity];
             Arrays.fill(locationList, INFEASIBLE_LOCN);
@@ -78,4 +79,7 @@ public class PointStoreLarge extends PointStore {
         return Arrays.copyOf(locationList, locationList.length);
     }
 
+    public int[] getPackedLocation(boolean compress) {
+        return moveAndPackLive(refCount, locationList.length, compress, i -> locationList[i]);
+    }
 }

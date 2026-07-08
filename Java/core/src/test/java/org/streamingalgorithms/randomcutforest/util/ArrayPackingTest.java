@@ -36,8 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.pack;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackDoubles;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackFloats;
 import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackInts;
 import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackShorts;
 
@@ -194,23 +192,6 @@ public class ArrayPackingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 0, 1, 2, 3, 17, 100 })
-    public void testPackDoublesRoundTrip(int inputLength) {
-        double[] inputArray = rng.doubles().limit(inputLength).toArray();
-        assertArrayEquals(inputArray, ArrayPacking.unpackDoubles(ArrayPacking.pack(inputArray)));
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = { 0, 1, 2, 3, 5, 100 })
-    public void testPackFloatsRoundTrip(int inputLength) {
-        float[] inputArray = new float[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = rng.nextFloat();
-        }
-        assertArrayEquals(inputArray, unpackFloats(ArrayPacking.pack(inputArray)));
-    }
-
-    @ParameterizedTest
     @ValueSource(booleans = { true, false })
     public void testPackShortsWithLength(boolean compress) {
         int inputLength = 100;
@@ -226,96 +207,6 @@ public class ArrayPackingTest {
 
         assertEquals(packLength, outputArray.length);
         assertArrayEquals(Arrays.copyOf(inputArray, packLength), outputArray);
-    }
-
-    @Test
-    public void testPackDoublesWithLength() {
-        int inputLength = 100;
-        int packLength = 76;
-        double[] inputArray = rng.doubles().limit(inputLength).toArray();
-        byte[] bytes = ArrayPacking.pack(inputArray, packLength);
-        double[] outputArray = ArrayPacking.unpackDoubles(bytes);
-
-        assertEquals(packLength, outputArray.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, packLength), outputArray);
-        assertDoesNotThrow(() -> pack(new double[0], 0));
-        assertThrows(IllegalArgumentException.class, () -> pack(new double[10], 11));
-        assertThrows(IllegalArgumentException.class, () -> pack(new double[10], -1));
-    }
-
-    @Test
-    public void testPackFloatsWithLength() {
-        int inputLength = 100;
-        int packLength = 76;
-        float[] inputArray = new float[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = rng.nextFloat();
-        }
-        byte[] bytes = ArrayPacking.pack(inputArray, packLength);
-        assertThrows(IllegalArgumentException.class, () -> pack(inputArray, inputLength + 10));
-        float[] outputArray = unpackFloats(bytes);
-
-        assertEquals(packLength, outputArray.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, packLength), outputArray);
-        assertDoesNotThrow(() -> pack(new float[0], 0));
-        assertThrows(IllegalArgumentException.class, () -> pack(new float[10], -1));
-    }
-
-    @Test
-    public void testUnpackDoublesWithLength() {
-        int inputLength = 100;
-        double[] inputArray = rng.doubles().limit(inputLength).toArray();
-        byte[] bytes = ArrayPacking.pack(inputArray);
-
-        int unpackLength1 = 25;
-        double[] outputArray1 = ArrayPacking.unpackDoubles(bytes, unpackLength1);
-        assertEquals(unpackLength1, outputArray1.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, unpackLength1), outputArray1);
-
-        int unpackLength2 = 123;
-        assertThrows(IllegalArgumentException.class, () -> pack(inputArray, unpackLength2));
-        double[] outputArray2 = ArrayPacking.unpackDoubles(bytes, unpackLength2);
-        assertEquals(unpackLength2, outputArray2.length);
-        assertArrayEquals(inputArray, Arrays.copyOf(outputArray2, inputLength));
-        for (int i = inputLength; i < unpackLength2; i++) {
-            assertEquals(0.0, outputArray2[i]);
-        }
-    }
-
-    @Test
-    public void testUnpackFloatWithLength() {
-        int inputLength = 100;
-        float[] inputArray = new float[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = rng.nextFloat();
-        }
-        byte[] bytes = ArrayPacking.pack(inputArray);
-
-        int unpackLength1 = 25;
-        float[] outputArray1 = unpackFloats(bytes, unpackLength1);
-        assertEquals(unpackLength1, outputArray1.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, unpackLength1), outputArray1);
-
-        int unpackLength2 = 123;
-        float[] outputArray2 = unpackFloats(bytes, unpackLength2);
-        assertEquals(unpackLength2, outputArray2.length);
-        assertArrayEquals(inputArray, Arrays.copyOf(outputArray2, inputLength));
-        for (int i = inputLength; i < unpackLength2; i++) {
-            assertEquals(0.0, outputArray2[i]);
-        }
-    }
-
-    @Test
-    public void testConfig() {
-        byte[] array = new byte[1];
-        assertThrows(IllegalArgumentException.class, () -> unpackFloats(array, 1));
-        assertThrows(IllegalArgumentException.class, () -> unpackDoubles(array, 1));
-
-        byte[] newArray = new byte[Double.BYTES];
-        assertDoesNotThrow(() -> unpackDoubles(newArray, 1));
-        assertDoesNotThrow(() -> unpackFloats(newArray, 1));
-        assertThrows(IllegalArgumentException.class, () -> unpackFloats(newArray, -1));
-        assertThrows(IllegalArgumentException.class, () -> unpackDoubles(newArray, -1));
     }
 
     /**

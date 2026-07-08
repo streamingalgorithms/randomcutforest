@@ -310,7 +310,7 @@ public class PointStoreTest {
         assertThrows(IllegalArgumentException.class, () -> new IndexIntervalManager(0));
         assertThrows(IllegalArgumentException.class, () -> new IndexIntervalManager(1, 0, null));
         assertThrows(IllegalArgumentException.class, () -> IndexIntervalManager.toBits(null));
-        IndexIntervalManager a = new IndexIntervalManager(new int[] { 0, 1 }, 2);
+        IndexIntervalManager a = new IndexIntervalManager(new byte[] { 0, 1 }, 2);
         IndexIntervalManager manager = new IndexIntervalManager(1);
         manager.takeIndex();
         assertThrows(IllegalStateException.class, () -> manager.takeIndex());

@@ -15,19 +15,16 @@
 
 package org.streamingalgorithms.randomcutforest.state.tree;
 
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
-
-import java.nio.ByteBuffer;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.bitEncode;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPack;
 
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IContextualStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
 import org.streamingalgorithms.randomcutforest.state.store.NodeStoreState;
 import org.streamingalgorithms.randomcutforest.tree.NodeStore;
-import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -78,31 +75,12 @@ public class NodeStoreMapper implements IContextualStateMapper<NodeStore, NodeSt
         state.setCanonicalAndNotALeaf(check);
         if (check) {
             boolean compress = state.isCompressed();
-            state.setLeftIndex(
-                    ArrayPacking.moveAndPack(map, size, compress, m -> (model.getLeftIndex(m) < capacity) ? 1 : 0));
-            state.setRightIndex(
-                    ArrayPacking.moveAndPack(map, size, compress, m -> (model.getRightIndex(m) < capacity) ? 1 : 0));
-            state.setCutDimension(ArrayPacking.moveAndPack(map, size, compress, model::getCutDimension));
+            state.setLeftIndex(bitEncode(size, compress, m -> (model.getLeftIndex(map[m]) < capacity) ? 1 : 0));
+            state.setRightIndex(bitEncode(size, compress, m -> (model.getRightIndex(map[m]) < capacity) ? 1 : 0));
+            state.setCutDimension(moveAndPack(map, size, compress, model::getCutDimension));
             state.setCutValueData(moveAndPack(map, cutValues, size));
         }
         return state;
-    }
-
-    /**
-     * Gather-and-marshal floats to bytes. Equivalent to pack(g) where g[i] =
-     * source[map[i]], without the intermediate float[]. Byte-identical to
-     * pack(float[]) (same big-endian ByteBuffer, same order).
-     */
-    public static byte[] moveAndPack(int[] map, float[] source, int size) {
-        checkNotNull(map, "map must not be null");
-        checkNotNull(source, "source must not be null");
-        checkArgument(0 <= size && size <= map.length, "size must be between 0 and map.length");
-
-        ByteBuffer buf = ByteBuffer.allocate(size * Float.BYTES);
-        for (int i = 0; i < size; i++) {
-            buf.putFloat(source[map[i]]);
-        }
-        return buf.array();
     }
 
 }

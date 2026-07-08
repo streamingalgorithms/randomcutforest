@@ -44,18 +44,18 @@ public class IndexIntervalManager {
         freeIndexesEnd[0] = capacity - 1;
     }
 
-    static BitSet toBits(int[] refCount) {
+    static BitSet toBits(byte[] refCount) {
         checkArgument(refCount != null, "not a meaningful array input");
         BitSet bits = new BitSet(refCount.length);
         for (int i = 0; i < refCount.length; i++) {
-            if (refCount[i] > 0) {
+            if (refCount[i] != 0) {
                 bits.set(i);
             }
         }
         return bits;
     }
 
-    public IndexIntervalManager(int[] refCount, int capacity) {
+    public IndexIntervalManager(byte[] refCount, int capacity) {
         this(capacity, refCount.length, toBits(refCount));
     }
 

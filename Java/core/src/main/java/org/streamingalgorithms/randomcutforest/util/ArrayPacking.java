@@ -127,6 +127,52 @@ public class ArrayPacking {
         return pack(inputArray, inputArray.length, compress);
     }
 
+    public static int[] pack(byte[] inputArray, int length, boolean compress) {
+        checkNotNull(inputArray, "inputArray must not be null");
+        checkArgument(0 <= length && length <= inputArray.length,
+                "length must be between 0 and inputArray.length (inclusive)");
+
+        if (!compress || length < 3) {
+            int[] ret = new int[length];
+            for (int i = 0; i < length; i++) {
+                ret[i] = inputArray[i] & 0xFF;
+            }
+            return ret;
+        }
+
+        int min = inputArray[0] & 0xFF;
+        int max = inputArray[0] & 0xFF;
+        for (int i = 1; i < length; i++) {
+            min = min(min, inputArray[i] & 0xFF);
+            max = Math.max(max, inputArray[i] & 0xFF);
+        }
+        long base = (long) max - min + 1;
+        if (base == 1) {
+            return new int[] { min, max, length };
+        } else {
+            int packNum = logMax(base);
+
+            int[] output = new int[3 + (int) Math.ceil(1.0 * length / packNum)];
+            output[0] = min;
+            output[1] = max;
+            output[2] = length;
+            int len = 0;
+            int used = 0;
+            while (len < length) {
+                long code = 0;
+                int reach = min(len + packNum - 1, length - 1);
+                for (int i = reach; i >= len; i--) {
+                    code = base * code + ((inputArray[i] & 0xFF) - min);
+                }
+                output[3 + used++] = (int) code;
+                len += packNum;
+            }
+            // uncomment for debug; should be always true
+            // checkArgument(used + 3 == output.length, "incorrect state");
+            return output;
+        }
+    }
+
     /**
      * Pack an array of shorts. If {@code compress} is true, then this method will
      * apply arithmetic compression to the inputs, otherwise it returns a copy of
@@ -325,81 +371,6 @@ public class ArrayPacking {
     }
 
     /**
-     * Pack an array of doubles into an array of bytes.
-     * 
-     * @param array An array of doubles.
-     * @return An array of bytes representing the original array of doubles.
-     */
-    public static byte[] pack(double[] array) {
-        checkNotNull(array, "array must not be null");
-        return pack(array, array.length);
-    }
-
-    /**
-     * Pack an array of doubles into an array of bytes.
-     * 
-     * @param array  An array of doubles.
-     * @param length The number of doubles in the input array to pack into the
-     *               resulting byte array.
-     * @return An array of bytes representing the original array of doubles.
-     */
-    public static byte[] pack(double[] array, int length) {
-        checkNotNull(array, "array must not be null");
-        checkArgument(0 <= length, "incorrect length parameter");
-        checkArgument(length <= array.length, "length must be between 0 and inputArray.length (inclusive)");
-
-        ByteBuffer buf = ByteBuffer.allocate(length * Double.BYTES);
-        for (int i = 0; i < length; i++) {
-            buf.putDouble(array[i]);
-        }
-
-        return buf.array();
-    }
-
-    /**
-     * Pack an array of floats into an array of bytes.
-     * 
-     * @param array An array of floats.
-     * @return An array of bytes representing the original array of floats.
-     */
-    public static byte[] pack(float[] array) {
-        checkNotNull(array, "array must not be null");
-        return pack(array, array.length);
-    }
-
-    /**
-     * Pack an array of floats into an array of bytes.
-     * 
-     * @param array  An array of floats.
-     * @param length The number of doubles in the input array to pack into the
-     *               resulting byte array.
-     * @return An array of bytes representing the original array of floats.
-     */
-    public static byte[] pack(float[] array, int length) {
-        checkArgument(0 <= length, "incorrect length parameter");
-        checkArgument(length <= array.length, "length must be between 0 and inputArray.length (inclusive)");
-
-        ByteBuffer buf = ByteBuffer.allocate(length * Float.BYTES);
-        for (int i = 0; i < length; i++) {
-            buf.putFloat(array[i]);
-        }
-
-        return buf.array();
-    }
-
-    /**
-     * Unpack an array of bytes as an array of doubles.
-     * 
-     * @param bytes An array of bytes.
-     * @return an array of doubles obtained by marshalling consecutive bytes in the
-     *         input array into doubles.
-     */
-    public static double[] unpackDoubles(byte[] bytes) {
-        checkNotNull(bytes, "bytes must not be null");
-        return unpackDoubles(bytes, bytes.length / Double.BYTES);
-    }
-
-    /**
      * Unpack an array of bytes as an array of doubles.
      * 
      * @param bytes  An array of bytes.
@@ -419,43 +390,6 @@ public class ArrayPacking {
 
         for (int i = 0; i < m; i++) {
             result[i] = buf.getDouble();
-        }
-
-        return result;
-    }
-
-    /**
-     * Unpack an array of bytes as an array of floats.
-     * 
-     * @param bytes An array of bytes.
-     * @return an array of floats obtained by marshalling consecutive bytes in the
-     *         input array into floats.
-     */
-    public static float[] unpackFloats(byte[] bytes) {
-        checkNotNull(bytes, "bytes must not be null");
-        return unpackFloats(bytes, bytes.length / Float.BYTES);
-    }
-
-    /**
-     * Unpack an array of bytes as an array of floats.
-     * 
-     * @param bytes  An array of bytes.
-     * @param length The desired length of the resulting float array. The input will
-     *               be truncated or padded with zeros as needed.
-     * @return an array of doubles obtained by marshalling consecutive bytes in the
-     *         input array into floats.
-     */
-    public static float[] unpackFloats(byte[] bytes, int length) {
-        checkNotNull(bytes, "bytes must not be null");
-        checkArgument(length >= 0, "length must be greater than or equal to 0");
-        checkArgument(bytes.length % Float.BYTES == 0, "bytes.length must be divisible by Float.BYTES");
-
-        ByteBuffer buf = ByteBuffer.wrap(bytes);
-        float[] result = new float[length];
-        int m = Math.min(length, bytes.length / Float.BYTES);
-
-        for (int i = 0; i < m; i++) {
-            result[i] = buf.getFloat();
         }
 
         return result;
