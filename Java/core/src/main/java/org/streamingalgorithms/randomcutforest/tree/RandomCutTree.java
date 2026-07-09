@@ -411,7 +411,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     public void makeTree(int size, BoundingBox scratch, int[] indexList, int[] outputList, int[] pointList,
-            long[] sequenceIndex, SeparationOracle oracle) {
+            long[] sequenceIndex, SeparationOracle oracle, long seed) {
         // this function allows a public call, which may be useful someday
         // that day is today ....
         if (size > 0 && size <= numberOfLeaves) {
@@ -419,8 +419,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             checkArgument(outputList.length <= size, "incorrect output buffer");
             checkArgument(sequenceIndex == null || (pointList.length == sequenceIndex.length), "mismatched input");
 
+            Random ring = new Random(seed);
             Cut scratchCut = new Cut(0, 0);
-            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratch, scratchCut);
+            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratch, scratchCut,
+                    ring);
             // the cuts are specififed; now build tree
             // note the contents of the indexList will be permuted.
             for (int i = 0; i < size; i++) {
@@ -446,7 +448,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the outputList is populated such that chosen[i] correponds to the inserted
     // point (which is revealed only after insertion)
     int makeTreeInt(int[] chosen, int[] output, int start, int end, int[] pointList, int firstFree,
-            SeparationOracle vecBuild, int[] scratch, BoundingBox boxScratch, Cut cutScratch) {
+            SeparationOracle vecBuild, int[] scratch, BoundingBox boxScratch, Cut cutScratch, Random ring) {
 
         if (end - start == 0)
             return Null;
@@ -468,7 +470,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             return rep + nodeStore.getCapacity() + 1;
         }
 
-        Random ring = new Random(getRandomSeed());
         double factor = ring.nextDouble();
         randomCut(factor, null, boxScratch, vecBuild, false, cutScratch);
         float cutValue = (float) cutScratch.getValue();
@@ -496,9 +497,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
         int leftCount = mid - start;
         int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch, boxScratch,
-                cutScratch);
+                cutScratch, ring);
         int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch,
-                boxScratch, cutScratch);
+                boxScratch, cutScratch, ring);
         nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
                 cutValue, cutDimension);
         return firstFree;

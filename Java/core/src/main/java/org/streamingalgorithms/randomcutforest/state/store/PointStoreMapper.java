@@ -34,12 +34,11 @@ package org.streamingalgorithms.randomcutforest.state.store;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.*;
 import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.*;
 
-import java.util.Arrays;
-
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
 import org.streamingalgorithms.randomcutforest.state.Version;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
+import org.streamingalgorithms.randomcutforest.tree.Column;
 import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
@@ -67,25 +66,24 @@ public class PointStoreMapper implements IStateMapper<PointStore, PointStoreStat
         int dimensions = state.getDimensions();
         float[] store = ArrayEncoder.unpackFloats(state.getPointData(), state.getCurrentStoreCapacity() * dimensions);
         int startOfFreeSegment = state.getStartOfFreeSegment();
-        int[] locationList = new int[indexCapacity];
-        Arrays.fill(locationList, PointStore.INFEASIBLE_LOCN);
 
-        // packed refCount -> byte[] + sparse overflow map, in one streaming pass (no
-        // fused int[indexCapacity])
+        int baseDimension = dimensions / state.getShingleSize();
+        long bound = PointStore.locationBound(state.getCapacity(), state.getShingleSize(), state.isRotationEnabled());
+        Column location = Column.of(indexCapacity, bound, true); // born all-sentinel; no fill needed
+
         byte[] refCountBytes = new byte[indexCapacity];
         Int2IntOpenHashMap overflow = ArrayEncoder.unpackRefCounts(state.getRefCount(), refCountBytes, indexCapacity,
                 state.isCompressed());
 
         if (!state.getVersion().equals(Version.V3_0)) {
-            // legacy: positional decode straight into locationList, divide the decoded
-            // range in place
-            int[] packedLoc = state.getLocationList();
-            int length = unpackedLength(packedLoc, state.isCompressed());
-            ArrayEncoder.unpackInts(packedLoc, locationList, length, state.isCompressed());
-            int baseDimension = dimensions / state.getShingleSize();
-            for (int i = 0; i < length; i++) {
-                locationList[i] = locationList[i] / baseDimension;
-            }
+            // legacy: positional, every index encoded, value is a RAW location.
+            // Guard on occupancy so dead slots stay at the column sentinel — otherwise the
+            // legacy -1 sentinel divides to 0 and masquerades as a live quotient.
+            int length = unpackedLength(state.getLocationList(), state.isCompressed());
+            ArrayEncoder.decodeCore(state.getLocationList(), length, state.isCompressed(), (int i, int v) -> {
+                if (refCountBytes[i] != 0)
+                    location.set(i, v / baseDimension);
+            });
         } else {
             if (state.getDuplicateRefs() != null) {
                 if (overflow == null) {
@@ -94,31 +92,29 @@ public class PointStoreMapper implements IStateMapper<PointStore, PointStoreStat
                 }
                 mergeDuplicateRefs(state.getDuplicateRefs(), state.isCompressed(), refCountBytes, overflow);
             }
-            // streaming scatter, no tempList, with the count invariant made explicit
-            final int[] cursor = { 0 };
-            final int[] placed = { 0 };
+            // V3: dense stream (live slots only, ascending index), values already
+            // quotients.
+            int liveCount = 0;
+            for (int i = 0; i < indexCapacity; i++)
+                if (refCountBytes[i] != 0)
+                    liveCount++;
+            final int[] cursor = { 0 }, placed = { 0 };
             ArrayEncoder.decodeCore(state.getLocationList(), indexCapacity, state.isCompressed(), (int v) -> {
                 int i = cursor[0];
                 while (i < indexCapacity && refCountBytes[i] == 0)
-                    i++; // bounded
+                    i++;
                 checkState(i < indexCapacity, "location count exceeds occupied slots");
-                locationList[i] = v;
+                location.set(i, v);
                 cursor[0] = i + 1;
                 placed[0]++;
             });
-            // int[] tempList = ArrayEncoder.decodeToArray(state.getLocationList(),
-            // indexCapacity, state.isCompressed());
-            // or the existing ArrayPacking.unpackInts(...) two-arg that returns int[]
-            // int nextLocation = 0;
-            // for (int i = 0; i < indexCapacity; i++) {
-            // if (refCountBytes[i] != 0) locationList[i] = tempList[nextLocation++];
-            // }
+            checkState(placed[0] == liveCount, "location count underflows occupied slots");
         }
 
         return PointStore.builder().internalRotationEnabled(state.isRotationEnabled())
                 .internalShinglingEnabled(state.isInternalShinglingEnabled()).indexCapacity(indexCapacity)
                 .currentStoreCapacity(state.getCurrentStoreCapacity()).capacity(state.getCapacity())
-                .shingleSize(state.getShingleSize()).dimensions(state.getDimensions()).locationList(locationList)
+                .shingleSize(state.getShingleSize()).dimensions(state.getDimensions()).location(location)
                 .nextTimeStamp(state.getLastTimeStamp()).startOfFreeSegment(startOfFreeSegment)
                 .refCountBytes(refCountBytes).overflow(overflow).knownShingle(state.getInternalShingle()).store(store)
                 .build();

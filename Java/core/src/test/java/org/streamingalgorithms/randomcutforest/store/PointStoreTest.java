@@ -40,7 +40,7 @@ public class PointStoreTest {
     public void setUp() {
         dimensions = 2;
         capacity = 4;
-        pointStore = new PointStoreSmall(dimensions, capacity);
+        pointStore = new PointStore.Builder<>().dimensions(dimensions).capacity(capacity).build();
     }
 
     @Test
@@ -63,23 +63,23 @@ public class PointStoreTest {
         assertEquals(counts[0], 1);
         assertEquals(counts[index], 1001);
         assertThrows(AssertionError.class, () -> pointStore.setLocation(0, 13));
-        assertThrows(AssertionError.class, () -> pointStore.extendLocationList(-10));
+        assertThrows(IllegalArgumentException.class, () -> pointStore.extendLocationList(-10));
     }
 
     @Test
     public void testConstructors() {
         PointStore.Builder builder = new PointStore.Builder().dynamicResizingEnabled(true);
-        assertThrows(IllegalArgumentException.class, () -> new PointStoreSmall(builder));
+        assertThrows(IllegalArgumentException.class, () -> new PointStore(builder));
         builder.dimensions(1000);
-        assertThrows(IllegalArgumentException.class, () -> new PointStoreSmall(builder));
+        assertThrows(IllegalArgumentException.class, () -> new PointStore(builder));
         builder.capacity(100000);
-        assertThrows(IllegalArgumentException.class, () -> new PointStoreSmall(builder));
-        assertDoesNotThrow(() -> new PointStoreLarge(builder));
+        assertDoesNotThrow(() -> new PointStore(builder));
+        assertDoesNotThrow(() -> new PointStore(builder));
         builder.shingleSize(3);
-        assertThrows(IllegalArgumentException.class, () -> new PointStoreLarge(builder));
+        assertThrows(IllegalArgumentException.class, () -> new PointStore(builder));
         builder.shingleSize(1);
         builder.dimensions(2);
-        PointStoreLarge large = new PointStoreLarge(builder);
+        PointStore large = new PointStore(builder);
         assertThrows(IllegalArgumentException.class, () -> large.checkFeasible(0));
         assertEquals(large.size(), 0);
         large.add(new float[2], 0L);

@@ -363,7 +363,7 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
         for (int i = 0; i < size; i++) {
             indexList[i] = i;
         }
-        tree.makeTree(size, scratchBox, indexList, outputList, pointIndex, sequenceIndex, null);
+        tree.makeTree(size, scratchBox, indexList, outputList, pointIndex, sequenceIndex, null, tree.getRandomSeed());
     }
 
     public static class Builder<T extends Builder<T>> extends AbstractStreamSampler.Builder<T> {

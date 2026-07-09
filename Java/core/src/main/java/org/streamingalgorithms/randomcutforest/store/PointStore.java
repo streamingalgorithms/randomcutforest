@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * This file has been substantially modified from the version in original repo
+ * which had the following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -21,12 +37,14 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.iterativeClustering;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndPackLive;
 
 import java.util.*;
 import java.util.function.BiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
+import org.streamingalgorithms.randomcutforest.tree.Column;
 import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 import org.streamingalgorithms.randomcutforest.util.ArrayUtils;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
@@ -34,13 +52,29 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import lombok.Getter;
 
-public abstract class PointStore implements IPointStore<Integer, float[]> {
+/**
+ * Single concrete point store. Collapses the former width-specialized
+ * {@code PointStoreSmall} (char[] locationList) and {@code PointStoreLarge}
+ * (int[] locationList) into one class whose per-index location slot is a single
+ * {@link Column}. Tier (BYTE / CHAR / INT) is chosen once by
+ * {@link Column#tierFor(long, boolean)} from the true semantic bound of a
+ * location value, and the same ladder is used on construction and on
+ * deserialize so the tier can never diverge between build and reload.
+ *
+ * <p>
+ * A location slot goes empty -> filled -> freed, so the sentinel IS reserved
+ * (reserveSentinel = true): a live value can never collide with the empty
+ * marker regardless of tier.
+ */
+public class PointStore implements IPointStore<Integer, float[]> {
 
     public static int INFEASIBLE_POINTSTORE_INDEX = -1;
 
     public static int INFEASIBLE_LOCN = (int) -1;
     /**
-     * an index manager to manage free locations
+     * an index manager to manage free locations. Deliberately NOT columnized: its
+     * arrays are interval-count-sized (tiny) and it sits on the hot insert path;
+     * columnizing would add virtual dispatch for no memory win.
      */
     protected IndexIntervalManager indexManager;
     /**
@@ -63,13 +97,21 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     protected long nextSequenceIndex;
 
     /**
-     * refCount[i] counts of the number of trees that are currently using the point
-     * determined by locationList[i] or (for directLocationMapping) the point at
-     * store[i * dimensions]
+     * refCount[i] counts of the number of times this point is being used across
+     * different trees (a point can be used multiple times by the same tree -- for
+     * example when duplicate points keep showing up
      */
     protected byte[] refCount;
 
     private final Int2IntOpenHashMap refCountMap;
+
+    /**
+     * per-index location slot. Stored value is {@code location / baseDimension};
+     * {@link #getLocation(int)} multiplies back. Empty slots hold
+     * {@code location.sentinel()}. Length (index capacity) grows via
+     * {@link Column#extend(int)} independently of the value bound.
+     */
+    protected final Column location;
 
     /**
      * first location where new data can be safely copied;
@@ -110,13 +152,61 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     @Getter
     boolean internalShinglingEnabled;
 
-    abstract void setInfeasiblePointstoreLocationIndex(int index);
+    // ------------------------------------------------------------------
+    // location column: bound, tier-from-legacy factory, and slot helpers
+    // ------------------------------------------------------------------
 
-    abstract void extendLocationList(int newCapacity);
+    /**
+     * Semantic upper bound of a stored location value (a quotient
+     * {@code location / baseDimension}). The store array can grow to
+     * {@code maxCapacity * dimensions} where {@code maxCapacity} is
+     * {@code (rotationEnabled ? 2 : 1) * capacity} (see {@link #resizeStore()}), so
+     * the largest quotient is {@code (rotationEnabled ? 2 : 1) * capacity *
+     * shingleSize - 1}. Shared by constructor AND mapper so Column.tierFor picks
+     * the same tier on build and reload. Long math: (rot?2:1)*cap*shingle can
+     * exceed int.
+     */
+    public static long locationBound(int capacity, int shingleSize, boolean rotationEnabled) {
+        return (long) (rotationEnabled ? 2 : 1) * capacity * shingleSize - 1;
+    }
 
-    abstract void setLocation(int index, int location);
+    private long locationMaxValue() {
+        return locationBound(capacity, shingleSize, rotationEnabled);
+    }
 
-    abstract int getLocation(int index);
+    /**
+     * A slot is live iff its stored value is not the sentinel. This replaces the
+     * old {@code compact()} liveness test, which relied on a numeric-range
+     * coincidence that happened to catch Large's {@code -baseDimension} via
+     * {@code >= 0} and Small's {@code baseDimension*65535} via the upper bound —
+     * two different halves of one check. Now explicit and tier-independent.
+     */
+    boolean isFeasible(int index) {
+        return location.get(index) != location.sentinel();
+    }
+
+    void setInfeasiblePointstoreLocationIndex(int index) {
+        location.set(index, location.sentinel());
+    }
+
+    void extendLocationList(int newCapacity) {
+        checkArgument(newCapacity > 0, "cannot be 0 or negative");
+        location.extend(newCapacity); // fills the new tail with sentinel
+    }
+
+    void setLocation(int index, int loc) {
+        int quotient = loc / baseDimension;
+        location.set(index, quotient);
+        assert baseDimension * quotient == loc : "location not aligned to baseDimension: " + loc;
+    }
+
+    int getLocation(int index) {
+        return baseDimension * location.get(index);
+    }
+
+    int locationListLength() {
+        return location.length();
+    }
 
     /**
      * Decrement the reference count for the given index.
@@ -185,8 +275,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         // then the padding for the new part; all mod (dimensions)
         // note that the expression is baseDimension when the condition
         // startOfFreeSegment % dimensions == (nextSequenceIndex-1)*baseDimension %
-        // dimension
-        // is met
+        // dimension is met
         return dimensions + (dimensions - startOfFreeSegment % dimensions
                 + (int) ((nextSequenceIndex) * baseDimension) % dimensions) % dimensions;
     }
@@ -328,13 +417,6 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         return copyShingle();
     }
 
-    /**
-     * The following function eliminates redundant information that builds up in the
-     * point store and shrinks the point store
-     */
-
-    abstract int locationListLength();
-
     void alignBoundaries(int initial, int freshStart) {
         int locn = freshStart;
         for (int i = 0; i < initial; i++) {
@@ -344,23 +426,28 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
 
     }
 
-    // PointStore — abstract, each subclass gathers from its own native location
-    // array
-    public abstract int[] getPackedLocation(boolean compress);
+    // Now that both widths share one Column, packing gathers straight from it.
+    public int[] getPackedLocation(boolean compress) {
+        return moveAndPackLive(refCount, location.length(), compress, i -> location.get(i)); // raw already
+    }
 
+    /**
+     * The following function eliminates redundant information that builds up in the
+     * point store and shrinks the point store
+     */
     public void compact() {
         int live = 0;
         int len = locationListLength();
         for (int i = 0; i < len; i++) {
-            int locn = getLocation(i);
-            if (locn >= 0 && locn < currentStoreCapacity * dimensions)
+            if (isFeasible(i)) {
                 live++;
+            }
         }
         long[] ref = new long[live];
         int n = 0;
         for (int i = 0; i < len; i++) {
-            int locn = getLocation(i);
-            if (locn >= 0 && locn < currentStoreCapacity * dimensions) {
+            if (isFeasible(i)) {
+                int locn = getLocation(i);
                 ref[n++] = ((long) locn << 32) | (i & 0xFFFFFFFFL);
             }
         }
@@ -432,12 +519,27 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
     }
 
     /**
-     *
      * @return the number of indices stored
      */
-    public abstract int size();
+    public int size() {
+        int count = 0;
+        int len = location.length();
+        for (int i = 0; i < len; i++) {
+            if (location.get(i) != location.sentinel()) {
+                ++count;
+            }
+        }
+        return count;
+    }
 
-    public abstract int[] getLocationList();
+    public int[] getLocationList() {
+        int len = location.length();
+        int[] answer = new int[len];
+        for (int i = 0; i < len; i++) {
+            answer[i] = location.get(i);
+        }
+        return answer;
+    }
 
     public int[] getPackedDuplicates(boolean compress) {
         int n = refCountMap.size();
@@ -558,6 +660,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         protected int indexCapacity = 0;
         protected float[] store = null;
         protected double[] knownShingle = null;
+        protected Column location = null;
         protected int[] locationList = null;
         protected byte[] refCountBytes = null;
         protected Int2IntOpenHashMap overflow = null;
@@ -653,6 +756,11 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
 
         // location of the points being tracked, if not directmapped
         // used for serialization
+        public T location(Column location) {
+            this.location = location;
+            return (T) this;
+        }
+
         public T locationList(int[] locationList) {
             this.locationList = locationList;
             return (T) this;
@@ -677,12 +785,10 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
             return (T) this;
         }
 
+        // No more Small/Large routing: one concrete PointStore, one location Column,
+        // tier picked internally from the true value bound.
         public PointStore build() {
-            if (shingleSize * capacity < Character.MAX_VALUE) {
-                return new PointStoreSmall(this);
-            } else {
-                return new PointStoreLarge(this);
-            }
+            return new PointStore(this);
         }
     }
 
@@ -694,15 +800,15 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         /**
          * the following checks are due to mappers (kept for future)
          */
-        if (builder.refCountBytes != null || builder.locationList != null || builder.knownShingle != null
-                || builder.refCount != null) {
+        if (builder.refCountBytes != null || builder.location != null || builder.knownShingle != null
+                || builder.refCount != null || builder.locationList != null) {
             checkArgument(builder.refCountBytes != null || builder.refCount != null, "reference count must be present");
-            checkArgument(builder.locationList != null, "location list must be present");
+            checkArgument(builder.location != null, "location list must be present");
             int length = (builder.refCountBytes != null) ? builder.refCountBytes.length
                     : (builder.refCount != null) ? builder.refCount.length : 0;
             checkArgument(length == builder.indexCapacity, "incorrect reference count length");
-            // following may change if IndexManager is dynamically resized as well
-            checkArgument(builder.locationList.length == builder.indexCapacity, " incorrect length of locations");
+            checkArgument(builder.location != null || builder.locationList != null, "location column must be present");
+            checkArgument(builder.location.length() == builder.indexCapacity, " incorrect length of locations");
             checkArgument(
                     builder.knownShingle == null
                             || builder.internalShinglingEnabled && builder.knownShingle.length == builder.dimensions,
@@ -729,6 +835,8 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
             store = new float[currentStoreCapacity * dimensions];
             this.refCountMap = new Int2IntOpenHashMap();
             this.refCountMap.defaultReturnValue(0);
+            // fresh column: length == index capacity, all slots sentinel
+            this.location = Column.of(currentStoreCapacity, locationMaxValue(), true);
         } else {
             if (builder.overflow == null) {
                 this.refCountMap = new Int2IntOpenHashMap();
@@ -760,7 +868,36 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
             }
             indexManager = new IndexIntervalManager(this.refCount, builder.indexCapacity);
             store = (builder.store == null) ? new float[currentStoreCapacity * dimensions] : builder.store;
+            this.location = (builder.location != null) ? builder.location
+                    : columnFrom(builder.locationList, locationMaxValue(), this.refCount);
+
         }
+    }
+
+    /**
+     * Build the location column from a legacy int[] locationList on deserialize.
+     * <p>
+     * Legacy empties are encoded as {@code -1} (old Large) or {@code 65535} (old
+     * Small, char sentinel widened to int). We do NOT normalize by matching those
+     * values: {@code 65535} is a legitimate live quotient in a Large / INT-tier
+     * store, so value-matching would silently drop a live entry. Instead we take
+     * liveness from {@code refCount} (authoritative: dead <=> refCount 0 <=>
+     * location was sentinel, kept in sync at every decrementRefCount) and write the
+     * fresh column's sentinel for every dead slot — normalizing both legacy
+     * encodings for free.
+     */
+    private static Column columnFrom(int[] legacyRaw, long maxValue, byte[] refCount) {
+        Column col = Column.of(legacyRaw.length, maxValue, true);
+        for (int i = 0; i < legacyRaw.length; i++) {
+            if ((refCount[i] & 0xff) != 0) {
+                // real quotient; < sentinel by construction, so col.set fits.
+                col.set(i, legacyRaw[i]);
+            }
+            // dead slot: Column.of already filled it with sentinel; leaving it
+            // there is exactly the normalization we want (legacy -1 and 65535
+            // both become the new tier's sentinel).
+        }
+        return col;
     }
 
     void resizeStore() {
@@ -788,7 +925,9 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
         }
     }
 
-    protected abstract void checkFeasible(int index);
+    protected void checkFeasible(int index) {
+        checkArgument(isFeasible(index), " invalid point");
+    }
 
     /**
      * Get a copy of the point at the given index.
@@ -882,7 +1021,7 @@ public abstract class PointStore implements IPointStore<Integer, float[]> {
 
     /**
      * a function that exposes an L1 clustering of the points stored in pointstore
-     * 
+     *
      * @param maxAllowed              the maximum number of clusters one is
      *                                interested in
      * @param shrinkage               a parameter used in CURE algorithm that can
