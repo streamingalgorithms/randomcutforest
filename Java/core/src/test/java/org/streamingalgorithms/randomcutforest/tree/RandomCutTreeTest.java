@@ -454,12 +454,10 @@ public class RandomCutTreeTest {
         assertTrue(tree.rangeSumData.length == (tree.numberOfLeaves - 1) / 2);
 
         int root = tree.getRoot();
-        assertTrue(tree.checkStrictlyContains(root, new float[2]));
 
         tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, 0.0);
         assertTrue(tree.boundingBoxData == null);
         assertTrue(tree.rangeSumData == null);
-        assertFalse(tree.checkStrictlyContains(root, new float[2]));
 
         tree.deletePoint(3, 4);
         tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, 0.5);
@@ -725,7 +723,7 @@ public class RandomCutTreeTest {
                 () -> tree.traversePathToLeafAndVisitNodes(null, null, null, tree.root, 0));
         assertThrows(IllegalStateException.class, () -> tree.traverseTreeMulti(null, null, null, tree.root, 0));
 
-        assertThrows(IllegalStateException.class, () -> tree.growNodeBox(null, pointStoreFloat, 0, 187));
+        assertThrows(IllegalStateException.class, () -> tree.growArrayBox(null, pointStoreFloat, 0, 187));
         assertThrows(IllegalStateException.class, () -> tree.getBox(187));
     }
 

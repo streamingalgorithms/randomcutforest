@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 
 /**
@@ -354,7 +353,7 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
     // not-saved path: fresh empty tree, build node-by-node via full add (handles
     // null root, makes its own random cuts).
     // The weight isn't read; addPoint takes (index, seq).
-    public void rebuildInto(RandomCutTree tree, int[] indexList, int[] outputList, BoundingBox scratchBox) {
+    public void rebuildInto(RandomCutTree tree, int[] indexList, int[] outputList) {
         reset_weights();
         if (indexList.length < size && size > 0) {
             indexList = new int[size];
@@ -363,7 +362,7 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
         for (int i = 0; i < size; i++) {
             indexList[i] = i;
         }
-        tree.makeTree(size, scratchBox, indexList, outputList, pointIndex, sequenceIndex, null, tree.getRandomSeed());
+        tree.makeTree(size, indexList, outputList, pointIndex, sequenceIndex, null, tree.getRandomSeed());
     }
 
     public static class Builder<T extends Builder<T>> extends AbstractStreamSampler.Builder<T> {

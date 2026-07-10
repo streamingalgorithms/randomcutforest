@@ -246,4 +246,11 @@ public class BoundingBox implements IBoundingBoxView {
         return Arrays.equals(minValues, otherBox.minValues) && Arrays.equals(maxValues, otherBox.maxValues);
     }
 
+    public void setAs(ArrayBox aBox) {
+        rangeSum = aBox.rangeSum;
+        System.arraycopy(aBox.values, aBox.offset, maxValues, 0, maxValues.length);
+        for (int i = 0; i < minValues.length; i++) {
+            minValues[i] = -aBox.values[i + minValues.length + aBox.offset];
+        }
+    }
 }

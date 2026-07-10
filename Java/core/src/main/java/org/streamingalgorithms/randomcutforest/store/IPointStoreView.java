@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.function.BiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 
 /**
  * A view of the PointStore that forces a read only access to the store.
@@ -50,6 +51,10 @@ public interface IPointStoreView<Point> {
     int getShingleSize();
 
     int[] transformIndices(int[] indexList);
+
+    void setAsArrayBox(int pointIndex, ArrayBox aBox);
+
+    void addToArrayBox(int pointIndex, ArrayBox aBox);
 
     /**
      * Prints the point given the index, irrespective of the encoding of the point.

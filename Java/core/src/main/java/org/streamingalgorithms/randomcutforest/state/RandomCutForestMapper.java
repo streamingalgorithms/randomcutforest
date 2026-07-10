@@ -257,10 +257,8 @@ public class RandomCutForestMapper
                         .pointStoreView(pointStore).boundingBoxCacheFraction(state.getBoundingBoxCacheFraction())
                         .centerOfMassEnabled(state.isCenterOfMassEnabled())
                         .storeSequenceIndexesEnabled(state.isStoreSequenceIndexesEnabled()).build();
-                treeMapper.setBox(pointStore.getDimensions());
                 treeMapper.setSamplerSize(tree.getNumberOfLeaves());
-                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList(),
-                        treeMapper.getScatchBox());
+                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList());
             }
             components.add(new SamplerPlusTree<>(sampler, tree));
         }

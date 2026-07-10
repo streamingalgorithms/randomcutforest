@@ -44,6 +44,7 @@ import java.util.function.BiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.Column;
 import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 import org.streamingalgorithms.randomcutforest.util.ArrayUtils;
@@ -948,17 +949,50 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     @Override
     public void getNumericVectorInto(int index, float[] answer) {
+        getNumericVectorInto(index, answer, 0);
+    }
+
+    void getNumericVectorInto(int index, float[] answer, int offset) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         checkArgument(answer != null && answer.length == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
 
         if (!rotationEnabled) {
-            System.arraycopy(store, address, answer, 0, dimensions);
+            System.arraycopy(store, address, answer, offset, dimensions);
         } else {
             // clearly every cell
             for (int i = 0; i < dimensions; i++) {
-                answer[(address + i) % dimensions] = store[address + i];
+                answer[(address + i) % dimensions + offset] = store[address + i];
+            }
+        }
+    }
+
+    @Override
+    public void setAsArrayBox(int index, ArrayBox aBox) {
+        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
+        checkArgument(aBox != null && aBox.getDimensions() == dimensions, "incorrect array for 0-alloc");
+        int address = getLocation(index);
+        checkFeasible(index);
+        if (!rotationEnabled) {
+            aBox.fromPoint(store, address);
+        } else {
+            aBox.fromPoint(getNumericVector(index));
+        }
+    }
+
+    @Override
+    public void addToArrayBox(int index, ArrayBox aBox) {
+        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
+        checkArgument(aBox != null && aBox.getDimensions() == dimensions, "incorrect array for 0-alloc");
+        int address = getLocation(index);
+        checkFeasible(index);
+        if (!rotationEnabled) {
+            aBox.addPoint(store, address);
+        } else {
+            // clearly every cell
+            for (int i = 0; i < dimensions; i++) {
+                aBox.addPointCoordinates(store[address + i], (address + i) % dimensions);
             }
         }
     }

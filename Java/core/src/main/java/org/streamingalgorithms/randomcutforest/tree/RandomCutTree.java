@@ -36,6 +36,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.sampler.CompactSampler.SEQUENCE_INDEX_NA;
+import static org.streamingalgorithms.randomcutforest.tree.ArrayBox.gapAttribution;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.DEFAULT_STORE_PARENT;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
@@ -93,6 +94,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected final int[] nodeScratch;
     protected final double[] attributionScratch;
     protected final Cut cutScratch;
+    protected final ArrayBox boxScratch;
 
     // the following is a separation oracle that takes a bounding box and generates
     // a cut
@@ -129,6 +131,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             sequenceMap = new HashMap<>();
         }
         resizeCache(boundingBoxCacheFraction);
+        boxScratch = new ArrayBox(dimension);
     }
 
     @Override
@@ -180,30 +183,32 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      *               gap computed must be non-zero (and nextAfter is defined)
      * @param output Cut corresponding to a random cut in the bounding box.
      */
-    protected void randomCut(double factor, float[] point, BoundingBox box, SeparationOracle oracle, boolean union,
-            Cut output) {
+    protected void randomCut(double factor, float[] point, ArrayBox box, double[] oracle, boolean union, Cut output) {
+        checkArgument(box != null, "box cannot be null, can be a point");
         double range = 0.0;
-        // box cannot be null -- it can be a single point
-        float[] minValues = box.minValues;
-        float[] maxValues = box.maxValues;
-        int dim = minValues.length;
-        if (oracle == null) {
-            // this is the hot path but we are avoiding allocation
-            if (union) {
-                for (int i = 0; i < dim; i++) {
-                    double minValue = min(minValues[i], point[i]);
-                    double maxValue = max(maxValues[i], point[i]);
-                    attributionScratch[i] = maxValue - minValue;
-                    range += attributionScratch[i];
-                }
-            } else {
-                for (int i = 0; i < dim; i++) {
-                    attributionScratch[i] = maxValues[i] - (double) minValues[i];
-                }
-                range = box.getRangeSum();
+        int dimension = box.getDimensions();
+        if (union) {
+            // point cannot be null
+            // oracle has to be null -- because the oracle has no union
+            for (int i = 0; i < dimension; i++) {
+                attributionScratch[i] = max(point[i], box.values[i + box.offset])
+                        + max(-point[i], box.values[i + box.offset + dimension]);
+                range += attributionScratch[i];
             }
         } else {
-            range = oracle.computeGap(box, attributionScratch);
+            if (oracle == null) {
+                for (int i = 0; i < dimension; i++) {
+                    attributionScratch[i] = box.values[i + box.offset] + box.values[i + box.offset + dimension];
+                }
+                range = box.rangeSum;
+            } else {
+                checkArgument(oracle.length == dimension, "incorrect probability specification");
+                for (int i = 0; i < dimension; i++) {
+                    checkArgument(oracle[i] >= 0, "cannot be negative");
+                    attributionScratch[i] = oracle[i];
+                    range += attributionScratch[i];
+                }
+            }
         }
 
         checkArgument(range > 0, () -> " the union is a single point " + Arrays.toString(point)
@@ -211,15 +216,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         double breakPoint = factor * range;
 
-        for (int i = 0; i < dim; i++) {
+        for (int i = 0; i < dimension; i++) {
             double gap = attributionScratch[i];
 
             // the invariant we must maintain is that if the float values
             // are not the same then the gap must be non-zeor
             // double gap = maxValue - minValue;
             if (breakPoint <= gap && gap > 0) {
-                float minValue = minValues[i];
-                float maxValue = maxValues[i];
+                float minValue = box.getMinValue(i);
+                float maxValue = box.getMaxValue(i);
                 if (union) {
                     minValue = min(minValue, point[i]);
                     maxValue = max(maxValue, point[i]);
@@ -252,7 +257,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * @param output the output cut
      * @return
      */
-    private void cleanup(double factor, BoundingBox box, float[] point, Cut output) {
+    private void cleanup(double factor, ArrayBox box, float[] point, Cut output) {
 
         // if we are here then factor is likely almost 1 and we have floating point
         // issues. we will randomize between the first and the last non-zero ranges
@@ -261,7 +266,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         // to ensure easier debugging. this should be an anomaly - no pun intended.
 
         // this is an allocation, but this should be rare
-        BoundingBox merged = (point != null) ? box.copy().addPoint(point) : box;
+        ArrayBox merged = (point != null) ? box.copy().addPoint(point) : box;
         Random rng = new Random((long) (factor * Long.MAX_VALUE / 2));
         if (rng.nextDouble() < 0.5) {
             for (int i = 0; i < merged.getDimensions(); i++) {
@@ -292,11 +297,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the following is just for testing and not to disturb the 100s of tests
     protected Cut randomCut(double factor, float[] point, BoundingBox box) {
         Cut output = new Cut(0, 0);
-        randomCut(factor, point, box, null, true, output);
+        randomCut(factor, point, new ArrayBox(box), null, true, output);
         return output;
     }
 
-    protected void randomCut(double factor, BoundingBox box, Cut output) {
+    protected void randomCut(double factor, ArrayBox box, Cut output) {
         randomCut(factor, null, box, null, false, output);
     }
 
@@ -343,8 +348,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 int savedNode = node;
                 int parent = savedParent;
                 float savedCutValue = (float) 0.0;
-                BoundingBox currentBox = new BoundingBox(oldPoint, oldPoint);
-                BoundingBox savedBox = currentBox.copy();
+                boxScratch.fromPoint(oldPoint);
+                ArrayBox savedBox = boxScratch.copy();
                 int savedDim = Integer.MAX_VALUE;
                 Random rng;
                 if (testRandom == null) {
@@ -355,28 +360,28 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 }
                 while (true) {
                     double factor = rng.nextDouble();
-                    randomCut(factor, point, currentBox, null, true, cutScratch);
+                    randomCut(factor, point, boxScratch, null, true, cutScratch);
                     int dim = cutScratch.getDimension();
                     float value = (float) cutScratch.getValue();
 
-                    boolean separation = ((point[dim] <= value && value < currentBox.getMinValue(dim)
-                            || point[dim] > value && value >= currentBox.getMaxValue(dim)));
+                    boolean separation = ((point[dim] <= value && value < boxScratch.getMinValue(dim)
+                            || point[dim] > value && value >= boxScratch.getMaxValue(dim)));
 
                     if (separation) {
                         savedCutValue = value;
                         savedDim = dim;
                         savedParent = parent;
                         savedNode = node;
-                        savedBox = currentBox.copy();
+                        savedBox.copyFrom(boxScratch);
                         parentPath.clear();
                     } else {
                         parentPath.push(new int[] { node, sibling });
                     }
 
-                    if (currentBox.contains(point) || parent == Null) {
+                    if (boxScratch.contains(point) || parent == Null) {
                         break;
                     } else {
-                        growNodeBox(currentBox, pointStoreView, parent, sibling);
+                        growArrayBox(boxScratch, pointStoreView, parent, sibling);
                         int[] next = pathToRoot.pop();
                         node = next[0];
                         sibling = next[1];
@@ -395,9 +400,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
                 int childMassIfLeaf = isLeaf(savedNode) ? getLeafMass(savedNode) : 0;
                 int mergedNode = nodeStore.addNode(pathToRoot, point, sequenceIndex, pointIndex, savedNode,
-                        childMassIfLeaf, savedDim, savedCutValue, savedBox);
+                        childMassIfLeaf, savedDim, savedCutValue);
                 addLeaf(pointIndex, sequenceIndex);
-                addBox(mergedNode, point, savedBox);
+                int idx = translate(mergedNode);
+                if (idx != Integer.MAX_VALUE) { // always add irrespective of rangesum
+                    copyArrayBoxToData(idx, savedBox);
+                    rangeSumData[idx] = ArrayBox.addPointInPlace(boundingBoxData, 2 * idx * dimension, dimension, point,
+                            0);
+                }
                 manageAncestorsAdd(pathToRoot, point);
                 if (pointSum != null) {
                     recomputePointSum(mergedNode);
@@ -410,8 +420,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
-    public void makeTree(int size, BoundingBox scratch, int[] indexList, int[] outputList, int[] pointList,
-            long[] sequenceIndex, SeparationOracle oracle, long seed) {
+    public void makeTree(int size, int[] indexList, int[] outputList, int[] pointList, long[] sequenceIndex,
+            SeparationOracle oracle, long seed) {
         // this function allows a public call, which may be useful someday
         // that day is today ....
         if (size > 0 && size <= numberOfLeaves) {
@@ -421,8 +431,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
             Random ring = new Random(seed);
             Cut scratchCut = new Cut(0, 0);
-            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratch, scratchCut,
-                    ring);
+            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratchCut, ring);
             // the cuts are specififed; now build tree
             // note the contents of the indexList will be permuted.
             for (int i = 0; i < size; i++) {
@@ -448,12 +457,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the outputList is populated such that chosen[i] correponds to the inserted
     // point (which is revealed only after insertion)
     int makeTreeInt(int[] chosen, int[] output, int start, int end, int[] pointList, int firstFree,
-            SeparationOracle vecBuild, int[] scratch, BoundingBox boxScratch, Cut cutScratch, Random ring) {
+            SeparationOracle vecBuild, int[] scratch, Cut cutScratch, Random ring) {
 
         if (end - start == 0)
             return Null;
         pointStoreView.getNumericVectorInto(pointList[chosen[start]], pointScratch);
-        boxScratch.setAs(pointScratch);
+        boxScratch.fromPoint(pointScratch);
 
         for (int i = start + 1; i < end; i++) {
             pointStoreView.getNumericVectorInto(pointList[chosen[i]], pointScratch);
@@ -471,7 +480,13 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
 
         double factor = ring.nextDouble();
-        randomCut(factor, null, boxScratch, vecBuild, false, cutScratch);
+        if (vecBuild != null) {
+            vecBuild.computeGap(boxScratch, attributionScratch);
+            randomCut(factor, null, boxScratch, attributionScratch, false, cutScratch);
+        } else {
+            randomCut(factor, null, boxScratch, null, false, cutScratch); // box-range path
+        }
+
         float cutValue = (float) cutScratch.getValue();
         int cutDimension = cutScratch.getDimension();
         // stable in-place partition of [start, end):
@@ -493,19 +508,20 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
         int idx = translate(firstFree);
         if (idx != Integer.MAX_VALUE) {
-            copyBoxToData(idx, boxScratch);
+            copyArrayBoxToData(idx, boxScratch);
         }
         int leftCount = mid - start;
-        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch, boxScratch,
-                cutScratch, ring);
+        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch, cutScratch,
+                ring);
         int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch,
-                boxScratch, cutScratch, ring);
+                cutScratch, ring);
         nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
                 cutValue, cutDimension);
         return firstFree;
     }
 
     protected void manageAncestorsAdd(Stack<int[]> path, float[] point) {
+        boolean resolved = false;
         while (!path.isEmpty()) {
             int index = path.pop()[0];
             nodeStore.increaseMassOfInternalNode(index);
@@ -513,8 +529,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 recomputePointSum(index);
             }
             if (boundingBoxCacheFraction > 0.0) {
-                checkContainsAndRebuildBox(index, point, pointStoreView);
-                addPointInPlace(index, point);
+                int idx = translate(index);
+                if (idx != Integer.MAX_VALUE) {
+                    rangeSumData[idx] = 0;
+                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * idx * dimension, dimension, 0);
+                    reconstructArrayBox(inPlace, index, pointStoreView);
+                    // double priorSum = rangeSumData[idx];
+                    rangeSumData[idx] = ArrayBox.addPointInPlace(boundingBoxData, 2 * idx * dimension, dimension, point,
+                            0);
+                    // checkContainsAndRebuildBox(index, point, pointStoreView);
+                    // addPointInPlace(index, point);
+                }
             }
         }
     }
@@ -739,83 +764,70 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
-    void copyBoxToData(int idx, BoundingBox box) {
+    void copyArrayBoxToData(int idx, ArrayBox box) {
         int base = 2 * idx * dimension;
-        int mid = base + dimension;
-        System.arraycopy(box.getMinValues(), 0, boundingBoxData, base, dimension);
-        System.arraycopy(box.getMaxValues(), 0, boundingBoxData, mid, dimension);
+        System.arraycopy(box.values, box.offset, boundingBoxData, base, 2 * dimension);
         rangeSumData[idx] = box.getRangeSum();
     }
 
-    void addPointInPlace(int index, float[] point) {
-        int idx = translate(index);
-        if (idx != Integer.MAX_VALUE) {
-            int base = 2 * idx * dimension;
-            int mid = base + dimension;
-            double rangeSum = 0;
-            for (int i = 0; i < dimension; i++) {
-                boundingBoxData[base + i] = min(boundingBoxData[base + i], point[i]);
-            }
-            for (int i = 0; i < dimension; i++) {
-                boundingBoxData[mid + i] = max(boundingBoxData[mid + i], point[i]);
-            }
-            for (int i = 0; i < dimension; i++) {
-                rangeSum += boundingBoxData[mid + i] - boundingBoxData[base + i];
-            }
-            rangeSumData[idx] = rangeSum;
-        }
+    // mainly for tests
+    protected BoundingBox getBox(int index) {
+        BoundingBox answer = new BoundingBox(dimension);
+        answer.setAs(getArrayBox(index));
+        return answer;
     }
 
-    public BoundingBox getBox(int index) {
+    public ArrayBox getArrayBox(int index) {
+        ArrayBox aBox = new ArrayBox(dimension);
         if (isLeaf(index)) {
-            float[] point = projectToTree(pointStoreView.getNumericVector(getPointIndex(index)));
-            checkArgument(point.length == dimension, () -> "failure in projection at index " + index);
-            return new BoundingBox(point, point);
+            pointStoreView.setAsArrayBox(getPointIndex(index), aBox);
         } else {
             checkState(isInternal(index), " incomplete state");
             int idx = translate(index);
             if (idx != Integer.MAX_VALUE) {
-                if (rangeSumData[idx] != 0) {
-                    // return non-trivial boxes
-                    return getBoxFromData(idx);
-                } else {
-                    BoundingBox box = reconstructBox(index, pointStoreView);
-                    copyBoxToData(idx, box);
-                    return box;
+                if (rangeSumData[idx] == 0) {
+                    // object creation
+                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * idx * dimension, dimension, 0);
+                    reconstructArrayBox(inPlace, index, pointStoreView);
+                    rangeSumData[idx] = inPlace.getRangeSum();
                 }
+                return aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]);
             }
-            return reconstructBox(index, pointStoreView);
+            reconstructArrayBox(aBox, index, pointStoreView);
+            // no need to save rangesum
         }
+        return aBox;
     }
 
-    BoundingBox reconstructBox(int index, IPointStoreView<float[]> pointStoreView) {
-        BoundingBox mutatedBoundingBox = getBox(nodeStore.getLeftIndex(index));
-        growNodeBox(mutatedBoundingBox, pointStoreView, index, nodeStore.getRightIndex(index));
-        return mutatedBoundingBox;
-    }
-
-    boolean checkStrictlyContains(int index, float[] point) {
+    void reconstructArrayBox(ArrayBox aBox, int index, IPointStoreView<float[]> pointStoreView) {
+        if (isLeaf(index)) {
+            pointStoreView.setAsArrayBox(getPointIndex(index), aBox);
+            return;
+        }
         int idx = translate(index);
-        if (idx != Integer.MAX_VALUE) {
-            int base = 2 * idx * dimension;
-            int mid = base + dimension;
-            boolean isInside = true;
-            for (int i = 0; i < dimension && isInside; i++) {
-                if (point[i] >= boundingBoxData[mid + i] || boundingBoxData[base + i] >= point[i]) {
-                    isInside = false;
-                }
-            }
-            return isInside;
+        if (idx != Integer.MAX_VALUE && rangeSumData[idx] != 0) {
+            aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]);
+            return;
         }
-        return false;
+        // rebuild THIS node's box from its children into aBox
+        reconstructArrayBox(aBox, nodeStore.getLeftIndex(index), pointStoreView);
+        growArrayBox(aBox, pointStoreView, index, nodeStore.getRightIndex(index));
     }
 
     boolean checkContainsAndRebuildBox(int index, float[] point, IPointStoreView<float[]> pointStoreView) {
         int idx = translate(index);
         if (idx != Integer.MAX_VALUE) {
-            if (!checkStrictlyContains(index, point)) {
-                BoundingBox mutatedBoundingBox = reconstructBox(index, pointStoreView);
-                copyBoxToData(idx, mutatedBoundingBox);
+            int base = 2 * idx * dimension;
+            boolean inside = true;
+            for (int i = 0; i < dimension && inside; i++) {
+                inside = (point[i] < boundingBoxData[base + i]) && (-point[i] < boundingBoxData[base + i + dimension]);
+            }
+            if (!inside) {
+                rangeSumData[idx] = 0; // force rebuild
+                // object creation
+                ArrayBox inPlace = new ArrayBox(boundingBoxData, base, dimension, 0);
+                reconstructArrayBox(inPlace, index, pointStoreView);
+                rangeSumData[idx] = inPlace.getRangeSum();
                 return false;
             }
             return true;
@@ -823,71 +835,38 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return false;
     }
 
-    BoundingBox getBoxFromData(int idx) {
-        int base = 2 * idx * dimension;
-        int mid = base + dimension;
-
-        return new BoundingBox(Arrays.copyOfRange(boundingBoxData, base, base + dimension),
-                Arrays.copyOfRange(boundingBoxData, mid, mid + dimension));
-    }
-
-    void addBox(int index, float[] point, BoundingBox box) {
-        int idx = translate(index);
-        if (idx != Integer.MAX_VALUE) { // always add irrespective of rangesum
-            copyBoxToData(idx, box);
-            addPointInPlace(index, point);
-        }
-    }
-
-    void growNodeBox(BoundingBox box, IPointStoreView<float[]> pointStoreView, int node, int sibling) {
+    void growArrayBox(ArrayBox aBox, IPointStoreView<float[]> pointStoreView, int node, int sibling) {
         if (isLeaf(sibling)) {
-            float[] point = projectToTree(pointStoreView.getNumericVector(getPointIndex(sibling)));
-            checkArgument(point.length == dimension, () -> " incorrect projection at index " + sibling);
-            box.addPoint(point);
+            // project-to-tree on the point is ignored for now.
+            pointStoreView.addToArrayBox(getPointIndex(sibling), aBox);
         } else {
             if (!isInternal(sibling)) {
                 throw new IllegalStateException(" incomplete state " + sibling);
             }
             int siblingIdx = translate(sibling);
             if (siblingIdx != Integer.MAX_VALUE) {
-                if (rangeSumData[siblingIdx] != 0) {
-                    box.addBox(getBoxFromData(siblingIdx));
-                } else {
-                    BoundingBox newBox = getBox(siblingIdx);
-                    copyBoxToData(siblingIdx, newBox);
-                    box.addBox(newBox);
+                if (rangeSumData[siblingIdx] == 0) {
+                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * siblingIdx * dimension, dimension, 0);
+                    reconstructArrayBox(inPlace, sibling, pointStoreView);
+                    rangeSumData[siblingIdx] = inPlace.getRangeSum();
                 }
+                aBox.addSlice(boundingBoxData, 2 * siblingIdx * dimension);
                 return;
             }
-            growNodeBox(box, pointStoreView, sibling, nodeStore.getLeftIndex(sibling));
-            growNodeBox(box, pointStoreView, sibling, nodeStore.getRightIndex(sibling));
-            return;
+            growArrayBox(aBox, pointStoreView, sibling, nodeStore.getLeftIndex(sibling));
+            growArrayBox(aBox, pointStoreView, sibling, nodeStore.getRightIndex(sibling));
         }
     }
 
-    public double probabilityOfCut(int node, float[] point, BoundingBox otherBox) {
+    public double probabilityOfCut(int node, float[] point, ArrayBox otherBox) {
         int nodeIdx = translate(node);
         if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
             int base = 2 * nodeIdx * dimension;
-            int mid = base + dimension;
-            double minsum = 0;
-            double maxsum = 0;
-            for (int i = 0; i < dimension; i++) {
-                minsum += max(boundingBoxData[base + i] - point[i], 0);
-            }
-            for (int i = 0; i < dimension; i++) {
-                maxsum += max(point[i] - boundingBoxData[mid + i], 0);
-            }
-            double sum = maxsum + minsum;
-
-            if (sum == 0.0) {
-                return 0.0;
-            }
-            return sum / (rangeSumData[nodeIdx] + sum);
+            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], point, null);
         } else if (otherBox != null) {
             return otherBox.probabilityOfCut(point);
         } else {
-            BoundingBox box = getBox(node);
+            ArrayBox box = getArrayBox(node);
             return box.probabilityOfCut(point);
         }
     }
@@ -974,15 +953,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * @param index the node of a tree
      * @return a bounding box of the points
      */
-    public BoundingBox validateAndReconstruct(int index, boolean retainBoxes, boolean rebuildMass, boolean recompute) {
+    public ArrayBox validateAndReconstruct(int index, boolean retainBoxes, boolean rebuildMass, boolean recompute) {
         if (isLeaf(index)) {
-            return (retainBoxes) ? getBox(index) : null;
+            return (retainBoxes) ? getArrayBox(index) : null;
         } else {
             checkState(isInternal(index), "illegal state");
             int left = getLeftChild(index);
             int right = getRightChild(index);
-            BoundingBox leftBox = validateAndReconstruct(left, retainBoxes, rebuildMass, recompute);
-            BoundingBox rightBox = validateAndReconstruct(right, retainBoxes, rebuildMass, recompute);
+            ArrayBox leftBox = validateAndReconstruct(left, retainBoxes, rebuildMass, recompute);
+            ArrayBox rightBox = validateAndReconstruct(right, retainBoxes, rebuildMass, recompute);
             if (retainBoxes && (leftBox.getMaxValue(getCutDimension(index)) > getCutValue(index)
                     || rightBox.getMinValue(getCutDimension(index)) <= getCutValue(index))) {
                 throw new IllegalStateException(" incorrect bounding state at index " + index + " cut value "
@@ -1000,7 +979,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 rightBox.addBox(leftBox);
                 int idx = translate(index);
                 if (idx != Integer.MAX_VALUE) { // always add irrespective of rangesum
-                    copyBoxToData(idx, rightBox);
+                    copyArrayBoxToData(idx, rightBox);
                 }
                 return rightBox;
             }

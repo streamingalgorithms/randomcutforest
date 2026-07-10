@@ -394,7 +394,7 @@ public class NodeStore {
     }
 
     public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
-            int childMassIfLeaf, int cutDimension, float cut, BoundingBox box) {
+            int childMassIfLeaf, int cutDimension, float cut) {
         int index = freeNodeManager.takeIndex();
         if (leftOf(cut, cutDimension, point)) {
             addRecord(index, pointIndex + capacity + 1, childIndex, cut, cutDimension);

@@ -33,6 +33,8 @@ import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
 import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
+import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
@@ -158,14 +160,15 @@ public class AnomalyScoreVisitorTest {
 
         depth--;
         IBoundingBoxView boundingBox = node.getBoundingBox().getMergedBox(new float[] { 1.0f, 1.0f });
-        node = new NodeView(null, null, Null);
+        IPointStoreView<float[]> pointStoreView = new PointStore.Builder<>().dimensions(2).capacity(2).build();
+        node = new NodeView(null, pointStoreView, Null);
         visitor.accept(node, depth);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
 
         depth--;
         boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, -1.0f });
-        node = new NodeView(null, null, Null);
+        node = new NodeView(null, pointStoreView, Null);
         visitor.accept(node, depth);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));

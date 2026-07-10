@@ -205,8 +205,7 @@ public class HyperTreeTest {
                 }
                 checkArgument(count == sampleSize, "incorrect construction");
                 var tree = trees.get(j);
-                BoundingBox scratch = new BoundingBox(dimensions);
-                tree.makeTree(sampleSize, scratch, indexList, outputList, reference, null, tree.getOracle(), seed + j);
+                tree.makeTree(sampleSize, indexList, outputList, reference, null, tree.getOracle(), seed + j);
                 for (int i = 0; i < indexList.length; i++) {
                     pointStore.incrementRefCount(outputList[i]);
                 }

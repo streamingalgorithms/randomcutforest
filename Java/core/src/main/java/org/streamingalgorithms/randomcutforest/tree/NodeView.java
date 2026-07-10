@@ -28,11 +28,12 @@ public class NodeView implements INodeView {
     RandomCutTree tree;
     int currentNodeOffset;
     float[] leafPoint;
-    BoundingBox currentBox;
+    ArrayBox currentBox;
 
     public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root) {
         this.currentNodeOffset = root;
         this.tree = tree;
+        leafPoint = new float[pointStoreView.getDimensions()];
     }
 
     public int getMass() {
@@ -89,9 +90,9 @@ public class NodeView implements INodeView {
 
     protected void setCurrentNode(int newNode, int index, boolean setBox) {
         currentNodeOffset = newNode;
-        leafPoint = tree.pointStoreView.getNumericVector(index);
+        tree.pointStoreView.getNumericVectorInto(index, leafPoint);
         if (setBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
-            currentBox = new BoundingBox(leafPoint, leafPoint);
+            currentBox = new ArrayBox(leafPoint);
         }
     }
 
@@ -102,7 +103,7 @@ public class NodeView implements INodeView {
     public void updateToParent(int parent, int currentSibling, boolean updateBox) {
         currentNodeOffset = parent;
         if (updateBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
-            tree.growNodeBox(currentBox, tree.pointStoreView, parent, currentSibling);
+            tree.growArrayBox(currentBox, tree.pointStoreView, parent, currentSibling);
         }
     }
 
