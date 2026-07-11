@@ -45,7 +45,7 @@ import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.TestUtils;
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyScoreVisitor;
+import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
@@ -223,8 +223,7 @@ public class ForestTraversalExecutorTest {
     public void testException() {
         ParallelForestTraversalExecutor executor = new ParallelForestTraversalExecutor(new ComponentList<>(0), 2);
         SequentialForestTraversalExecutor executor1 = new SequentialForestTraversalExecutor(new ComponentList<>(0));
-        IVisitorFactory<Double> visitorFactory = (tree, x) -> new AnomalyScoreVisitor(tree.projectToTree(x),
-                tree.getMass());
+        IVisitorFactory<Double> visitorFactory = (tree, x) -> new ScoreVisitor(tree.projectToTree(x), tree.getMass());
         assertThrows(IllegalStateException.class,
                 () -> executor.traverseForest(new float[1], visitorFactory, Double::sum, x -> x));
         assertThrows(IllegalStateException.class,

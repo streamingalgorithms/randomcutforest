@@ -26,8 +26,8 @@ import org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisit
 /**
  * A DiVector is used when we want to track a quantity in both the positive and
  * negative directions for each dimension in a manifold. For example, when using
- * a {@link AttributionVisitor} to compute the attribution of the anomaly
- * score to dimension of the input point, we want to know if the anomaly score
+ * a {@link AttributionVisitor} to compute the attribution of the anomaly score
+ * to dimension of the input point, we want to know if the anomaly score
  * attributed to the ith coordinate of the input point is due to that coordinate
  * being unusually high or unusually low.
  */

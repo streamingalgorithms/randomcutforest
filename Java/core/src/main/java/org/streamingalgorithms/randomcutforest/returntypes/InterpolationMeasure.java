@@ -23,9 +23,8 @@ import java.util.function.Function;
 import java.util.stream.Collector;
 
 /**
- * An InterpolationMeasure is used by
- * {@link org.streamingalgorithms.randomcutforest.interpolation.SimpleInterpolationVisitor}
- * to store certain geometric quantities during a tree traversal.
+ * An InterpolationMeasure is used  to store certain geometric
+ * quantities during a tree traversal and useful for density estimation
  */
 public class InterpolationMeasure {
 

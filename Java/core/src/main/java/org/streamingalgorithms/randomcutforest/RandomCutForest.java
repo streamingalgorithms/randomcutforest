@@ -50,7 +50,6 @@ import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSumma
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
-import org.streamingalgorithms.randomcutforest.interpolation.SimpleInterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
@@ -833,8 +832,7 @@ public class RandomCutForest {
      * more anomalous. A threshold of 1.0 is commonly used to distinguish anomalous
      * points from non-anomalous ones.
      * <p>
-     * See {@link AnomalyScoreVisitor} for more details about the anomaly score
-     * algorithm.
+     * See {@link ScoreVisitor} for more details about the anomaly score algorithm.
      *
      * @param point The point being scored.
      * @return an anomaly score for the given point.
@@ -887,8 +885,8 @@ public class RandomCutForest {
      * of how anomalous it is. The result DiVector will contain an anomaly score in
      * both the positive and negative directions for each dimension of the data.
      * <p>
-     * See {@link AttributionVisitor} for more details about the anomaly
-     * score algorithm.
+     * See {@link AttributionVisitor} for more details about the anomaly score
+     * algorithm.
      *
      * @param point The point being scored.
      * @return an anomaly score for the given point.
@@ -942,7 +940,7 @@ public class RandomCutForest {
     /**
      * Compute a density estimate at the given point.
      * <p>
-     * See {@link SimpleInterpolationVisitor} and {@link DensityOutput} for more
+     * See {@link InterpolationVisitor} and {@link DensityOutput} for more
      * details about the density computation.
      *
      * @param point The point where the density estimate is made.

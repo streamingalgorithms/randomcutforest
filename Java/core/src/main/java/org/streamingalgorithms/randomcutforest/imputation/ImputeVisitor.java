@@ -22,7 +22,7 @@ import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyScoreVisitor;
+import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
@@ -139,7 +139,7 @@ public class ImputeVisitor implements MultiVisitor<ConditionalTreeSample> {
     /**
      * Update the rank value using the probability that the imputed query point is
      * separated from this bounding box in a random cut. This step is conceptually
-     * the same as * {@link AnomalyScoreVisitor#accept}.
+     * the same as * {@link ScoreVisitor#accept}.
      *
      * @param node        the node being visited
      * @param depthOfNode the depth of the node being visited

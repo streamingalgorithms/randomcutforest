@@ -23,22 +23,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import java.util.Arrays;
+import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 import org.streamingalgorithms.randomcutforest.CommonUtils;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
-import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
-import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.tree.*;
 
 public class AnomalyScoreVisitorTest {
 
@@ -46,14 +44,10 @@ public class AnomalyScoreVisitorTest {
     public void testNew() {
         float[] point = new float[] { 1.0f, 2.0f };
         int sampleSize = 9;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, sampleSize);
+        ScoreVisitor visitor = new ScoreVisitor(point, sampleSize);
 
         assertFalse(visitor.pointInsideBox);
-        for (int i = 0; i < point.length; i++) {
-            assertFalse(visitor.coordInsideBox[i]);
-        }
-
-        assertFalse(visitor.ignoreLeafEquals);
+        assertFalse(visitor.ignoreLeaf);
         assertEquals(0, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
     }
@@ -62,14 +56,10 @@ public class AnomalyScoreVisitorTest {
     public void testNewWithIgnoreOptions() {
         float[] point = new float[] { 1.0f, 2.0f };
         int sampleSize = 9;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, sampleSize, 7);
+        ScoreVisitor visitor = new ScoreVisitor(point, sampleSize, 7);
 
         assertFalse(visitor.pointInsideBox);
-        for (int i = 0; i < point.length; i++) {
-            assertFalse(visitor.coordInsideBox[i]);
-        }
-
-        assertTrue(visitor.ignoreLeafEquals);
+        assertTrue(visitor.ignoreLeaf);
         assertEquals(7, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
     }
@@ -86,7 +76,7 @@ public class AnomalyScoreVisitorTest {
         when(leafNode.getMass()).thenReturn(leafMass);
 
         int subSampleSize = 21;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, subSampleSize);
+        ScoreVisitor visitor = new ScoreVisitor(point, subSampleSize);
         visitor.acceptLeaf(leafNode, leafDepth);
         double expectedScore = CommonUtils.defaultDampFunction(leafMass, subSampleSize)
                 / (leafDepth + Math.log(leafMass + 1) / Math.log(2));
@@ -94,7 +84,7 @@ public class AnomalyScoreVisitorTest {
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
         assertTrue(visitor.pointInsideBox);
 
-        visitor = new AnomalyScoreVisitor(point, subSampleSize);
+        visitor = new ScoreVisitor(point, subSampleSize);
         visitor.acceptLeaf(leafNode, 0);
         expectedScore = CommonUtils.defaultDampFunction(leafMass, subSampleSize)
                 / (Math.log(leafMass + 1) / Math.log(2.0));
@@ -102,13 +92,13 @@ public class AnomalyScoreVisitorTest {
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
         assertTrue(visitor.pointInsideBox);
 
-        AnomalyScoreVisitor anotherVisitor = new AnomalyScoreVisitor(point, subSampleSize, 7);
+        ScoreVisitor anotherVisitor = new ScoreVisitor(point, subSampleSize, 7);
         anotherVisitor.acceptLeaf(leafNode, 0);
-        assertEquals(anotherVisitor.score, visitor.score);
+        assertEquals(anotherVisitor.savedScore, visitor.savedScore);
 
-        AnomalyScoreVisitor yetAnotherVisitor = new AnomalyScoreVisitor(point, subSampleSize, 12);
+        ScoreVisitor yetAnotherVisitor = new ScoreVisitor(point, subSampleSize, 12);
         yetAnotherVisitor.acceptLeaf(leafNode, 0);
-        assertNotEquals(yetAnotherVisitor.score, visitor.score);
+        assertNotEquals(yetAnotherVisitor.savedScore, visitor.savedScore);
     }
 
     @Test
@@ -121,7 +111,7 @@ public class AnomalyScoreVisitorTest {
 
         int leafDepth = 100;
 
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, 2);
+        ScoreVisitor visitor = new ScoreVisitor(point, 2);
         visitor.acceptLeaf(leafNode, leafDepth);
         double expectedScore = 1.0 / (leafDepth + 1);
         assertThat(visitor.getResult(),
@@ -130,13 +120,13 @@ public class AnomalyScoreVisitorTest {
 
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);
-        AnomalyScoreVisitor anotherVisitor = new AnomalyScoreVisitor(point, 2, 7);
+        ScoreVisitor anotherVisitor = new ScoreVisitor(point, 2, 7);
         anotherVisitor.acceptLeaf(leafNode, 100);
-        assertEquals(anotherVisitor.score, visitor.score);
+        assertEquals(anotherVisitor.savedScore, visitor.savedScore);
 
-        AnomalyScoreVisitor yetAnotherVisitor = new AnomalyScoreVisitor(point, 2, 12);
+        ScoreVisitor yetAnotherVisitor = new ScoreVisitor(point, 2, 12);
         yetAnotherVisitor.acceptLeaf(leafNode, 100);
-        assertEquals(yetAnotherVisitor.score, visitor.score);
+        assertEquals(yetAnotherVisitor.savedScore, visitor.savedScore);
 
     }
 
@@ -144,7 +134,7 @@ public class AnomalyScoreVisitorTest {
     public void testAcceptEqualsLeafPoint() {
         float[] pointToScore = { 0.0f, 0.0f };
         int sampleSize = 50;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(pointToScore, sampleSize);
+        ScoreVisitor visitor = new ScoreVisitor(pointToScore, sampleSize);
 
         float[] point = Arrays.copyOf(pointToScore, pointToScore.length);
         INodeView node = mock(NodeView.class);
@@ -175,108 +165,19 @@ public class AnomalyScoreVisitorTest {
     }
 
     @Test
-    public void testAccept() {
-        float[] pointToScore = new float[] { 0.0f, 0.0f };
-        int sampleSize = 50;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(pointToScore, sampleSize);
+    public void testScoreOnRealTree() {
+        int dims = 2, sampleSize = 64;
+        RandomCutForest forest = RandomCutForest.builder().dimensions(dims).numberOfTrees(1).sampleSize(sampleSize)
+                .randomSeed(42).build();
+        Random rng = new Random(7);
+        for (int i = 0; i < 500; i++) {
+            forest.update(new float[] { (float) rng.nextGaussian(), (float) rng.nextGaussian() });
+        }
+        double score = forest.getAnomalyScore(new float[] { 8.0f, 8.0f }); // clear outlier
+        assertTrue(score > 1.0, "a far outlier should score > 1");
 
-        NodeView node = mock(NodeView.class);
-        float[] otherPoint = new float[] { 1.0f, 1.0f };
-        when(node.getLeafPoint()).thenReturn(otherPoint);
-        when(node.getBoundingBox()).thenReturn(new BoundingBox(otherPoint, otherPoint));
-        int depth = 4;
-        visitor.acceptLeaf(node, depth);
-        double expectedScore = 1.0 / (depth + 1);
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-
-        depth--;
-        IBoundingBoxView boundingBox = node.getBoundingBox().getMergedBox(new float[] { 2.0f, 0.0f });
-        when(node.getBoundingBox()).thenReturn(boundingBox);
-        when(node.probabilityOfSeparation(any())).thenReturn(1.0 / 3);
-        visitor.accept(node, depth);
-        double p = visitor.getProbabilityOfSeparation(boundingBox);
-        expectedScore = p * (1.0 / (depth + 1)) + (1 - p) * expectedScore;
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-
-        depth--;
-        boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, 0.0f });
-
-        when(node.getBoundingBox()).thenReturn(boundingBox);
-        when(node.probabilityOfSeparation(any())).thenReturn(0.0);
-        visitor.accept(node, depth);
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        expectedScore = p * (1.0 / (depth + 1)) + (1 - p) * expectedScore;
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-
-        depth--;
-        boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, -1.0f });
-        when(node.probabilityOfSeparation(any())).thenReturn(0.0);
-        visitor.accept(node, depth);
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-        assertTrue(visitor.pointInsideBox);
-    }
-
-    @Test
-    public void testGetProbabilityOfSeparation() {
-        float[] minPoint = { 0.0f, 0.0f, 0.0f };
-        float[] maxPoint = { 1.0f, 2.0f, 3.0f };
-        IBoundingBoxView boundingBox = new BoundingBox(minPoint);
-        boundingBox = boundingBox.getMergedBox(maxPoint);
-
-        float[] point = { 0.5f, 0.5f, 0.5f };
-        int sampleSize = 2;
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, sampleSize);
-
-        double p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo(0.0, EPSILON));
-        assertTrue(visitor.coordInsideBox[0]);
-        assertTrue(visitor.coordInsideBox[1]);
-        assertTrue(visitor.coordInsideBox[2]);
-
-        visitor = new AnomalyScoreVisitor(point, sampleSize);
-        visitor.coordInsideBox[1] = visitor.coordInsideBox[2] = true;
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo(0.0, EPSILON));
-        assertTrue(visitor.coordInsideBox[0]);
-        assertTrue(visitor.coordInsideBox[1]);
-        assertTrue(visitor.coordInsideBox[2]);
-
-        point = new float[] { 2.0f, 0.5f, 0.5f };
-        visitor = new AnomalyScoreVisitor(point, sampleSize);
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo(1.0 / (2.0 + 2.0 + 3.0), EPSILON));
-        assertFalse(visitor.coordInsideBox[0]);
-        assertTrue(visitor.coordInsideBox[1]);
-        assertTrue(visitor.coordInsideBox[2]);
-
-        visitor = new AnomalyScoreVisitor(point, sampleSize);
-        visitor.coordInsideBox[1] = visitor.coordInsideBox[2] = true;
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo(1.0 / (2.0 + 2.0 + 3.0), EPSILON));
-        assertFalse(visitor.coordInsideBox[0]);
-        assertTrue(visitor.coordInsideBox[1]);
-        assertTrue(visitor.coordInsideBox[2]);
-
-        point = new float[] { 0.5f, -3.0f, 4.0f };
-        visitor = new AnomalyScoreVisitor(point, sampleSize);
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo((3.0 + 1.0) / (1.0 + 5.0 + 4.0), EPSILON));
-        assertTrue(visitor.coordInsideBox[0]);
-        assertFalse(visitor.coordInsideBox[1]);
-        assertFalse(visitor.coordInsideBox[2]);
-
-        visitor = new AnomalyScoreVisitor(point, sampleSize);
-        visitor.coordInsideBox[0] = true;
-        p = visitor.getProbabilityOfSeparation(boundingBox);
-        assertThat(p, closeTo((3.0 + 1.0) / (1.0 + 5.0 + 4.0), EPSILON));
-        assertTrue(visitor.coordInsideBox[0]);
-        assertFalse(visitor.coordInsideBox[1]);
-        assertFalse(visitor.coordInsideBox[2]);
+        double inlier = forest.getAnomalyScore(new float[] { 0.0f, 0.0f });
+        assertTrue(inlier < score, "inlier scores below the outlier");
     }
 
     @Test
@@ -285,9 +186,7 @@ public class AnomalyScoreVisitorTest {
         float[] leafPoint = Arrays.copyOf(point, point.length);
         BoundingBox boundingBox = new BoundingBox(leafPoint);
 
-        AnomalyScoreVisitor visitor = new AnomalyScoreVisitor(point, 2);
-        assertThrows(IllegalStateException.class, () -> visitor.getProbabilityOfSeparation(boundingBox));
-
+        ScoreVisitor visitor = new ScoreVisitor(point, 2);
         TransductiveScalarScoreVisitor esotericVisitor = new TransductiveScalarScoreVisitor(leafPoint, 2,
                 CommonUtils::defaultScoreSeenFunction, CommonUtils::defaultScoreUnseenFunction,
                 CommonUtils::defaultDampFunction, b -> new double[3]);
