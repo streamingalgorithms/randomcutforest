@@ -48,8 +48,8 @@ public class NodeView implements INodeView {
     }
 
     public IBoundingBoxView getSiblingBoundingBox(float[] point) {
-        return (toLeft(point)) ? tree.getBox(tree.nodeStore.getRightIndex(currentNodeOffset))
-                : tree.getBox(tree.nodeStore.getLeftIndex(currentNodeOffset));
+        return (toLeft(point)) ? tree.getArrayBox(tree.nodeStore.getRightIndex(currentNodeOffset))
+                : tree.getArrayBox(tree.nodeStore.getLeftIndex(currentNodeOffset));
     }
 
     public int getCutDimension() {
@@ -75,8 +75,13 @@ public class NodeView implements INodeView {
     }
 
     @Override
-    public double probailityOfSeparation(float[] point) {
-        return tree.probabilityOfCut(currentNodeOffset, point, currentBox);
+    public double probabilityOfSeparation(float[] point) {
+        return tree.probabilityOfCut(currentNodeOffset, point, currentBox, null);
+    }
+
+    @Override
+    public double probabilityOfSeparation(float[] point, float[] components) {
+        return tree.probabilityOfCut(currentNodeOffset, point, currentBox, components);
     }
 
     @Override

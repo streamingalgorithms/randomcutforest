@@ -51,7 +51,12 @@ public interface INodeView {
      * @return the probability of separation
      */
 
-    double probailityOfSeparation(float[] point);
+    double probabilityOfSeparation(float[] point);
+
+    // same as above, but shows the components over the 2*dimension half-dimensions
+    // the first half correspond to the max values and the second half for min
+    // values
+    double probabilityOfSeparation(float[] point, float[] components);
 
     /**
      * for a leaf node, return the index in the point store for the leaf point. If

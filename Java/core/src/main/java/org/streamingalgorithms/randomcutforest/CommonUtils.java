@@ -177,7 +177,11 @@ public class CommonUtils {
      * @return The original value scaled appropriately for this tree
      */
     public static double defaultScalarNormalizerFunction(double scalarValue, double mass) {
-        return scalarValue * Math.log(mass + 1) / Math.log(2.0);
+        return scalarValue * defaultAffineNormalizer(mass);
+    }
+
+    public static double defaultAffineNormalizer(double mass) {
+        return Math.log(mass + 1) / Math.log(2.0);
     }
 
     /**

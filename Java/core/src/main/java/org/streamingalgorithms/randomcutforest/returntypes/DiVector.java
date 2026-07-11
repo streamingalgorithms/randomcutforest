@@ -21,12 +21,12 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import java.util.Arrays;
 import java.util.function.Function;
 
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyAttributionVisitor;
+import org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor;
 
 /**
  * A DiVector is used when we want to track a quantity in both the positive and
  * negative directions for each dimension in a manifold. For example, when using
- * a {@link AnomalyAttributionVisitor} to compute the attribution of the anomaly
+ * a {@link AttributionVisitor} to compute the attribution of the anomaly
  * score to dimension of the input point, we want to know if the anomaly score
  * attributed to the ith coordinate of the input point is due to that coordinate
  * being unusually high or unusually low.
@@ -131,6 +131,14 @@ public class DiVector {
         return result;
     }
 
+    public DiVector scaleInPlace(double z) {
+        for (int i = 0; i < dimensions; i++) {
+            high[i] = high[i] * z;
+            low[i] = low[i] * z;
+        }
+        return this;
+    }
+
     /**
      * If the L1 norm of this DiVector is positive, scale the values in high and low
      * so that the new L1 norm is equal to the target value. If the current L1 norm
@@ -184,7 +192,14 @@ public class DiVector {
         return score;
     }
 
+    public DiVector(double[] directionalAttribution) {
+        this.dimensions = directionalAttribution.length / 2;
+        this.high = Arrays.copyOfRange(directionalAttribution, 0, dimensions);
+        this.low = Arrays.copyOfRange(directionalAttribution, dimensions, 2 * dimensions);
+    }
+
     public DiVector lift(Function<double[], double[]> projection) {
-        return new DiVector(projection.apply(high), projection.apply(low));
+        return this;
+        // return new DiVector(projection.apply(high), projection.apply(low));
     }
 }

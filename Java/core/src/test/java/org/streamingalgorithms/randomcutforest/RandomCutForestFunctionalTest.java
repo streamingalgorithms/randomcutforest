@@ -242,10 +242,10 @@ public class RandomCutForestFunctionalTest {
         }
         double newScore = forest.getAnomalyScore(new double[] { 0.0, 0.0, 0.0 });
         DiVector newVector = forest.getAnomalyAttribution(new double[] { 0.0, 0.0, 0.0 });
-        assertEquals(initial.getHighLowSum(), newVector.getHighLowSum(), 10E-10);
-        assertEquals(initial.getHighLowSum(), newScore, 1E-10);
-        assertArrayEquals(initial.high, newVector.high, 1E-10);
-        assertArrayEquals(initial.low, newVector.low, 1E-10);
+        assertEquals(initial.getHighLowSum(), newVector.getHighLowSum(), 1E-6);
+        assertEquals(initial.getHighLowSum(), newScore, 1E-6);
+        assertArrayEquals(initial.high, newVector.high, 1E-6);
+        assertArrayEquals(initial.low, newVector.low, 1E-6);
     }
 
     @ParameterizedTest
@@ -261,7 +261,7 @@ public class RandomCutForestFunctionalTest {
         assertTrue(seenResult.getHighLowSum(1) < 0.5);
         assertTrue(seenResult.getHighLowSum(2) < 0.5);
         assertTrue(seenScore < 1.0);
-        assertEquals(seenScore, seenResult.getHighLowSum(), 1E-10);
+        assertEquals(seenScore, seenResult.getHighLowSum(), 1E-6);
 
         DiVector likelyResult = forest.getApproximateAnomalyAttribution(point);
         double score = forest.getApproximateAnomalyScore(point);

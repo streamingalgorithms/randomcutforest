@@ -34,11 +34,7 @@ import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
 
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyAttributionVisitor;
-import org.streamingalgorithms.randomcutforest.anomalydetection.AnomalyScoreVisitor;
-import org.streamingalgorithms.randomcutforest.anomalydetection.DynamicAttributionVisitor;
-import org.streamingalgorithms.randomcutforest.anomalydetection.DynamicScoreVisitor;
-import org.streamingalgorithms.randomcutforest.anomalydetection.SimulatedTransductiveScalarScoreVisitor;
+import org.streamingalgorithms.randomcutforest.anomalydetection.*;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
@@ -53,6 +49,7 @@ import org.streamingalgorithms.randomcutforest.executor.SequentialForestUpdateEx
 import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSummarizer;
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
+import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.SimpleInterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
@@ -847,8 +844,7 @@ public class RandomCutForest {
             return 0.0;
         }
 
-        IVisitorFactory<Double> visitorFactory = (tree, x) -> new AnomalyScoreVisitor(tree.projectToTree(x),
-                tree.getMass());
+        IVisitorFactory<Double> visitorFactory = (tree, x) -> new ScoreVisitor(tree.projectToTree(x), tree.getMass());
         BinaryOperator<Double> accumulator = Double::sum;
         Function<Double, Double> finisher = x -> x / numberOfTrees;
 
@@ -874,8 +870,7 @@ public class RandomCutForest {
             return 0.0;
         }
 
-        IVisitorFactory<Double> visitorFactory = (tree, x) -> new AnomalyScoreVisitor(tree.projectToTree(x),
-                tree.getMass());
+        IVisitorFactory<Double> visitorFactory = (tree, x) -> new ScoreVisitor(tree.projectToTree(x), tree.getMass());
 
         ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(
                 DEFAULT_APPROXIMATE_ANOMALY_SCORE_HIGH_IS_CRITICAL, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_PRECISION,
@@ -892,7 +887,7 @@ public class RandomCutForest {
      * of how anomalous it is. The result DiVector will contain an anomaly score in
      * both the positive and negative directions for each dimension of the data.
      * <p>
-     * See {@link AnomalyAttributionVisitor} for more details about the anomaly
+     * See {@link AttributionVisitor} for more details about the anomaly
      * score algorithm.
      *
      * @param point The point being scored.
@@ -906,10 +901,10 @@ public class RandomCutForest {
         }
 
         IVisitorFactory<DiVector> visitorFactory = new VisitorFactory<>(
-                (tree, y) -> new AnomalyAttributionVisitor(tree.projectToTree(y), tree.getMass()),
+                (tree, y) -> new AttributionVisitor(tree.projectToTree(y), tree.getMass()),
                 (tree, x) -> x.lift(tree::liftFromTree));
         BinaryOperator<DiVector> accumulator = DiVector::addToLeft;
-        Function<DiVector, DiVector> finisher = x -> x.scale(1.0 / numberOfTrees);
+        Function<DiVector, DiVector> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
 
         return traverseForest(transformToShingledPoint(point), visitorFactory, accumulator, finisher);
     }
@@ -932,7 +927,7 @@ public class RandomCutForest {
         }
 
         IVisitorFactory<DiVector> visitorFactory = new VisitorFactory<>(
-                (tree, y) -> new AnomalyAttributionVisitor(tree.projectToTree(y), tree.getMass()),
+                (tree, y) -> new AttributionVisitor(tree.projectToTree(y), tree.getMass()),
                 (tree, x) -> x.lift(tree::liftFromTree));
 
         ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,
@@ -962,8 +957,8 @@ public class RandomCutForest {
             return new DensityOutput(dimensions, sampleSize);
         }
 
-        IVisitorFactory<InterpolationMeasure> visitorFactory = new VisitorFactory<>((tree,
-                y) -> new SimpleInterpolationVisitor(tree.projectToTree(y), tree.getMass(), 1.0, centerOfMassEnabled),
+        IVisitorFactory<InterpolationMeasure> visitorFactory = new VisitorFactory<>(
+                (tree, y) -> new InterpolationVisitor(tree.projectToTree(y), tree.getMass(), 1.0, centerOfMassEnabled),
                 (tree, x) -> x.lift(tree::liftFromTree));
         Collector<InterpolationMeasure, ?, InterpolationMeasure> collector = InterpolationMeasure.collector(dimensions,
                 0, numberOfTrees);
@@ -1542,8 +1537,9 @@ public class RandomCutForest {
             return 0.0;
         }
 
-        VisitorFactory<Double> visitorFactory = new VisitorFactory<>((tree, y) -> new DynamicScoreVisitor(
-                tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold, seen, unseen, damp));
+        VisitorFactory<Double> visitorFactory = new VisitorFactory<>((tree, y) -> new ScoreVisitor(
+                tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
+                DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp)));
         BinaryOperator<Double> accumulator = Double::sum;
 
         Function<Double, Double> finisher = sum -> sum / numberOfTrees;
@@ -1622,8 +1618,9 @@ public class RandomCutForest {
             return 0.0;
         }
 
-        VisitorFactory<Double> visitorFactory = new VisitorFactory<>((tree, y) -> new DynamicScoreVisitor(
-                tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold, seen, unseen, damp));
+        VisitorFactory<Double> visitorFactory = new VisitorFactory<>((tree, y) -> new ScoreVisitor(
+                tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
+                DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp)));
 
         ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(highIsCritical, precision,
                 DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
@@ -1654,11 +1651,12 @@ public class RandomCutForest {
         }
 
         VisitorFactory<DiVector> visitorFactory = new VisitorFactory<>(
-                (tree, y) -> new DynamicAttributionVisitor(tree.projectToTree(y), tree.getMass(),
-                        ignoreLeafMassThreshold, seen, unseen, newDamp),
+                (tree, y) -> new AttributionVisitor(tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold,
+                        DefaultScoreFunctions.score(seen), DefaultScoreFunctions.score(unseen),
+                        DefaultScoreFunctions.damp(newDamp)),
                 (tree, x) -> x.lift(tree::liftFromTree));
         BinaryOperator<DiVector> accumulator = DiVector::addToLeft;
-        Function<DiVector, DiVector> finisher = x -> x.scale(1.0 / numberOfTrees);
+        Function<DiVector, DiVector> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
 
         return traverseForest(transformToShingledPoint(point), visitorFactory, accumulator, finisher);
     }
@@ -1688,8 +1686,9 @@ public class RandomCutForest {
         }
 
         VisitorFactory<DiVector> visitorFactory = new VisitorFactory<>(
-                (tree, y) -> new DynamicAttributionVisitor(tree.projectToTree(y), tree.getMass(),
-                        ignoreLeafMassThreshold, seen, unseen, newDamp),
+                (tree, y) -> new AttributionVisitor(tree.projectToTree(y), tree.getMass(), ignoreLeafMassThreshold,
+                        DefaultScoreFunctions.score(seen), DefaultScoreFunctions.score(unseen),
+                        DefaultScoreFunctions.damp(newDamp)),
                 (tree, x) -> x.lift(tree::liftFromTree));
 
         ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,

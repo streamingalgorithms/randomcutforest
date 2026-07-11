@@ -193,7 +193,7 @@ public class AnomalyScoreVisitorTest {
         depth--;
         IBoundingBoxView boundingBox = node.getBoundingBox().getMergedBox(new float[] { 2.0f, 0.0f });
         when(node.getBoundingBox()).thenReturn(boundingBox);
-        when(node.probailityOfSeparation(any())).thenReturn(1.0 / 3);
+        when(node.probabilityOfSeparation(any())).thenReturn(1.0 / 3);
         visitor.accept(node, depth);
         double p = visitor.getProbabilityOfSeparation(boundingBox);
         expectedScore = p * (1.0 / (depth + 1)) + (1 - p) * expectedScore;
@@ -204,7 +204,7 @@ public class AnomalyScoreVisitorTest {
         boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, 0.0f });
 
         when(node.getBoundingBox()).thenReturn(boundingBox);
-        when(node.probailityOfSeparation(any())).thenReturn(0.0);
+        when(node.probabilityOfSeparation(any())).thenReturn(0.0);
         visitor.accept(node, depth);
         p = visitor.getProbabilityOfSeparation(boundingBox);
         expectedScore = p * (1.0 / (depth + 1)) + (1 - p) * expectedScore;
@@ -213,7 +213,7 @@ public class AnomalyScoreVisitorTest {
 
         depth--;
         boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, -1.0f });
-        when(node.probailityOfSeparation(any())).thenReturn(0.0);
+        when(node.probabilityOfSeparation(any())).thenReturn(0.0);
         visitor.accept(node, depth);
         p = visitor.getProbabilityOfSeparation(boundingBox);
         assertThat(visitor.getResult(),

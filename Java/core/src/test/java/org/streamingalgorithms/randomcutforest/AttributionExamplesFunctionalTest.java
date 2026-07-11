@@ -215,7 +215,7 @@ public class AttributionExamplesFunctionalTest {
                         .getApproximateDynamicAttribution(queryTwo, 0.1, true, 0, CommonUtils::defaultScoreSeenFunction,
                                 CommonUtils::defaultScoreUnseenFunction, CommonUtils::defaultDampFunction)
                         .getHighLowSum(),
-                1e-5);
+                1e-3); // precision is 0.1; not 0
 
         // we insert queryOne a few times to make sure it is sampled
         for (int i = 2000; i < 2000 + 5; i++) {

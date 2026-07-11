@@ -858,16 +858,16 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
-    public double probabilityOfCut(int node, float[] point, ArrayBox otherBox) {
+    public double probabilityOfCut(int node, float[] point, ArrayBox otherBox, float[] components) {
         int nodeIdx = translate(node);
         if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
             int base = 2 * nodeIdx * dimension;
-            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], point, null);
+            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], point, components);
         } else if (otherBox != null) {
-            return otherBox.probabilityOfCut(point);
+            return otherBox.probabilityOfCut(point, components);
         } else {
             ArrayBox box = getArrayBox(node);
-            return box.probabilityOfCut(point);
+            return box.probabilityOfCut(point, components);
         }
     }
 

@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
+import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
+
 import java.util.Arrays;
 
 import org.streamingalgorithms.randomcutforest.CommonUtils;
@@ -43,9 +45,6 @@ import org.streamingalgorithms.randomcutforest.tree.INodeView;
  * the point being scored is equal to the leaf node in the traversal.
  */
 public abstract class AbstractScalarScoreVisitor implements Visitor<Double> {
-
-    public static final int DEFAULT_IGNORE_LEAF_MASS_THRESHOLD = 0;
-
     /**
      * The point whose anomaly score is being computed.
      */
@@ -152,7 +151,7 @@ public abstract class AbstractScalarScoreVisitor implements Visitor<Double> {
         }
         double probabilityOfSeparation;
         if (!ignoreLeafEquals) {
-            probabilityOfSeparation = node.probailityOfSeparation(pointToScore);
+            probabilityOfSeparation = node.probabilityOfSeparation(pointToScore);
             if (probabilityOfSeparation <= 0) {
                 pointInsideBox = true;
                 return;

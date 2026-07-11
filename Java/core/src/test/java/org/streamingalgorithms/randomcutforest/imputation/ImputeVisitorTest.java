@@ -169,7 +169,7 @@ public class ImputeVisitorTest {
         depth--;
         IBoundingBoxView boundingBox = node.getBoundingBox().getMergedBox(new float[] { 99.0f, 4.0f, -19.0f });
         when(node.getBoundingBox()).thenReturn(boundingBox);
-        when(node.probailityOfSeparation(any()))
+        when(node.probabilityOfSeparation(any()))
                 .thenReturn(CommonUtils.getProbabilityOfSeparation(boundingBox, expected));
         when(node.getMass()).thenReturn(leafMass + 2);
 

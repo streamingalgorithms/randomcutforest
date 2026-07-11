@@ -31,6 +31,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.NodeView;
@@ -41,12 +42,9 @@ public class AnomalyAttributionVisitorTest {
     public void testNew() {
         float[] point = new float[] { 1.1f, -2.2f, 3.3f };
         int treeMass = 99;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(point, treeMass);
+        AttributionVisitor visitor = new AttributionVisitor(point, treeMass);
 
         assertFalse(visitor.pointInsideBox);
-        for (int i = 0; i < point.length; i++) {
-            assertFalse(visitor.coordInsideBox[i]);
-        }
 
         assertFalse(visitor.ignoreLeaf);
         assertEquals(0, visitor.ignoreLeafMassThreshold);
@@ -60,12 +58,9 @@ public class AnomalyAttributionVisitorTest {
     public void testNewWithIgnoreOptions() {
         float[] point = new float[] { 1.1f, -2.2f, 3.3f };
         int treeMass = 99;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(point, treeMass, 7);
+        AttributionVisitor visitor = new AttributionVisitor(point, treeMass, 7);
 
         assertFalse(visitor.pointInsideBox);
-        for (int i = 0; i < point.length; i++) {
-            assertFalse(visitor.coordInsideBox[i]);
-        }
 
         assertTrue(visitor.ignoreLeaf);
         assertEquals(7, visitor.ignoreLeafMassThreshold);
@@ -87,11 +82,10 @@ public class AnomalyAttributionVisitorTest {
         when(leafNode.getMass()).thenReturn(leafMass);
 
         int treeMass = 21;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(point, treeMass, 0);
+        AttributionVisitor visitor = new AttributionVisitor(point, treeMass, 0);
         visitor.acceptLeaf(leafNode, leafDepth);
 
         assertTrue(visitor.hitDuplicates);
-        assertEquals(visitor.sumOfNewRange, 0);
         double expectedScoreSum = CommonUtils.defaultDampFunction(leafMass, treeMass)
                 / (leafDepth + Math.log(leafMass + 1) / Math.log(2));
         double expectedScore = expectedScoreSum / (2 * point.length);
@@ -115,7 +109,7 @@ public class AnomalyAttributionVisitorTest {
         when(leafNode.getMass()).thenReturn(leafMass);
 
         int treeMass = 21;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(point, treeMass, 0);
+        AttributionVisitor visitor = new AttributionVisitor(point, treeMass, 0);
         visitor.acceptLeaf(leafNode, leafDepth);
 
         double expectedScoreSum = defaultScoreUnseenFunction(leafDepth, leafMass);
@@ -132,7 +126,7 @@ public class AnomalyAttributionVisitorTest {
         assertEquals(defaultScalarNormalizerFunction(expectedScoreSum * (6.0 - 3.3) / sumOfNewRange, treeMass),
                 result.low[2], EPSILON);
 
-        visitor = new AnomalyAttributionVisitor(point, treeMass, 3);
+        visitor = new AttributionVisitor(point, treeMass, 3);
         visitor.acceptLeaf(leafNode, leafDepth);
         result = visitor.getResult();
         assertEquals(defaultScalarNormalizerFunction(expectedScoreSum * (1.1 - (-4.0)) / sumOfNewRange, treeMass),
@@ -145,7 +139,7 @@ public class AnomalyAttributionVisitorTest {
         assertEquals(defaultScalarNormalizerFunction(expectedScoreSum * (6.0 - 3.3) / sumOfNewRange, treeMass),
                 result.low[2], EPSILON);
 
-        visitor = new AnomalyAttributionVisitor(point, treeMass, 4);
+        visitor = new AttributionVisitor(point, treeMass, 4);
         visitor.acceptLeaf(leafNode, leafDepth);
         double expectedScore = expectedScoreSum / (2 * point.length);
         result = visitor.getResult();
@@ -159,22 +153,20 @@ public class AnomalyAttributionVisitorTest {
     public void testAccept() {
         float[] pointToScore = { 0.0f, 0.0f };
         int treeMass = 50;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(pointToScore, treeMass, 0);
+        AttributionVisitor visitor = new AttributionVisitor(pointToScore, treeMass, 0);
 
+        // ---- leaf ----
         INodeView leafNode = mock(NodeView.class);
         float[] point = new float[] { 1.0f, -2.0f };
-        when(leafNode.getLeafPoint()).thenReturn(point);
-        when(leafNode.getBoundingBox()).thenReturn(new BoundingBox(point, point));
-
+        when(leafNode.getLeafPoint()).thenReturn(point); // acceptLeaf now uses getLeafPoint, not getBoundingBox
         int leafMass = 3;
         when(leafNode.getMass()).thenReturn(leafMass);
         int depth = 4;
         visitor.acceptLeaf(leafNode, depth);
-        DiVector result = visitor.getResult();
+        DiVector result = visitor.observeResult(); // non-destructive peek
 
         double expectedScoreSum = defaultScoreUnseenFunction(depth, leafNode.getMass());
         double sumOfNewRange = 1.0 + 2.0;
-
         double[] expectedUnnormalizedLow = new double[] { expectedScoreSum * 1.0 / sumOfNewRange, 0.0 };
         double[] expectedUnnormalizedHigh = new double[] { 0.0, expectedScoreSum * 2.0 / sumOfNewRange };
 
@@ -184,19 +176,21 @@ public class AnomalyAttributionVisitorTest {
                     EPSILON);
         }
 
-        // parent does not contain pointToScore
-
+        // ---- parent does not contain pointToScore ----
+        // The visitor now asks the node for probabilityOfSeparation; stub that
+        // (delegating
+        // to the box) instead of getBoundingBox(), which the new accept no longer
+        // calls.
         depth--;
-        INodeView sibling = mock(NodeView.class);
-        int siblingMass = 2;
-        when(sibling.getMass()).thenReturn(siblingMass);
         INodeView parent = mock(NodeView.class);
-        int parentMass = leafMass + siblingMass;
+        int parentMass = leafMass + 2; // sibling mass = 2
         when(parent.getMass()).thenReturn(parentMass);
-        BoundingBox boundingBox = new BoundingBox(point, new float[] { 2.0f, -0.5f });
-        when(parent.getBoundingBox()).thenReturn(boundingBox);
+        ArrayBox parentBox = new ArrayBox(point, new float[] { 2.0f, -0.5f });
+        when(parent.probabilityOfSeparation(any(), any()))
+                .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+
         visitor.accept(parent, depth);
-        result = visitor.getResult();
+        result = visitor.observeResult();
 
         double expectedSumOfNewRange2 = 2.0 + 2.0;
         double expectedProbOfCut2 = (1.0 + 0.5) / expectedSumOfNewRange2;
@@ -222,18 +216,19 @@ public class AnomalyAttributionVisitorTest {
                     EPSILON);
         }
 
-        // grandparent contains pointToScore
-
-        assertFalse(visitor.pointInsideBox);
-
+        // ---- grandparent contains pointToScore -> converge, values frozen ----
+        assertFalse(visitor.pointInsideBox); // not yet converged after the parent
         depth--;
         INodeView grandParent = mock(NodeView.class);
-
         when(grandParent.getMass()).thenReturn(parentMass + 2);
-        when(grandParent.getBoundingBox()).thenReturn(boundingBox
-                .getMergedBox(new BoundingBox(new float[] { -1.0f, 1.0f }).getMergedBox(new float[] { -0.5f, -1.5f })));
+        ArrayBox grandParentBox = parentBox
+                .getMergedBox(new ArrayBox(new float[] { -1.0f, 1.0f }).getMergedBox(new float[] { -0.5f, -1.5f }));
+        when(grandParent.probabilityOfSeparation(any(), any()))
+                .thenAnswer(inv -> grandParentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+
         visitor.accept(grandParent, depth);
-        result = visitor.getResult();
+        assertTrue(visitor.pointInsideBox); // NOW it converged — the containment short-circuit fired
+        result = visitor.observeResult();
 
         for (int i = 0; i < pointToScore.length; i++) {
             assertEquals(defaultScalarNormalizerFunction(expectedUnnormalizedLow2[i], treeMass), result.low[i],
@@ -248,12 +243,12 @@ public class AnomalyAttributionVisitorTest {
     public void reNormalizeNotEqual(int mass) {
         float[] pointToScore = { 0.0f, 0.0f };
         int treeMass = 50;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(pointToScore, treeMass, 4);
+        AttributionVisitor visitor = new AttributionVisitor(pointToScore, treeMass, 4);
 
         INodeView leafNode = mock(NodeView.class);
         float[] point = new float[] { 1.0f, -2.0f };
         when(leafNode.getLeafPoint()).thenReturn(point);
-        when(leafNode.getBoundingBox()).thenReturn(new BoundingBox(point, point));
+        when(leafNode.getBoundingBox()).thenReturn(new ArrayBox(point));
 
         int leafMass = mass;
         when(leafNode.getMass()).thenReturn(leafMass);
@@ -261,11 +256,11 @@ public class AnomalyAttributionVisitorTest {
         INodeView parent = mock(NodeView.class);
         int parentMass = leafMass + 2;
         when(parent.getMass()).thenReturn(parentMass);
-        BoundingBox boundingBox = new BoundingBox(point, new float[] { 2.0f, 2.0f });
+        ArrayBox boundingBox = new ArrayBox(point, new float[] { 2.0f, 2.0f });
         when(parent.getBoundingBox()).thenReturn(boundingBox);
-        when(parent.getSiblingBoundingBox(any())).thenReturn(new BoundingBox(new float[] { 2.0f, 2.0f }));
+        when(parent.getSiblingBoundingBox(any())).thenReturn(new ArrayBox(new float[] { 2.0f, 2.0f }));
         visitor.accept(parent, 0);
-        DiVector result = visitor.directionalAttribution;
+        DiVector result = new DiVector(visitor.directionalAttribution);
         assertEquals(result.getHighLowSum(), visitor.savedScore, 1e-6);
     }
 
@@ -274,7 +269,7 @@ public class AnomalyAttributionVisitorTest {
     public void reNormalize(int mass) {
         float[] pointToScore = { 0.0f, 0.0f };
         int treeMass = 50;
-        AnomalyAttributionVisitor visitor = new AnomalyAttributionVisitor(pointToScore, treeMass, 4);
+        AttributionVisitor visitor = new AttributionVisitor(pointToScore, treeMass, 4);
 
         INodeView leafNode = mock(NodeView.class);
         float[] point = pointToScore;
@@ -287,11 +282,11 @@ public class AnomalyAttributionVisitorTest {
         INodeView parent = mock(NodeView.class);
         int parentMass = leafMass + 2;
         when(parent.getMass()).thenReturn(parentMass);
-        BoundingBox boundingBox = new BoundingBox(point, new float[] { 2.0f, 2.0f });
+        ArrayBox boundingBox = new ArrayBox(point, new float[] { 2.0f, 2.0f });
         when(parent.getBoundingBox()).thenReturn(boundingBox);
-        when(parent.getSiblingBoundingBox(any())).thenReturn(new BoundingBox(new float[] { 2.0f, 2.0f }));
+        when(parent.getSiblingBoundingBox(any())).thenReturn(new ArrayBox(new float[] { 2.0f, 2.0f }));
         visitor.accept(parent, 0);
-        DiVector result = visitor.directionalAttribution;
+        DiVector result = new DiVector(visitor.directionalAttribution);
         assertEquals(result.getHighLowSum(), visitor.savedScore, 1e-6);
     }
 

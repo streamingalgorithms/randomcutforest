@@ -151,7 +151,7 @@ public class ImputeVisitor implements MultiVisitor<ConditionalTreeSample> {
             box = (BoundingBox) node.getBoundingBox();
             probabilityOfSeparation = CommonUtils.getProbabilityOfSeparation(box, queryPoint);
         } else {
-            probabilityOfSeparation = node.probailityOfSeparation(queryPoint);
+            probabilityOfSeparation = node.probabilityOfSeparation(queryPoint);
         }
         converged = (probabilityOfSeparation == 0);
 

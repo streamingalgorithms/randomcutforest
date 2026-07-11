@@ -221,17 +221,18 @@ public class ArrayBox implements IBoundingBoxView {
 
     // ---- gap / cut probability --------------------------------------------
 
-    public double probabilityOfCut(float[] point) {
-        return gapAttribution(values, offset, dimensions, rangeSum, point, null);
+    public double probabilityOfCut(float[] point, float[] components) {
+        return gapAttribution(values, offset, dimensions, rangeSum, point, components);
     }
 
     /**
-     * Returns S / (S + rangeSum) and, if halfDimensionalContribution is non-null
-     * (length == 2 * dimensions, indexed from 0), fills it with the per-half-
-     * dimension attribution max(0f, newValues[i] - values[offset+i]) / (rangeSum +
-     * S), so the entries sum to the returned probability. Per-coordinate gaps stay
-     * float; the reduction into S is done in double. Passing null takes the exact
-     * same path and just returns the probability.
+     * a single source of probability computation Returns S / (S + rangeSum) and, if
+     * halfDimensionalContribution is non-null (length == 2 * dimensions, indexed
+     * from 0), fills it with the per-half- dimension attribution max(0f,
+     * newValues[i] - values[offset+i]) / (rangeSum + S), so the entries sum to the
+     * returned probability. Per-coordinate gaps stay float; the reduction into S is
+     * done in double. Passing null takes the exact same path and just returns the
+     * probability.
      */
     protected static double gapAttribution(float[] values, int offset, int dimensions, double rangeSum, float[] point,
             float[] halfDimensionalContribution) {
