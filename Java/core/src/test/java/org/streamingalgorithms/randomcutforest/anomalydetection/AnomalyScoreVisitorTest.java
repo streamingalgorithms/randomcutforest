@@ -46,7 +46,7 @@ public class AnomalyScoreVisitorTest {
         int sampleSize = 9;
         ScoreVisitor visitor = new ScoreVisitor(point, sampleSize);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
         assertFalse(visitor.ignoreLeaf);
         assertEquals(0, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
@@ -58,7 +58,7 @@ public class AnomalyScoreVisitorTest {
         int sampleSize = 9;
         ScoreVisitor visitor = new ScoreVisitor(point, sampleSize, 7);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
         assertTrue(visitor.ignoreLeaf);
         assertEquals(7, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
@@ -82,7 +82,7 @@ public class AnomalyScoreVisitorTest {
                 / (leafDepth + Math.log(leafMass + 1) / Math.log(2));
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
-        assertTrue(visitor.pointInsideBox);
+        assertTrue(visitor.isConverged());
 
         visitor = new ScoreVisitor(point, subSampleSize);
         visitor.acceptLeaf(leafNode, 0);
@@ -90,7 +90,7 @@ public class AnomalyScoreVisitorTest {
                 / (Math.log(leafMass + 1) / Math.log(2.0));
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
-        assertTrue(visitor.pointInsideBox);
+        assertTrue(visitor.isConverged());
 
         ScoreVisitor anotherVisitor = new ScoreVisitor(point, subSampleSize, 7);
         anotherVisitor.acceptLeaf(leafNode, 0);
@@ -116,7 +116,7 @@ public class AnomalyScoreVisitorTest {
         double expectedScore = 1.0 / (leafDepth + 1);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, 2), EPSILON));
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
 
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);

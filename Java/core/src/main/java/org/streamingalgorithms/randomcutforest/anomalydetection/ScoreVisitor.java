@@ -15,12 +15,16 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
+import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 
 import java.util.Arrays;
 
 import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
+import org.streamingalgorithms.randomcutforest.IRFVisitor;
+import org.streamingalgorithms.randomcutforest.IVisitorFactory;
+import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 /**
  * Scalar anomaly-score visitor. All traversal scaffolding lives in
@@ -38,6 +42,19 @@ import org.streamingalgorithms.randomcutforest.tree.INodeView;
  */
 public class ScoreVisitor extends AbstractScoringVisitor<Double> {
 
+    // package-private: reusable factory only. Unarmed (treeMass 0); first
+    // reusableTraverse calls prepare(tree, point) before anything reads state.
+    protected ScoreVisitor(int dimension) {
+        super(dimension, 0, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP,
+                DEFAULT_NORMALIZER);
+    }
+
+    protected ScoreVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold,
+            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
+        super(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
+    }
+
     protected ScoreVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
@@ -52,9 +69,8 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
     }
 
     public ScoreVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold) {
-        this(pointToScore, treeMass, ignoreLeafMassThreshold, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
-                DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
-                DefaultScoreFunctions.DEFAULT_NORMALIZER);
+        this(pointToScore, treeMass, ignoreLeafMassThreshold, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN,
+                DefaultScoreFunctions.DEFAULT_DAMP, DefaultScoreFunctions.DEFAULT_NORMALIZER);
     }
 
     public ScoreVisitor(float[] pointToScore, int treeMass) {
@@ -71,6 +87,9 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
         savedScore = prob * scoreUnseenFn.of(depth, mass) + (1 - prob) * savedScore;
     }
 
+    // ScoreVisitor — add fields
+    private double foldedScore; // per-query sum; NOT reset per tree
+
     @Override
     public void acceptLeaf(INodeView leafNode, int depthOfNode) {
         if (Arrays.equals(leafNode.getLeafPoint(), pointToScore)
@@ -85,5 +104,57 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
     @Override
     public Double getResult() {
         return savedScore * normalizer.scale(treeMass);
+    }
+
+    // fold: per tree, add this tree's normalized score into the running sum
+    public void foldOut() {
+        foldedScore += savedScore * normalizer.scale(treeMass);
+    }
+
+    @Override
+    public Double getFoldResult() {
+        // per-query — fold path only
+        return foldedScore;
+    }
+
+    @Override
+    public void reset() {
+        super.reset(); // savedScore=0, pointInsideBox=false, shadowBoxActive=false,
+                       // hitDuplicates=false
+        // foldedScore deliberately NOT cleared — accumulates across trees
+        // this function is purely informational placeholder
+    }
+
+    @Override
+    public double convergingValue() {
+        return savedScore * normalizer.scale(treeMass);
+    }
+
+    public static IVisitorFactory<Double> reusableFactory(int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
+            ScoreFn scoreUnseenFn, DampFn dampFn, Normalizer normalizer) {
+        return new IVisitorFactory<Double>() {
+            @Override
+            public boolean isReusable() {
+                return true;
+            }
+
+            @Override
+            public boolean isFoldable() {
+                return true;
+            }
+
+            // sizes from the (projected) point; mass + copy come from prepare(tree, point)
+            @Override
+            public IRFVisitor<Double> newReusableVisitor(float[] point) {
+                return new ScoreVisitor(point.length, 0, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn,
+                        normalizer); // sized, unarmed; no copy
+            }
+
+            @Override
+            public Visitor<Double> newVisitor(ITree<?, ?> tree, float[] point) {
+                return new ScoreVisitor(tree.projectToTree(point), tree.getMass(), ignoreLeafMassThreshold, scoreSeenFn,
+                        scoreUnseenFn, dampFn, normalizer);
+            }
+        };
     }
 }

@@ -47,4 +47,19 @@ public interface ConvergingAccumulator<R> {
      * @return the accumulated.
      */
     R getAccumulatedValue();
+
+    /**
+     * Primitive (non-boxing) convergence probe for the reuse+fold path. The
+     * executor feeds one per-tree scalar here instead of boxing a result through
+     * accept(R). Accumulators that support the fast path override this; others
+     * inherit the throw.
+     */
+    default void acceptValue(double convergingValue) {
+        throw new UnsupportedOperationException("not a primitive-converging accumulator");
+    }
+
+    /** True if this accumulator supports the primitive acceptValue path. */
+    default boolean isPrimitive() {
+        return false;
+    }
 }

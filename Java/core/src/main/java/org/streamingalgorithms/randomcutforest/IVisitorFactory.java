@@ -24,4 +24,16 @@ public interface IVisitorFactory<R> {
     default R liftResult(ITree<?, ?> tree, R result) {
         return result;
     }
+
+    default boolean isReusable() {
+        return false;
+    }
+
+    default boolean isFoldable() {
+        return false;
+    }
+
+    default IRFVisitor<R> newReusableVisitor(float[] point) {
+        throw new UnsupportedOperationException("not a reusable factory");
+    }
 }

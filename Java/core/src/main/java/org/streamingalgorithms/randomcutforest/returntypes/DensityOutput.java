@@ -59,6 +59,8 @@ public class DensityOutput extends InterpolationMeasure {
      * @return a scalar density estimate.
      */
     public double getDensity(double q, int manifoldDimension) {
+        if (sampleSize == 0)
+            return 0.0;
         double sumOfPts = measure.getHighLowSum() / sampleSize;
 
         if (sumOfPts <= 0.0) {

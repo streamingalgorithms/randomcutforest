@@ -17,6 +17,8 @@ package org.streamingalgorithms.randomcutforest.returntypes;
 
 import static java.lang.Math.max;
 
+import lombok.Getter;
+
 /**
  * This accumulator checks to see if a result is converging by testing the
  * sample mean and standard deviation of a scalar value computed from the
@@ -68,6 +70,7 @@ public abstract class OneSidedStDevAccumulator<R> implements ConvergingAccumulat
      * The number of values that are 'witnesses' to convergence until now. See
      * {@link #accept}.
      */
+    @Getter
     private int witnesses;
     /**
      * The current sum of the converging scalar value. Used to compute the sample
@@ -119,7 +122,11 @@ public abstract class OneSidedStDevAccumulator<R> implements ConvergingAccumulat
     @Override
     public void accept(R result) {
         accumulateValue(result);
-        double value = getConvergingValue(result);
+        acceptValue(getConvergingValue(result));
+    }
+
+    @Override
+    public void acceptValue(double value) {
         sumConvergeVal += value;
         sumSqConvergeVal += value * value;
         valuesAccepted++;
@@ -132,6 +139,11 @@ public abstract class OneSidedStDevAccumulator<R> implements ConvergingAccumulat
                 witnesses++;
             }
         }
+    }
+
+    @Override
+    public boolean isPrimitive() {
+        return true;
     }
 
     /**
@@ -172,13 +184,6 @@ public abstract class OneSidedStDevAccumulator<R> implements ConvergingAccumulat
      * @param result The new result to add to the accumulated value.
      */
     protected abstract void accumulateValue(R result);
-
-    /**
-     * Return the number of witnesses
-     */
-    public int getWitnesses() {
-        return witnesses;
-    }
 
     /**
      * @return the mean of the values

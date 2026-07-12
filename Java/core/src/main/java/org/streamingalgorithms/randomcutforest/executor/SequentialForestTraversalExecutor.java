@@ -19,11 +19,9 @@ import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collector;
 
-import org.streamingalgorithms.randomcutforest.ComponentList;
-import org.streamingalgorithms.randomcutforest.IComponentModel;
-import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
-import org.streamingalgorithms.randomcutforest.IVisitorFactory;
+import org.streamingalgorithms.randomcutforest.*;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 /**
  * Traverse the trees in a forest sequentially.
@@ -37,11 +35,33 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
     @Override
     public <R, S> S traverseForest(float[] point, IVisitorFactory<R> visitorFactory, BinaryOperator<R> accumulator,
             Function<R, S> finisher) {
-
-        R unnormalizedResult = components.stream().map(c -> c.traverse(point, visitorFactory)).reduce(accumulator)
-                .orElseThrow(() -> new IllegalStateException("accumulator returned an empty result"));
-
-        return finisher.apply(unnormalizedResult);
+        if (!visitorFactory.isReusable()) {
+            R result = components.stream().map(c -> c.traverse(point, visitorFactory)).reduce(accumulator)
+                    .orElseThrow(() -> new IllegalStateException("empty"));
+            return finisher.apply(result);
+        }
+        // SequentialForestTraversalExecutor, reuse path
+        IRFVisitor<R> slot = visitorFactory.newReusableVisitor(point);
+        NodeView viewTower = null; // a viewing structure and not the view
+                                   // trees arm the view
+        if (visitorFactory.isFoldable()) {
+            for (ITraversable c : components) {
+                viewTower = c.reusableFoldableTraverse(point, slot, viewTower); // arms + walks; leaves per-tree buffer
+                                                                                // full
+                slot.foldOut(); // scale + add into query accumulator in the visitor itself
+                                // visitor keeps the score
+            }
+            return finisher.apply(visitorFactory.liftResult(/* tree? */ null, slot.getFoldResult()));
+            // getResult() returns the ONE DiVector(foldedAttribution)
+            // foldresult is the accumulator
+        } else {
+            R acc = null;
+            for (ITraversable c : components) {
+                R r = visitorFactory.liftResult(null, c.reusableTraverse(point, slot));
+                acc = (acc == null) ? r : accumulator.apply(acc, r);
+            }
+            return finisher.apply(acc);
+        }
     }
 
     @Override
@@ -54,13 +74,30 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
     public <R, S> S traverseForest(float[] point, IVisitorFactory<R> visitorFactory,
             ConvergingAccumulator<R> accumulator, Function<R, S> finisher) {
 
+        // fast path: reusable + foldable + primitive-converging → no per-tree alloc, no
+        // boxing
+        if (visitorFactory.isReusable() && visitorFactory.isFoldable() && accumulator.isPrimitive()) {
+            IRFVisitor<R> slot = visitorFactory.newReusableVisitor(point);
+            NodeView viewTower = null;
+            for (ITraversable c : components) {
+                viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+                accumulator.acceptValue(slot.convergingValue()); // probe FIRST (before foldOut may scale buffer)
+                slot.foldOut(); // then fold into the visitor's sum
+                if (accumulator.isConverged()) {
+                    break;
+                }
+            }
+            return finisher.apply(visitorFactory.liftResult(null, slot.getFoldResult()));
+        }
+
+        // legacy fallback: non-reusable converging factories (allocates + boxes,
+        // unchanged)
         for (IComponentModel<?, ?> component : components) {
             accumulator.accept(component.traverse(point, visitorFactory));
             if (accumulator.isConverged()) {
                 break;
             }
         }
-
         return finisher.apply(accumulator.getAccumulatedValue());
     }
 

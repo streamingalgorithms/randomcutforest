@@ -55,7 +55,7 @@ public class ScoreVisitorTest {
         int sampleSize = 9;
         ScoreVisitor visitor = new ScoreVisitor(point, sampleSize);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
         assertFalse(visitor.ignoreLeaf);
         assertEquals(0, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
@@ -67,7 +67,7 @@ public class ScoreVisitorTest {
         int sampleSize = 9;
         ScoreVisitor visitor = new ScoreVisitor(point, sampleSize, 7);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
         assertTrue(visitor.ignoreLeaf);
         assertEquals(7, visitor.ignoreLeafMassThreshold);
         assertThat(visitor.getResult(), is(0.0));
@@ -90,7 +90,7 @@ public class ScoreVisitorTest {
                 / (leafDepth + Math.log(leafMass + 1) / Math.log(2));
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
-        assertTrue(visitor.pointInsideBox);
+        assertTrue(visitor.isConverged());
 
         visitor = new ScoreVisitor(point, subSampleSize);
         visitor.acceptLeaf(leafNode, 0);
@@ -98,7 +98,7 @@ public class ScoreVisitorTest {
                 / (Math.log(leafMass + 1) / Math.log(2.0));
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, subSampleSize), EPSILON));
-        assertTrue(visitor.pointInsideBox);
+        assertTrue(visitor.isConverged());
 
         // ignoreLeafMassThreshold = 7 < leafMass = 10 -> leaf is NOT ignored, so the
         // damped-seen score is used, matching the default visitor.
@@ -127,7 +127,7 @@ public class ScoreVisitorTest {
         double expectedScore = 1.0 / (leafDepth + 1);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, 2), EPSILON));
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
 
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);
@@ -178,7 +178,7 @@ public class ScoreVisitorTest {
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
 
         // ---- internal node, point inside: converge, score frozen ----
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
         depth--;
         ArrayBox containingBox = parentBox
                 .getMergedBox(new ArrayBox(new float[] { -1.0f, -1.0f }).getMergedBox(new float[] { -1.0f, 0.0f }));
@@ -188,7 +188,7 @@ public class ScoreVisitorTest {
                 .thenAnswer(inv -> containingBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(grandParent, depth);
-        assertTrue(visitor.pointInsideBox);
+        assertTrue(visitor.isConverged());
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
     }

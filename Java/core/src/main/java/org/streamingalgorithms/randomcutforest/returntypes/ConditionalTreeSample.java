@@ -20,7 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collector;
 
-import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
 
 public class ConditionalTreeSample {
 
@@ -35,7 +35,7 @@ public class ConditionalTreeSample {
      * used to construct the sample Note that the bounding box is in the projective
      * space defined by the tree
      */
-    protected BoundingBox parentOfLeafBox;
+    protected IBoundingBoxView parentOfLeafBox;
 
     /**
      * L1 distance of the sampled point (in the projective space of the tree) L1
@@ -57,7 +57,7 @@ public class ConditionalTreeSample {
      */
     public double weight;
 
-    public ConditionalTreeSample(int pointStoreIndex, BoundingBox box, double distance, float[] leafPoint) {
+    public ConditionalTreeSample(int pointStoreIndex, IBoundingBoxView box, double distance, float[] leafPoint) {
         this.pointStoreIndex = pointStoreIndex;
         this.parentOfLeafBox = box;
         this.distance = distance;

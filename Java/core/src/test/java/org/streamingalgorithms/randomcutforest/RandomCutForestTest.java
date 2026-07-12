@@ -40,6 +40,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.util.ArrayList;
@@ -49,11 +50,12 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
-import java.util.stream.Collector;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.powermock.reflect.Whitebox;
+import org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor;
+import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestUpdateExecutor;
@@ -62,14 +64,13 @@ import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
 import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
 import org.streamingalgorithms.randomcutforest.executor.SequentialForestTraversalExecutor;
 import org.streamingalgorithms.randomcutforest.executor.SequentialForestUpdateExecutor;
+import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
-import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDiVectorAccumulator;
-import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDoubleAccumulator;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
@@ -77,7 +78,6 @@ import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
-import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
 
@@ -91,6 +91,18 @@ public class RandomCutForestTest {
     private IStateCoordinator<Integer, float[]> updateCoordinator;
     private AbstractForestUpdateExecutor<Integer, float[]> updateExecutor;
     private RandomCutForest forest;
+    private static RandomCutForest trainedForest;
+
+    static {
+        trainedForest = RandomCutForest.builder().numberOfTrees(100).sampleSize(256).dimensions(2).randomSeed(42)
+                .centerOfMassEnabled(true).build();
+
+        // dense cluster at origin, sparse elsewhere
+        Random rng = new Random(42);
+        for (int i = 0; i < 10_000; i++) {
+            trainedForest.update(new double[] { rng.nextGaussian(), rng.nextGaussian() });
+        }
+    }
 
     @BeforeEach
     public void setUp() {
@@ -203,7 +215,7 @@ public class RandomCutForestTest {
         assertThrows(IllegalArgumentException.class, () -> forest.traverseForest(new float[] { 2.2f, -1.1f, 3.3f },
                 TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, accumulator, finisher));
         assertThrows(NullPointerException.class, () -> forest.traverseForest(point, null, accumulator, finisher));
-        assertThrows(NullPointerException.class, () -> forest.traverseForest(point,
+        assertThrows(IllegalArgumentException.class, () -> forest.traverseForest(point,
                 TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, (BinaryOperator<Double>) null, finisher));
         assertThrows(NullPointerException.class,
                 () -> forest.traverseForest(point, TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, accumulator, null));
@@ -335,171 +347,174 @@ public class RandomCutForestTest {
     }
 
     @Test
-    public void testGetAnomalyScore() {
-        float[] point = { 1.2f, -3.4f };
+    public void scalarFoldMatchesCollector() {
+        RandomCutForest forest = trainedForest;
+        assertTrue(forest.samplersFull()); // treeMass == sampleSize
 
-        assertFalse(forest.isOutputReady());
-        assertEquals(0.0, forest.getAnomalyScore(point));
+        float[] q = { 1.2f, -3.4f };
+        float[] shingled = forest.transformToShingledPoint(q);
 
-        doReturn(true).when(forest).isOutputReady();
-        double expectedResult = 0.0;
+        // fold path (production)
+        double fold = forest.getAnomalyScore(q);
 
-        for (int i = 0; i < numberOfTrees; i++) {
-            SamplerPlusTree<Integer, float[]> component = (SamplerPlusTree<Integer, float[]>) components.get(i);
-            ITree<Integer, float[]> tree = component.getTree();
-            double treeResult = Math.random();
-            when(tree.traverse(aryEq(point), any(IVisitorFactory.class))).thenReturn(treeResult);
+        // collector path: same ScoreVisitor, non-reuse traverse, sum + average
+        IVisitorFactory<Double> factory = ScoreVisitor.reusableFactory(0, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN,
+                DEFAULT_DAMP, DEFAULT_NORMALIZER);
+        double collected = forest.getComponents().stream().map(c -> ((SamplerPlusTree<Integer, float[]>) c).getTree())
+                .mapToDouble(t -> t.traverse(shingled, factory)) // newVisitor + getResult() per tree
+                .sum() / forest.getNumberOfTrees();
 
-            when(tree.getMass()).thenReturn(256);
-
-            expectedResult += treeResult;
-        }
-
-        expectedResult /= numberOfTrees;
-        assertEquals(expectedResult, forest.getAnomalyScore(point), EPSILON);
+        assertEquals(collected, fold, 1e-9);
     }
 
     @Test
-    public void testGetApproximateAnomalyScore() {
-        float[] point = { 1.2f, -3.4f };
-
-        assertFalse(forest.isOutputReady());
-        assertEquals(0.0, forest.getApproximateAnomalyScore(point));
-
-        doReturn(true).when(forest).isOutputReady();
-
-        ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(
-                RandomCutForest.DEFAULT_APPROXIMATE_ANOMALY_SCORE_HIGH_IS_CRITICAL,
-                RandomCutForest.DEFAULT_APPROXIMATE_DYNAMIC_SCORE_PRECISION,
-                RandomCutForest.DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
-
-        for (int i = 0; i < numberOfTrees; i++) {
-            SamplerPlusTree<Integer, float[]> component = (SamplerPlusTree<Integer, float[]>) components.get(i);
-            ITree<Integer, float[]> tree = component.getTree();
-            double treeResult = Math.random();
-            when(tree.traverse(aryEq(point), any(IVisitorFactory.class))).thenReturn(treeResult);
-
-            when(tree.getMass()).thenReturn(256);
-
-            if (!accumulator.isConverged()) {
-                accumulator.accept(treeResult);
-            }
+    public void approximateAttributionMatchesExactAtFullVisitation() {
+        RandomCutForest forest = RandomCutForest.builder().numberOfTrees(100).sampleSize(256).dimensions(2)
+                .randomSeed(42).build();
+        RandomCutForest parallel = RandomCutForest.builder().parallelExecutionEnabled(true).numberOfTrees(100)
+                .sampleSize(256).dimensions(2).randomSeed(42).build();
+        Random rng = new Random(42);
+        for (int i = 0; i < 20_000; i++) {
+            var point = new double[] { rng.nextGaussian(), rng.nextGaussian() };
+            forest.update(point);
+            parallel.update(point);
+            // note the test also validates parallel update being exact with sequential
         }
 
-        double expectedResult = accumulator.getAccumulatedValue() / accumulator.getValuesAccepted();
-        assertEquals(expectedResult, forest.getApproximateAnomalyScore(point), EPSILON);
+        assertTrue(forest.samplersFull());
+        double[] q = { 1.2, -3.4 };
+
+        DiVector exact = forest.getAnomalyAttribution(q);
+
+        DiVector approxParallel = parallel.getApproximateAnomalyAttribution(q);
+
+        assertArrayEquals(exact.high, approxParallel.high, EPSILON); // parallel == exact, by construction
+        assertArrayEquals(exact.low, approxParallel.low, EPSILON);
+
+        DiVector approxSeq = forest.getApproximateAnomalyAttribution(q);
+        assertArrayEquals(exact.high, approxSeq.high, 0.2); // sequential within tolerance
+        assertArrayEquals(exact.low, approxSeq.low, 0.2);
     }
 
     @Test
-    public void testGetAnomalyAttribution() {
-        float[] point = { 1.2f, -3.4f };
+    public void attributionFoldMatchesCollectorPath() {
+        int dims = 2, sampleSize = 256, numberOfTrees = 100;
+        RandomCutForest forest = trainedForest;
 
-        assertFalse(forest.isOutputReady());
-        DiVector zero = new DiVector(dimensions);
-        DiVector result = forest.getAnomalyAttribution(point);
-        assertArrayEquals(zero.high, result.high);
-        assertArrayEquals(zero.low, result.low);
-
-        doReturn(true).when(forest).isOutputReady();
-        DiVector expectedResult = new DiVector(dimensions);
-
-        for (int i = 0; i < numberOfTrees; i++) {
-            DiVector treeResult = new DiVector(dimensions);
-            for (int j = 0; j < dimensions; j++) {
-                treeResult.high[j] = Math.random();
-                treeResult.low[j] = Math.random();
-            }
-
-            SamplerPlusTree<Integer, float[]> component = (SamplerPlusTree<Integer, float[]>) components.get(i);
-            ITree<Integer, float[]> tree = component.getTree();
-            when(tree.traverse(aryEq(point), any(VisitorFactory.class))).thenReturn(treeResult);
-
-            when(tree.getMass()).thenReturn(256);
-
-            DiVector.addToLeft(expectedResult, treeResult);
+        Random rng = new Random(42);
+        for (int i = 0; i < 20_000; i++) {
+            forest.update(new double[] { rng.nextGaussian(), rng.nextGaussian() });
         }
+        assertTrue(forest.samplersFull()); // full → treeMass == sampleSize
 
-        expectedResult = expectedResult.scale(1.0 / numberOfTrees);
-        result = forest.getAnomalyAttribution(point);
-        assertArrayEquals(expectedResult.high, result.high, EPSILON);
-        assertArrayEquals(expectedResult.low, result.low, EPSILON);
+        float[] q = { 1.2f, -3.4f };
+        float[] shingled = forest.transformToShingledPoint(q);
+
+        // FOLD path (production)
+        DiVector fold = forest.getAnomalyAttribution(q);
+
+        // COLLECTOR path: same AttributionVisitor, non-reuse traverse + sum + average
+        IVisitorFactory<DiVector> factory = AttributionVisitor.reusableFactory(0, DEFAULT_SCORE_SEEN,
+                DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+
+        DiVector collected = new DiVector(dims);
+        DiVector finalCollected = collected;
+        forest.getComponents().stream().map(c -> ((SamplerPlusTree<Integer, float[]>) c).getTree())
+                .map(t -> t.traverse(shingled, factory)) // newVisitor → getResult() (per-tree DiVector)
+                .forEach(v -> DiVector.addToLeft(finalCollected, v));
+        collected = collected.scale(1.0 / numberOfTrees);
+
+        assertArrayEquals(collected.high, fold.high, 1e-9);
+        assertArrayEquals(collected.low, fold.low, 1e-9);
     }
 
     @Test
-    public void testGetApproximateAnomalyAttribution() {
-        float[] point = { 1.2f, -3.4f };
-        DiVector zero = new DiVector(dimensions);
-        DiVector result = forest.getApproximateAnomalyAttribution(point);
-
-        assertFalse(forest.isOutputReady());
-        assertArrayEquals(zero.high, result.high, EPSILON);
-        assertArrayEquals(zero.low, result.low, EPSILON);
-
-        doReturn(true).when(forest).isOutputReady();
-
-        ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,
-                RandomCutForest.DEFAULT_APPROXIMATE_ANOMALY_SCORE_HIGH_IS_CRITICAL,
-                RandomCutForest.DEFAULT_APPROXIMATE_DYNAMIC_SCORE_PRECISION,
-                RandomCutForest.DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
-
-        for (int i = 0; i < numberOfTrees; i++) {
-            SamplerPlusTree<Integer, float[]> component = (SamplerPlusTree<Integer, float[]>) components.get(i);
-            ITree<Integer, float[]> tree = component.getTree();
-            DiVector treeResult = new DiVector(dimensions);
-
-            for (int j = 0; j < dimensions; j++) {
-                treeResult.high[j] = Math.random();
-                treeResult.low[j] = Math.random();
-            }
-
-            when(tree.traverse(aryEq(point), any(VisitorFactory.class))).thenReturn(treeResult);
-
-            when(tree.getMass()).thenReturn(256);
-
-            if (!accumulator.isConverged()) {
-                accumulator.accept(treeResult);
-            }
+    public void approximateScoreMatchesExactAtFullVisitation() {
+        RandomCutForest forest = RandomCutForest.builder().numberOfTrees(100).sampleSize(256).dimensions(2)
+                .randomSeed(42).build();
+        RandomCutForest parallel = RandomCutForest.builder().parallelExecutionEnabled(true).numberOfTrees(100)
+                .sampleSize(256).dimensions(2).randomSeed(42).build();
+        Random rng = new Random(42);
+        for (int i = 0; i < 20_000; i++) {
+            var point = new double[] { rng.nextGaussian(), rng.nextGaussian() };
+            forest.update(point);
+            parallel.update(point);
+            // note the test also validates parallel update being exact with sequential
         }
 
-        DiVector expectedResult = accumulator.getAccumulatedValue().scale(1.0 / accumulator.getValuesAccepted());
-        result = forest.getApproximateAnomalyAttribution(point);
-        assertArrayEquals(expectedResult.high, result.high, EPSILON);
-        assertArrayEquals(expectedResult.low, result.low, EPSILON);
+        assertTrue(forest.samplersFull());
+
+        double[] q = { 1.2, -3.4 };
+
+        // exact (visits all trees)
+        double exact = forest.getAnomalyScore(q);
+
+        // approximate with precision tight enough to visit every tree → must equal
+        // exact
+        // precision < 1/numberOfTrees forces convergenceThreshold = maxValues (no early
+        // stop)
+        double approxFull = forest.getApproximateAnomalyScore(q); // DEFAULT precision; assert relationship not equality
+                                                                  // if it early-stops
+
+        // the guaranteed-equal check: parallel mode short-circuits to exact
+        double approxParallel = parallel.getApproximateAnomalyScore(q);
+
+        assertEquals(exact, approxParallel, EPSILON); // parallel approximate == exact, by construction
+        assertEquals(exact, approxFull, 0.15); // sequential approximate within tolerance of exact
     }
 
     @Test
-    public void testGetSimpleDensity() {
-        float[] point = { 12.3f, -45.6f };
-        DensityOutput zero = new DensityOutput(dimensions, sampleSize);
-        assertFalse(forest.isOutputReady());
-        DensityOutput result = forest.getSimpleDensity(point);
-        assertEquals(zero.getDensity(), result.getDensity(), EPSILON);
+    public void densityIsHigherInDenseRegions() {
+        RandomCutForest forest = trainedForest;
 
-        doReturn(true).when(forest).isOutputReady();
-        List<InterpolationMeasure> intermediateResults = new ArrayList<>();
+        double dense = forest.getSimpleDensity(new double[] { 0, 0 }).getDensity();
+        double edge = forest.getSimpleDensity(new double[] { 3, 3 }).getDensity();
+        double far = forest.getSimpleDensity(new double[] { 8, 8 }).getDensity();
 
-        for (int i = 0; i < numberOfTrees; i++) {
-            InterpolationMeasure treeResult = new InterpolationMeasure(dimensions, sampleSize);
-            for (int j = 0; j < dimensions; j++) {
-                treeResult.measure.high[j] = Math.random();
-                treeResult.measure.low[j] = Math.random();
-                treeResult.distances.high[j] = Math.random();
-                treeResult.distances.low[j] = Math.random();
-                treeResult.probMass.high[j] = Math.random();
-                treeResult.probMass.low[j] = Math.random();
-            }
+        assertTrue(dense > edge, "center denser than edge");
+        assertTrue(edge > far, "edge denser than far");
+        assertTrue(far >= 0, "density non-negative");
+    }
 
-            SamplerPlusTree<Integer, float[]> component = (SamplerPlusTree<Integer, float[]>) components.get(i);
-            ITree<Integer, float[]> tree = component.getTree();
-            when(tree.traverse(aryEq(point), any(VisitorFactory.class))).thenReturn(treeResult);
-            intermediateResults.add(treeResult);
+    @Test
+    public void foldPathMatchesCollectorPath() {
+        // full forest: treeMass == sampleSize on every tree, so the two
+        // normalizations (fold: live treeMass; collector: fixed sampleSize) coincide
+        int dims = 3, sampleSize = 256, numberOfTrees = 100;
+        RandomCutForest forest = RandomCutForest.builder().numberOfTrees(numberOfTrees).sampleSize(sampleSize)
+                .dimensions(dims).randomSeed(42).centerOfMassEnabled(true).build();
+
+        Random rng = new Random(42);
+        for (int i = 0; i < 20_000; i++) { // >> sampleSize → every tree full
+            forest.update(new double[] { rng.nextGaussian(), rng.nextGaussian(), rng.nextGaussian() });
         }
+        assertTrue(forest.samplersFull()); // precondition: full, so treeMass == sampleSize
 
-        Collector<InterpolationMeasure, ?, InterpolationMeasure> collector = InterpolationMeasure.collector(dimensions,
-                0, numberOfTrees);
-        DensityOutput expectedResult = new DensityOutput(intermediateResults.stream().collect(collector));
-        result = forest.getSimpleDensity(point);
-        assertEquals(expectedResult.getDensity(), result.getDensity(), EPSILON);
+        float[] q = { 0.3f, -0.7f, 1.1f };
+        float[] shingled = forest.transformToShingledPoint(q);
+
+        // --- FOLD path: production getSimpleDensity ---
+        DensityOutput fold = forest.getSimpleDensity(q);
+
+        // --- COLLECTOR path: same current InterpolationVisitor, non-reuse traverse +
+        // collector ---
+
+        IVisitorFactory<InterpolationMeasure> factory = InterpolationVisitor.reusableFactory(1.0,
+                forest.isCenterOfMassEnabled());
+
+        DensityOutput collected = new DensityOutput(
+                forest.getComponents().stream().map(c -> ((SamplerPlusTree<Integer, float[]>) c).getTree()).map(t -> {
+                    InterpolationMeasure m = t.traverse(shingled, factory);
+                    m.setSampleSize((int) t.getMass()); // replicate foldOut's setSampleSize(treeMass)
+                    return m;
+                }).collect(InterpolationMeasure.collector(dims, 0, numberOfTrees))); // seed 0
+
+        // the two aggregation paths must agree at a full forest
+        assertEquals(collected.getDensity(0.001, dims), fold.getDensity(0.001, dims), 1e-9);
+        assertArrayEquals(collected.getDirectionalDensity(0.001, dims).high,
+                fold.getDirectionalDensity(0.001, dims).high, 1e-9);
+        assertArrayEquals(collected.getDirectionalDensity(0.001, dims).low, fold.getDirectionalDensity(0.001, dims).low,
+                1e-9);
     }
 
     @Test

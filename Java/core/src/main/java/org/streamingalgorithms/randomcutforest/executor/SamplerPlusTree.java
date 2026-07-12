@@ -21,11 +21,13 @@ import java.util.Optional;
 
 import org.streamingalgorithms.randomcutforest.IComponentModel;
 import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
+import org.streamingalgorithms.randomcutforest.IRFVisitor;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 import lombok.Getter;
 
@@ -104,6 +106,16 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
     @Override
     public <R> R traverseMulti(float[] point, IMultiVisitorFactory<R> visitorFactory) {
         return tree.traverseMulti(point, visitorFactory);
+    }
+
+    @Override
+    public <R> R reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor) {
+        return tree.reusableTraverse(point, resuableVisitor);
+    }
+
+    @Override
+    public <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView viewTower) {
+        return tree.reusableFoldableTraverse(point, resuableVisitor, viewTower);
     }
 
     @Override

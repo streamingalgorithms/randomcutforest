@@ -44,7 +44,7 @@ public class AnomalyAttributionVisitorTest {
         int treeMass = 99;
         AttributionVisitor visitor = new AttributionVisitor(point, treeMass);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
 
         assertFalse(visitor.ignoreLeaf);
         assertEquals(0, visitor.ignoreLeafMassThreshold);
@@ -60,7 +60,7 @@ public class AnomalyAttributionVisitorTest {
         int treeMass = 99;
         AttributionVisitor visitor = new AttributionVisitor(point, treeMass, 7);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
 
         assertTrue(visitor.ignoreLeaf);
         assertEquals(7, visitor.ignoreLeafMassThreshold);
@@ -89,7 +89,7 @@ public class AnomalyAttributionVisitorTest {
         double expectedScoreSum = CommonUtils.defaultDampFunction(leafMass, treeMass)
                 / (leafDepth + Math.log(leafMass + 1) / Math.log(2));
         double expectedScore = expectedScoreSum / (2 * point.length);
-        DiVector result = visitor.getResult();
+        DiVector result = visitor.observeResult();
         for (int i = 0; i < point.length; i++) {
             assertEquals(defaultScalarNormalizerFunction(expectedScore, treeMass), result.low[i], EPSILON);
             assertEquals(defaultScalarNormalizerFunction(expectedScore, treeMass), result.high[i], EPSILON);
@@ -115,7 +115,7 @@ public class AnomalyAttributionVisitorTest {
         double expectedScoreSum = defaultScoreUnseenFunction(leafDepth, leafMass);
         double sumOfNewRange = (1.1 - (-4.0)) + (5.0 - (-2.2)) + (6.0 - 3.3);
 
-        DiVector result = visitor.getResult();
+        DiVector result = visitor.observeResult();
         assertEquals(defaultScalarNormalizerFunction(expectedScoreSum * (1.1 - (-4.0)) / sumOfNewRange, treeMass),
                 result.high[0], EPSILON);
         assertEquals(0.0, result.low[0]);
@@ -128,7 +128,7 @@ public class AnomalyAttributionVisitorTest {
 
         visitor = new AttributionVisitor(point, treeMass, 3);
         visitor.acceptLeaf(leafNode, leafDepth);
-        result = visitor.getResult();
+        result = visitor.observeResult();
         assertEquals(defaultScalarNormalizerFunction(expectedScoreSum * (1.1 - (-4.0)) / sumOfNewRange, treeMass),
                 result.high[0], EPSILON);
         assertEquals(0.0, result.low[0]);
@@ -142,7 +142,7 @@ public class AnomalyAttributionVisitorTest {
         visitor = new AttributionVisitor(point, treeMass, 4);
         visitor.acceptLeaf(leafNode, leafDepth);
         double expectedScore = expectedScoreSum / (2 * point.length);
-        result = visitor.getResult();
+        result = visitor.observeResult();
         for (int i = 0; i < point.length; i++) {
             assertEquals(defaultScalarNormalizerFunction(expectedScore, treeMass), result.low[i], EPSILON);
             assertEquals(defaultScalarNormalizerFunction(expectedScore, treeMass), result.high[i], EPSILON);
@@ -217,7 +217,7 @@ public class AnomalyAttributionVisitorTest {
         }
 
         // ---- grandparent contains pointToScore -> converge, values frozen ----
-        assertFalse(visitor.pointInsideBox); // not yet converged after the parent
+        assertFalse(visitor.isConverged()); // not yet converged after the parent
         depth--;
         INodeView grandParent = mock(NodeView.class);
         when(grandParent.getMass()).thenReturn(parentMass + 2);
@@ -227,7 +227,7 @@ public class AnomalyAttributionVisitorTest {
                 .thenAnswer(inv -> grandParentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(grandParent, depth);
-        assertTrue(visitor.pointInsideBox); // NOW it converged — the containment short-circuit fired
+        assertTrue(visitor.isConverged()); // NOW it converged — the containment short-circuit fired
         result = visitor.observeResult();
 
         for (int i = 0; i < pointToScore.length; i++) {

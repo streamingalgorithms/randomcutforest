@@ -49,11 +49,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Stack;
 
-import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
-import org.streamingalgorithms.randomcutforest.IVisitorFactory;
-import org.streamingalgorithms.randomcutforest.MultiVisitor;
-import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.Visitor;
+import org.streamingalgorithms.randomcutforest.*;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 
@@ -770,32 +766,36 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         rangeSumData[idx] = box.getRangeSum();
     }
 
-    // mainly for tests
+    // only for tests
     protected BoundingBox getBox(int index) {
+        checkState(isLeaf(index) || isInternal(index), "incorrect ask");
         BoundingBox answer = new BoundingBox(dimension);
         answer.setAs(getArrayBox(index));
         return answer;
     }
 
-    public ArrayBox getArrayBox(int index) {
-        ArrayBox aBox = new ArrayBox(dimension);
+    // RandomCutTree — fill caller's box, no allocation
+    public void fillArrayBox(int index, ArrayBox aBox) {
         if (isLeaf(index)) {
             pointStoreView.setAsArrayBox(getPointIndex(index), aBox);
         } else {
-            checkState(isInternal(index), " incomplete state");
             int idx = translate(index);
             if (idx != Integer.MAX_VALUE) {
                 if (rangeSumData[idx] == 0) {
-                    // object creation
                     ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * idx * dimension, dimension, 0);
                     reconstructArrayBox(inPlace, index, pointStoreView);
                     rangeSumData[idx] = inPlace.getRangeSum();
                 }
-                return aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]);
+                aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]); // in-place, no alloc
+            } else {
+                reconstructArrayBox(aBox, index, pointStoreView);
             }
-            reconstructArrayBox(aBox, index, pointStoreView);
-            // no need to save rangesum
         }
+    }
+
+    public ArrayBox getArrayBox(int index) {
+        ArrayBox aBox = new ArrayBox(dimension);
+        fillArrayBox(index, aBox);
         return aBox;
     }
 
@@ -999,7 +999,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * determined by the input point is root, node1, node2, ..., node(N-1), nodeN,
      * leaf; then we will first invoke visitor::acceptLeaf on the leaf node, and
      * then we will invoke visitor::accept on the remaining nodes in the following
-     * order: nodeN, node(N-1), ..., node2, node1, and root.
+     * order: nodeN, node(N-1), ..., node2, node1, and root. The reusableTraverse
+     * earns it place by reusing the same visitor -- instead of a factory method and
+     * thereby saves on object allocation -- note that if a forest has 50 trees
+     * (seems obvious, why else is it a forest and not a spiney) then this is 50x
+     * less GC.
      *
      * @param point          A point which determines the traversal path from the
      *                       root to a leaf node.
@@ -1017,6 +1021,26 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         NodeView currentNodeView = new NodeView(this, pointStoreView, root);
         traversePathToLeafAndVisitNodes(point, visitor, currentNodeView, root, 0);
         return visitorFactory.liftResult(this, visitor.getResult());
+    }
+
+    @Override
+    public <R> R reusableTraverse(float[] point, IRFVisitor<R> v) {
+        v.prepare(this, point); // self-arm: I supply my own projection + mass
+        NodeView view = new NodeView(this, pointStoreView, root);
+        traversePathToLeafAndVisitNodes(point, v, view, root, 0);
+        return v.getResult(); // raw; lift in executor
+    }
+
+    public <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> v, NodeView view) {
+        v.prepare(this, point); // self-arm: I supply my own projection + mass
+        if (view == null)
+            view = new NodeView(this, pointStoreView, root);
+        else
+            view.rearm(this, root);
+        traversePathToLeafAndVisitNodes(point, v, view, root, 0);
+        // result extracted from visitor
+        // the viewing tower (not the view) passed along
+        return view;
     }
 
     protected <R> void traversePathToLeafAndVisitNodes(float[] point, Visitor<R> visitor, NodeView currentNodeView,

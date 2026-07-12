@@ -24,7 +24,7 @@ import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
 import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
-import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
 /**
@@ -77,7 +77,7 @@ public class ImputeVisitor implements MultiVisitor<ConditionalTreeSample> {
 
     protected int[] dimensionsUsed;
 
-    protected BoundingBox box;
+    protected ArrayBox box;
 
     /**
      * Create a new ImputeVisitor.
@@ -148,8 +148,8 @@ public class ImputeVisitor implements MultiVisitor<ConditionalTreeSample> {
 
         double probabilityOfSeparation;
         if (box == null) {
-            box = (BoundingBox) node.getBoundingBox();
-            probabilityOfSeparation = CommonUtils.getProbabilityOfSeparation(box, queryPoint);
+            box = (ArrayBox) node.getBoundingBox();
+            probabilityOfSeparation = box.probabilityOfCut(queryPoint, null);
         } else {
             probabilityOfSeparation = node.probabilityOfSeparation(queryPoint);
         }

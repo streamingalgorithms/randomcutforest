@@ -15,11 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
-import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
-import org.streamingalgorithms.randomcutforest.IVisitorFactory;
-import org.streamingalgorithms.randomcutforest.MultiVisitor;
-import org.streamingalgorithms.randomcutforest.Visitor;
+import org.streamingalgorithms.randomcutforest.*;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 /**
  * This interface defines a model that can be traversed by a {@link Visitor}.
@@ -80,4 +78,19 @@ public interface ITraversable {
      */
     boolean isOutputReady();
 
+    /**
+     * perform a traversal where the receptacle, the visitor is capable of being
+     * reused across multiple trees without heavy allocation
+     *
+     * @param point           the point that determines the traversal path
+     * @param resuableVisitor a visitor that can reuse its state
+     * @param <R>             The return value type of the visitor.
+     * @return the return value of the visitor
+     */
+
+    <R> R reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor);
+
+    // visitor keeps the score (no pun intended)
+    // and it strings along a nodeviewer (reused across trees)
+    <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView view);
 }

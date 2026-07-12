@@ -32,10 +32,7 @@ import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.streamingalgorithms.randomcutforest.CommonUtils;
-import org.streamingalgorithms.randomcutforest.tree.BoundingBox;
-import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.tree.*;
 
 public class ImputeVisitorTest {
 
@@ -154,7 +151,7 @@ public class ImputeVisitorTest {
         INodeView node = mock(NodeView.class);
         when(node.getLeafPoint()).thenReturn(point);
         when(node.getLiftedLeafPoint()).thenReturn(point);
-        when(node.getBoundingBox()).thenReturn(new BoundingBox(point, point));
+        when(node.getBoundingBox()).thenReturn(new ArrayBox(point, point));
         int depth = 100;
         int leafMass = 10;
         when(node.getMass()).thenReturn(leafMass);

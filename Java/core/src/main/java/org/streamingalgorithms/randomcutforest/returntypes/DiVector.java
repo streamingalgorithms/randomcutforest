@@ -202,4 +202,10 @@ public class DiVector {
         return this;
         // return new DiVector(projection.apply(high), projection.apply(low));
     }
+
+    // InterpolationMeasure
+    public void clear() {
+        Arrays.fill(high, 0);
+        Arrays.fill(low, 0);
+    }
 }

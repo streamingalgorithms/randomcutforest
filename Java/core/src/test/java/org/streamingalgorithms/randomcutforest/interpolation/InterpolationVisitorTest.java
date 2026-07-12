@@ -80,7 +80,7 @@ public class InterpolationVisitorTest {
         int sampleSize = 9;
         InterpolationVisitor visitor = newVisitor(point, sampleSize);
 
-        assertFalse(visitor.pointInsideBox);
+        assertFalse(visitor.isConverged());
 
         InterpolationMeasure output = visitor.getResult();
         double[] zero = new double[point.length];
@@ -104,7 +104,7 @@ public class InterpolationVisitorTest {
         InterpolationVisitor visitor = newVisitor(point, sampleSize);
         visitor.acceptLeaf(leafNode, 100);
 
-        InterpolationMeasure result = visitor.getResult();
+        InterpolationMeasure result = visitor.observeResult();
 
         double[] expected = new double[point.length];
         Arrays.fill(expected, 0.5 * (1 + leafMass) / point.length);
@@ -132,7 +132,7 @@ public class InterpolationVisitorTest {
 
         InterpolationVisitor visitor = newVisitor(point, sampleSize);
         visitor.acceptLeaf(leafNode, 100);
-        InterpolationMeasure result = visitor.getResult();
+        InterpolationMeasure result = visitor.observeResult();
 
         double expectedSumOfNewRange = 3.0 + 4.0 + 2.0;
         double[] expectedDifferenceInRangeVector = { 0.0, 3.0, 4.0, 0.0, 0.0, 2.0 };
@@ -170,7 +170,7 @@ public class InterpolationVisitorTest {
         int depth = 4;
         runLeaf(newVisitor, leafPoint, leafMass, depth);
         runLeaf(oldVisitor, leafPoint, leafMass, depth);
-        assertMeasuresClose(oldVisitor.getResult(), newVisitor.getResult(), TOL);
+        assertMeasuresClose(oldVisitor.getResult(), newVisitor.observeResult(), TOL);
 
         // ---- parent, point outside ----
         depth--;
@@ -178,8 +178,8 @@ public class InterpolationVisitorTest {
         float[] parentMax = { 2.0f, -0.5f };
         runInternal(newVisitor, leafPoint, parentMax, null, parentMass, depth);
         runInternal(oldVisitor, leafPoint, parentMax, null, parentMass, depth);
-        assertMeasuresClose(oldVisitor.getResult(), newVisitor.getResult(), TOL);
-        assertFalse(newVisitor.pointInsideBox);
+        assertMeasuresClose(oldVisitor.getResult(), newVisitor.observeResult(), TOL);
+        assertFalse(newVisitor.isConverged());
 
         // ---- grandparent, point inside -> both converge, values frozen ----
         depth--;
@@ -189,7 +189,7 @@ public class InterpolationVisitorTest {
         int gpMass = parentMass + 2;
         runInternal(newVisitor, gpMin, gpMax, null, gpMass, depth);
         runInternal(oldVisitor, gpMin, gpMax, null, gpMass, depth);
-        assertMeasuresClose(oldVisitor.getResult(), newVisitor.getResult(), TOL);
+        assertMeasuresClose(oldVisitor.getResult(), newVisitor.observeResult(), TOL);
     }
 
     /**
@@ -209,7 +209,7 @@ public class InterpolationVisitorTest {
         float[] leafPoint = { 0.0f, 0.0f };
         runLeaf(newVisitor, leafPoint, 1, 2);
         runLeaf(oldVisitor, leafPoint, 1, 2);
-        assertMeasuresClose(oldVisitor.getResult(), newVisitor.getResult(), TOL);
+        assertMeasuresClose(oldVisitor.getResult(), newVisitor.observeResult(), TOL);
 
         // parent: shadow path, sibling box at {1,-2}, node box spans both points
         float[] siblingPoint = { 1.0f, -2.0f };
@@ -222,7 +222,7 @@ public class InterpolationVisitorTest {
         }
         newVisitor.accept(pNew, 1);
         oldVisitor.accept(pOld, 1);
-        assertMeasuresClose(oldVisitor.getResult(), newVisitor.getResult(), TOL);
+        assertMeasuresClose(oldVisitor.getResult(), newVisitor.observeResult(), TOL);
     }
 
     // ---------- path drivers (feed both visitor types the same mocks) ----------

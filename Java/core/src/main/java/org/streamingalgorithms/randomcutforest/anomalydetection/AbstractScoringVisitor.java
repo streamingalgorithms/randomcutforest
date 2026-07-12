@@ -16,11 +16,10 @@
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
-
-import java.util.Arrays;
+import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.ScoreFn;
 
 import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
-import org.streamingalgorithms.randomcutforest.Visitor;
+import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
@@ -48,20 +47,17 @@ import org.streamingalgorithms.randomcutforest.tree.INodeView;
  * must instead be siblings under this base.</li>
  * </ul>
  */
-public abstract class AbstractScoringVisitor<R> implements Visitor<R> {
+public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
-    protected final float[] pointToScore;
-    protected final int treeMass;
-    protected final boolean ignoreLeaf;
-    protected final int ignoreLeafMassThreshold;
+    protected boolean ignoreLeaf;
+    protected int ignoreLeafMassThreshold;
 
-    protected final DefaultScoreFunctions.ScoreFn scoreSeenFn;
-    protected final DefaultScoreFunctions.ScoreFn scoreUnseenFn;
-    protected final DefaultScoreFunctions.DampFn dampFn;
-    protected final DefaultScoreFunctions.Normalizer normalizer;
+    protected DefaultScoreFunctions.ScoreFn scoreSeenFn;
+    protected DefaultScoreFunctions.ScoreFn scoreUnseenFn;
+    protected DefaultScoreFunctions.DampFn dampFn;
+    protected DefaultScoreFunctions.Normalizer normalizer;
 
     protected double savedScore;
-    protected boolean pointInsideBox;
 
     /**
      * Set true when a duplicate leaf is reached. The scalar policy never sets this
@@ -70,13 +66,18 @@ public abstract class AbstractScoringVisitor<R> implements Visitor<R> {
      */
     protected boolean hitDuplicates;
 
-    /** Reused counterfactual box; allocated once, only on the shadow path. */
-    protected ArrayBox shadowBox;
-
     protected AbstractScoringVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
-        this.pointToScore = Arrays.copyOf(pointToScore, pointToScore.length);
+        this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
+        System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
+    }
+
+    // reusable path only: allocates pointToScore directly (no copy).
+    // prepare(tree, point) fills mass + projection before the first read.
+    protected AbstractScoringVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
+            ScoreFn scoreUnseenFn, DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
+        this.pointToScore = new float[dimension]; // ← the only line that differs
         this.treeMass = treeMass;
         this.ignoreLeaf = ignoreLeafMassThreshold > DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
         this.ignoreLeafMassThreshold = ignoreLeafMassThreshold;
@@ -84,10 +85,20 @@ public abstract class AbstractScoringVisitor<R> implements Visitor<R> {
         this.scoreUnseenFn = scoreUnseenFn;
         this.dampFn = dampFn;
         this.normalizer = normalizer;
-        this.savedScore = 0.0;
-        this.pointInsideBox = false;
-        this.hitDuplicates = false;
         this.shadowBox = null;
+        setDefaults();
+    }
+
+    void setDefaults() {
+        savedScore = 0.0;
+        pointInsideBox = false;
+        shadowBoxActive = false;
+        hitDuplicates = false;
+    }
+
+    @Override
+    public void reset() {
+        setDefaults();
     }
 
     /**
@@ -127,16 +138,16 @@ public abstract class AbstractScoringVisitor<R> implements Visitor<R> {
 
     protected final double acceptShadowBox(INodeView node) {
         ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox(pointToScore);
-        if (shadowBox == null) {
-            shadowBox = sib.copy(); // one-time allocation of the visitor's own reused box
+        if (shadowBoxActive == false) {
+            if (shadowBox == null) {
+                shadowBox = sib.copy(); // one-time allocation of the visitor's own reused box
+            } else {
+                shadowBox.copyFrom(sib);
+            }
+            shadowBoxActive = true;
         } else {
             shadowBox.addBox(sib); // grow in place, no allocation
         }
         return shadowBox.probabilityOfCut(pointToScore, contributionTarget());
-    }
-
-    @Override
-    public final boolean isConverged() {
-        return pointInsideBox;
     }
 }

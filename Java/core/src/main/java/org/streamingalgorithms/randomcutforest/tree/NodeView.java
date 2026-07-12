@@ -29,11 +29,23 @@ public class NodeView implements INodeView {
     int currentNodeOffset;
     float[] leafPoint;
     ArrayBox currentBox;
+    private final ArrayBox reusableBox;
 
     public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root) {
         this.currentNodeOffset = root;
         this.tree = tree;
-        leafPoint = new float[pointStoreView.getDimensions()];
+        int dimensions = pointStoreView.getDimensions();
+        leafPoint = new float[dimensions];
+        reusableBox = new ArrayBox(dimensions);
+    }
+
+    // NodeView
+    protected void rearm(RandomCutTree tree, int root) {
+        this.tree = tree;
+        this.currentNodeOffset = root;
+        this.currentBox = null;
+        // leafPoint and reusableBox arrays kept (same dimension across the forest);
+        // refilled per node
     }
 
     public int getMass() {
@@ -41,15 +53,19 @@ public class NodeView implements INodeView {
     }
 
     public IBoundingBoxView getBoundingBox() {
-        if (currentBox == null) {
-            return tree.getBox(currentNodeOffset);
-        }
-        return currentBox;
+        if (currentBox != null)
+            return currentBox;
+        tree.fillArrayBox(currentNodeOffset, reusableBox); // fills reusableBox in place, no alloc
+        return reusableBox;
     }
 
     public IBoundingBoxView getSiblingBoundingBox(float[] point) {
-        return (toLeft(point)) ? tree.getArrayBox(tree.nodeStore.getRightIndex(currentNodeOffset))
-                : tree.getArrayBox(tree.nodeStore.getLeftIndex(currentNodeOffset));
+        if (toLeft(point)) {
+            tree.fillArrayBox(tree.nodeStore.getRightIndex(currentNodeOffset), reusableBox);
+        } else {
+            tree.fillArrayBox(tree.nodeStore.getLeftIndex(currentNodeOffset), reusableBox);
+        }
+        return reusableBox;
     }
 
     public int getCutDimension() {

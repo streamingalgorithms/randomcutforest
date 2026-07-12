@@ -22,16 +22,20 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import java.util.function.Function;
 import java.util.stream.Collector;
 
+import lombok.Getter;
+
 /**
- * An InterpolationMeasure is used  to store certain geometric
- * quantities during a tree traversal and useful for density estimation
+ * An InterpolationMeasure is used to store certain geometric quantities during
+ * a tree traversal and useful for density estimation
  */
 public class InterpolationMeasure {
 
     public final DiVector measure;
     public final DiVector distances;
     public final DiVector probMass;
+    @Getter
     protected final int dimensions;
+    @Getter
     protected int sampleSize;
 
     /**
@@ -123,20 +127,6 @@ public class InterpolationMeasure {
     }
 
     /**
-     * @return the number of spatial dimensions in this InterpolationMeasure.
-     */
-    public int getDimensions() {
-        return dimensions;
-    }
-
-    /**
-     * @return the sample size of the Random Cut Tree that we are measuring.
-     */
-    public int getSampleSize() {
-        return sampleSize;
-    }
-
-    /**
      * Return a new InterpolationMeasure will all values scaled by the given factor.
      *
      * @param z The scale factor.
@@ -149,7 +139,38 @@ public class InterpolationMeasure {
     }
 
     public InterpolationMeasure lift(Function<double[], double[]> projection) {
-        return new InterpolationMeasure(sampleSize, measure.lift(projection), distances.lift(projection),
-                probMass.lift(projection));
+        // return new InterpolationMeasure(sampleSize, measure.lift(projection),
+        // distances.lift(projection),
+        // probMass.lift(projection));
+        // for now, with 1 class of trees
+        return this;
+    }
+
+    // InterpolationMeasure — in-place variants for the fold path
+    public InterpolationMeasure scaleInPlace(double z) {
+        sampleSize = (int) round(sampleSize * z);
+        measure.scaleInPlace(z); // ASSUME DiVector has this; else measure = measure.scale(z) (allocates)
+        distances.scaleInPlace(z);
+        probMass.scaleInPlace(z);
+        return this;
+    }
+
+    // addToLeft already mutates left in place — reuse it directly, no new method
+    // needed.
+// folded.addFrom(stored):
+    public InterpolationMeasure addFrom(InterpolationMeasure right) {
+        return addToLeft(this, right); // sums sampleSize + all three DiVectors into this
+    }
+
+    public void setSampleSize(int sampleSize) {
+        this.sampleSize = sampleSize;
+    }
+
+    // InterpolationMeasure
+    public void clear() {
+        measure.clear();
+        distances.clear();
+        probMass.clear();
+        sampleSize = 0;
     }
 }
