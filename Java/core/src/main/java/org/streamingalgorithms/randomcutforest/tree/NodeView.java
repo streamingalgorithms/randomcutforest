@@ -28,8 +28,24 @@ public class NodeView implements INodeView {
     RandomCutTree tree;
     int currentNodeOffset;
     float[] leafPoint;
+
+    // currentBox is a *sentinel reference*, not an owned object:
+    // null -> hot cache (>= SWITCH_FRACTION): boxes come from cached slices via
+    // reusableBox
+    // !null -> cold cache (< SWITCH_FRACTION): points at pathBox, the accumulated
+    // path box
+    // Demoting it from an allocation to a sentinel is the whole GC hack; every
+    // downstream check (getBoundingBox, probabilityOfSeparation, updateToParent)
+    // is unchanged because they only ever test null / hand the reference onward.
     ArrayBox currentBox;
+
+    // fill-and-discard scratch for sibling / reconstructed boxes (hot + cold)
     private final ArrayBox reusableBox;
+    // reset-and-grow scratch for the accumulated path box (cold cache only).
+    // MUST be distinct from reusableBox: getSiblingBoundingBox fills reusableBox
+    // while getBoundingBox returns currentBox(==pathBox); a cold-cache visitor can
+    // hold both live, so aliasing them would clobber.
+    private final ArrayBox pathBox;
 
     public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root) {
         this.currentNodeOffset = root;
@@ -37,15 +53,16 @@ public class NodeView implements INodeView {
         int dimensions = pointStoreView.getDimensions();
         leafPoint = new float[dimensions];
         reusableBox = new ArrayBox(dimensions);
+        pathBox = new ArrayBox(dimensions);
     }
 
     // NodeView
     protected void rearm(RandomCutTree tree, int root) {
         this.tree = tree;
         this.currentNodeOffset = root;
-        this.currentBox = null;
-        // leafPoint and reusableBox arrays kept (same dimension across the forest);
-        // refilled per node
+        this.currentBox = null; // deactivate; pathBox array retained, re-primed by setCurrentNode
+        // leafPoint, reusableBox, pathBox arrays kept (same dimension across the
+        // forest); refilled per node
     }
 
     public int getMass() {
@@ -113,7 +130,14 @@ public class NodeView implements INodeView {
         currentNodeOffset = newNode;
         tree.pointStoreView.getNumericVectorInto(index, leafPoint);
         if (setBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
-            currentBox = new ArrayBox(leafPoint);
+            // was: currentBox = new ArrayBox(leafPoint); // per-tree alloc (~42.5KB/op at
+            // cache=0)
+            // now: reset the owned scratch to the single leaf point and activate the
+            // sentinel.
+            // fromPoint MUST fully reset (values + rangeSum + any flags) to match the
+            // old constructor's state, else tree N carries tree N-1's grown box.
+            pathBox.fromPoint(leafPoint);
+            currentBox = pathBox;
         }
     }
 
@@ -124,7 +148,7 @@ public class NodeView implements INodeView {
     public void updateToParent(int parent, int currentSibling, boolean updateBox) {
         currentNodeOffset = parent;
         if (updateBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
-            tree.growArrayBox(currentBox, tree.pointStoreView, parent, currentSibling);
+            tree.growArrayBox(currentBox, tree.pointStoreView, parent, currentSibling); // in-place, currentBox==pathBox
         }
     }
 
