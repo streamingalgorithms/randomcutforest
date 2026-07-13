@@ -33,6 +33,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <vector.addmodules>jdk.incubator.vector</vector.addmodules>
     </properties>
 
     <modules>
@@ -98,6 +99,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.15.0</version>
                 <configuration>
+                    <compilerArgs>
+                        <arg>--add-modules=${vector.addmodules}</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -112,12 +116,15 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.6</version>
                 <configuration>
-                    <argLine>@{argLine} -ea --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} -ea --add-modules=${vector.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.5.6</version>
+                <configuration>
+                    <argLine>@{argLine} -ea --add-modules=${vector.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -199,12 +206,21 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.12.0</version>
+                <configuration>
+                    <additionalOptions>
+                        <additionalOption>--add-modules</additionalOption>
+                        <additionalOption>jdk.incubator.vector</additionalOption>
+                    </additionalOptions>
+
+                    <failOnError>true</failOnError>       <!-- real errors DO fail the build -->
+                    <failOnWarnings>false</failOnWarnings> <!-- warnings do NOT -->
+                    <quiet>true</quiet>                    <!-- kill progress chatter, keep warnings+errors -->
+                    <doclint>all,-missing</doclint>        <!-- check refs/HTML/syntax; don't nag missing tags -->
+                </configuration>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
+                        <goals><goal>jar</goal></goals>
                     </execution>
                 </executions>
             </plugin>
