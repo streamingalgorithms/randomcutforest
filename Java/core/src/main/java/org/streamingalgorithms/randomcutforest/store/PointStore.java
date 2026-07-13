@@ -1018,23 +1018,25 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     @Override
-    public boolean leftOf(int index, float cutValue, int dim) {
+    public float valueAt(int index, int coord) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
-        checkArgument(dim < dimensions, "incorrect dimension");
+        checkArgument(coord < dimensions, "incorrect coord in valueAt");
         int address = getLocation(index);
         checkFeasible(index);
 
         if (!rotationEnabled) {
-            return store[address + dim] <= cutValue;
+            return store[address + coord];
         } else {
-            // optimize some day
-            for (int i = 0; i < dimensions; i++) {
-                if ((address + i) % dimensions == dim) {
-                    return store[address + i] <= cutValue;
-                }
-            }
-            return true;
+            int currentColumn = address % dimensions;
+            int offset = (coord - currentColumn + dimensions) % dimensions;
+            int targetIndex = address + offset;
+            return store[targetIndex];
         }
+    }
+
+    @Override
+    public boolean leftOf(int index, float cutValue, int dim) {
+        return valueAt(index, dim) <= cutValue;
     }
 
     public String toString(int index) {

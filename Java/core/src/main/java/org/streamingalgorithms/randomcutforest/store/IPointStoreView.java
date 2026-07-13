@@ -36,6 +36,8 @@ public interface IPointStoreView<Point> {
 
     boolean isEqual(int index, float[] pointScratch);
 
+    float valueAt(int index, int coord);
+
     boolean leftOf(int index, float cutValue, int cutDimension);
 
     float[] getInternalShingle();

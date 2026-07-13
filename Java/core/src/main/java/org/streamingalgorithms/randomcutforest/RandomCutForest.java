@@ -961,9 +961,6 @@ public class RandomCutForest {
      * @return A collection of tree samples
      */
     protected List<ConditionalTreeSample> getConditionalField(float[] point, int[] missingIndexes, double centrality) {
-
-        // missing indexes can be null -- but then getNearNeighborsInSample may be more
-        // efficient
         checkArgument(centrality >= 0, " cannot be negative");
         checkArgument(centrality <= 1, "centrality needs to be in range [0,1]");
         checkArgument(point != null, " cannot be null");
@@ -972,9 +969,7 @@ public class RandomCutForest {
         }
 
         int[] liftedIndices = transformIndices(missingIndexes, point.length);
-        IMultiVisitorFactory<ConditionalTreeSample> visitorFactory = (tree, y) -> new ImputeVisitor(y,
-                tree.projectToTree(y), liftedIndices, tree.projectMissingIndices(liftedIndices), centrality,
-                tree.getRandomSeed());
+        IMultiVisitorFactory<ConditionalTreeSample> visitorFactory = ImputeVisitor.factory(liftedIndices, centrality);
         return traverseForestMulti(transformToShingledPoint(point), visitorFactory, ConditionalTreeSample.collector);
     }
 
@@ -1014,7 +1009,8 @@ public class RandomCutForest {
 
         int[] liftedIndices = transformIndices(missingIndexes, point.length);
         ConditionalSampleSummarizer summarizer = new ConditionalSampleSummarizer(liftedIndices,
-                transformToShingledPoint(point), centrality, project, numberOfRepresentatives, shrinkage, shingleSize);
+                transformToShingledPoint(point), centrality, project, numberOfRepresentatives, shrinkage, shingleSize,
+                stateCoordinator.getStore());
         return summarizer.summarize(getConditionalField(point, missingIndexes, centrality), addtypical);
     }
 

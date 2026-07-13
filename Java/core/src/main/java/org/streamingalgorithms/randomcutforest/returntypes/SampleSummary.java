@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * This file is significantly modified from its original version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -161,11 +177,11 @@ public class SampleSummary {
      * constructs a summary of the weighted points based on the percentile envelopes
      * by picking 1-percentile and percentile fractional rank of the items useful in
      * surfacing a robust range of values
-     * 
+     *
      * @param points     weighted points
      * @param percentile value corresponding to bounds
      */
-    public SampleSummary(List<Weighted<float[]>> points, double percentile) {
+    public SampleSummary(List<Weighted<float[]>> points, double percentile, int a) {
         checkArgument(points.size() > 0, "point list cannot be empty");
         checkArgument(percentile > 0.5, " has to be more than 0.5");
         checkArgument(percentile < 1.0, "has to be less than 1");
@@ -181,11 +197,8 @@ public class SampleSummary {
             checkArgument(weight >= 0, "weights have to be non-negative");
             totalWeight += weight;
             for (int i = 0; i < dimension; i++) {
-                int index = i;
-                checkArgument(!Float.isNaN(e.index[i]),
-                        () -> " improper input, in coordinate " + index + ", must be non-NaN values");
-                checkArgument(Float.isFinite(e.index[i]),
-                        () -> " improper input, in coordinate " + index + ", must be finite values");
+                checkArgument(!Float.isNaN(e.index[i]), " improper input, in coordinate, must be non-NaN values");
+                checkArgument(Float.isFinite(e.index[i]), " improper input, in coordinate, must be finite values");
                 coordinateSum[i] += e.index[i] * weight;
                 coordinateSumSquare[i] += e.index[i] * e.index[i] * weight;
             }
@@ -210,6 +223,250 @@ public class SampleSummary {
             this.lower[i] = prefixPick(list, totalWeight * (1.0 - percentile)).index;
             this.median[i] = prefixPick(list, totalWeight / 2.0).index;
             this.upper[i] = prefixPick(list, totalWeight * percentile).index;
+        }
+    }
+
+    public SampleSummary(List<Weighted<float[]>> points, double percentile, double who) {
+        checkArgument(points.size() > 0, "point list cannot be empty");
+        checkArgument(percentile > 0.5, " has to be more than 0.5");
+        checkArgument(percentile < 1.0, "has to be less than 1");
+
+        final int n = points.size();
+        final int dimension = points.get(0).index.length;
+
+        // --- single pass: weights (dimension-independent) + mean/deviation sums ---
+        // `rows` holds REFERENCES to each point's coord array (n pointers, no float
+        // copy).
+        final float[][] rows = new float[n][];
+        final float[] w = new float[n];
+        final double[] coordinateSum = new double[dimension];
+        final double[] coordinateSumSquare = new double[dimension];
+        double totalWeight = 0;
+        for (int k = 0; k < n; k++) {
+            Weighted<float[]> e = points.get(k);
+            checkArgument(e.index.length == dimension, "points have to be of same length");
+            float weight = e.weight;
+            checkArgument(!Float.isNaN(weight), " weights must be non-NaN values ");
+            checkArgument(Float.isFinite(weight), " weights must be finite ");
+            checkArgument(weight >= 0, "weights have to be non-negative");
+            rows[k] = e.index;
+            w[k] = weight;
+            totalWeight += weight;
+            for (int i = 0; i < dimension; i++) {
+                float v = e.index[i];
+                if (Float.isNaN(v) || !Float.isFinite(v)) {
+                    throw new IllegalArgumentException(" improper input, must be finite, non-NaN values");
+                }
+                coordinateSum[i] += v * weight;
+                coordinateSumSquare[i] += v * v * weight;
+            }
+        }
+        checkArgument(totalWeight > 0, " weights cannot all be 0");
+
+        this.weightOfSamples = totalWeight;
+        this.mean = new float[dimension];
+        this.deviation = new float[dimension];
+        this.median = new float[dimension];
+        this.upper = new float[dimension];
+        this.lower = new float[dimension];
+        for (int i = 0; i < dimension; i++) {
+            this.mean[i] = (float) (coordinateSum[i] / totalWeight);
+            this.deviation[i] = (float) Math.sqrt(max(0.0, coordinateSumSquare[i] / totalWeight - mean[i] * mean[i]));
+        }
+
+        // --- per-dimension weighted quantiles, boxing-free ---
+        final long[] packed = new long[n]; // reused across dimensions
+        final double lowerTarget = totalWeight * (1.0 - percentile);
+        final double medianTarget = totalWeight / 2.0;
+        final double upperTarget = totalWeight * percentile;
+        for (int i = 0; i < dimension; i++) {
+            for (int k = 0; k < n; k++) {
+                // high 32 = order-preserving transform of the coordinate; low 32 = point index
+                packed[k] = ((long) sortableInt(rows[k][i]) << 32) | (k & 0xffffffffL);
+            }
+            Arrays.sort(packed); // signed long sort == ascending float order (stable by index)
+            this.lower[i] = weightedPick(packed, w, n, lowerTarget);
+            this.median[i] = weightedPick(packed, w, n, medianTarget);
+            this.upper[i] = weightedPick(packed, w, n, upperTarget);
+        }
+    }
+
+    // ---- helpers (add as private static members) ----
+
+    private static int sortableInt(float f) {
+        int b = Float.floatToIntBits(f);
+        return b ^ ((b >> 31) & 0x7fffffff);
+    }
+
+    private static float decodeValue(long key) {
+        int sk = (int) (key >> 32);
+        int bits = sk ^ ((sk >> 31) & 0x7fffffff); // inverse of sortableInt
+        return Float.intBitsToFloat(bits);
+    }
+
+    // Weighted prefix quantile over the sorted packed keys.
+
+    private static float weightedPick(long[] sorted, float[] w, int n, double target) {
+        double cum = 0.0;
+        for (int t = 0; t < n; t++) {
+            cum += w[(int) (sorted[t] & 0xffffffffL)];
+            if (cum >= target) { // <-- verify: prefixPick uses >= or > ? and this clamp?
+                return decodeValue(sorted[t]);
+            }
+        }
+        return decodeValue(sorted[n - 1]); // target beyond total weight -> max value
+    }
+
+    public SampleSummary(float[][] coords, float[] weights, double percentile) {
+        checkArgument(coords.length > 0, "point list cannot be empty");
+        checkArgument(coords.length == weights.length, "coords and weights length mismatch");
+        checkArgument(percentile > 0.5, " has to be more than 0.5");
+        checkArgument(percentile < 1.0, "has to be less than 1");
+
+        final int n = coords.length;
+        final int dimension = coords[0].length;
+
+        final double[] coordinateSum = new double[dimension];
+        final double[] coordinateSumSquare = new double[dimension];
+        double totalWeight = 0;
+        for (int k = 0; k < n; k++) {
+            float[] row = coords[k];
+            checkArgument(row.length == dimension, "points have to be of same length");
+            float weight = weights[k];
+            checkArgument(!Float.isNaN(weight), " weights must be non-NaN values ");
+            checkArgument(Float.isFinite(weight), " weights must be finite ");
+            checkArgument(weight >= 0, "weights have to be non-negative");
+            totalWeight += weight;
+            for (int i = 0; i < dimension; i++) {
+                float v = row[i];
+                // plain branch, not checkArgument(cond, () -> ...): the lazy supplier was a
+                // per-coordinate closure alloc (n x dimension per summary).
+                if (Float.isNaN(v) || !Float.isFinite(v)) {
+                    throw new IllegalArgumentException(
+                            " improper input, in coordinate, must be finite, non-NaN values");
+                }
+                coordinateSum[i] += v * weight;
+                coordinateSumSquare[i] += v * v * weight;
+            }
+        }
+        checkArgument(totalWeight > 0, " weights cannot all be 0");
+
+        this.weightOfSamples = totalWeight;
+        this.mean = new float[dimension];
+        this.deviation = new float[dimension];
+        this.median = new float[dimension];
+        this.upper = new float[dimension];
+        this.lower = new float[dimension];
+        for (int i = 0; i < dimension; i++) {
+            this.mean[i] = (float) (coordinateSum[i] / totalWeight);
+            this.deviation[i] = (float) Math.sqrt(max(0.0, coordinateSumSquare[i] / totalWeight - mean[i] * mean[i]));
+        }
+
+        final long[] packed = new long[n]; // reused across dimensions
+        final double lowerTarget = totalWeight * (1.0 - percentile);
+        final double medianTarget = totalWeight / 2.0;
+        final double upperTarget = totalWeight * percentile;
+        for (int i = 0; i < dimension; i++) {
+            for (int k = 0; k < n; k++) {
+                packed[k] = ((long) sortableInt(coords[k][i]) << 32) | (k & 0xffffffffL);
+            }
+            Arrays.sort(packed); // signed long sort == ascending float order (stable by index)
+            this.lower[i] = weightedPick(packed, weights, n, lowerTarget);
+            this.median[i] = weightedPick(packed, weights, n, medianTarget);
+            this.upper[i] = weightedPick(packed, weights, n, upperTarget);
+        }
+    }
+
+    // --- convenience: default percentile ---
+    public SampleSummary(float[][] coords, float[] weights) {
+        this(coords, weights, DEFAULT_PERCENTILE);
+    }
+
+    // --- ADAPTER
+    public SampleSummary(List<Weighted<float[]>> points, double percentile) {
+        this(coordsOf(points), weightsOf(points), percentile);
+    }
+
+    private static float[][] coordsOf(List<Weighted<float[]>> points) {
+        final int n = points.size();
+        final float[][] c = new float[n][];
+        for (int k = 0; k < n; k++) {
+            c[k] = points.get(k).index; // shared by reference (SoA ctor does not retain it)
+        }
+        return c;
+    }
+
+    private static float[] weightsOf(List<Weighted<float[]>> points) {
+        final int n = points.size();
+        final float[] w = new float[n];
+        for (int k = 0; k < n; k++) {
+            w[k] = points.get(k).weight;
+        }
+        return w;
+    }
+
+    public interface CoordReader {
+        int count(); // number of samples
+
+        int dimension(); // number of output coordinates
+
+        float value(int k, int j); // coordinate j of sample k, read on demand
+
+        float weight(int k);
+    }
+
+    public SampleSummary(CoordReader r, double percentile) {
+        final int n = r.count();
+        final int dimension = r.dimension();
+        checkArgument(n > 0, "point list cannot be empty");
+        checkArgument(percentile > 0.5, " has to be more than 0.5");
+        checkArgument(percentile < 1.0, "has to be less than 1");
+
+        final double[] coordinateSum = new double[dimension];
+        final double[] coordinateSumSquare = new double[dimension];
+        double totalWeight = 0;
+        for (int k = 0; k < n; k++) {
+            float weight = r.weight(k);
+            checkArgument(!Float.isNaN(weight) && Float.isFinite(weight) && weight >= 0, "bad weight");
+            totalWeight += weight;
+            for (int i = 0; i < dimension; i++) {
+                float v = r.value(k, i);
+                if (Float.isNaN(v) || !Float.isFinite(v)) {
+                    throw new IllegalArgumentException(" improper input, must be finite, non-NaN values");
+                }
+                coordinateSum[i] += v * weight;
+                coordinateSumSquare[i] += v * v * weight;
+            }
+        }
+        checkArgument(totalWeight > 0, " weights cannot all be 0");
+
+        this.weightOfSamples = totalWeight;
+        this.mean = new float[dimension];
+        this.deviation = new float[dimension];
+        this.median = new float[dimension];
+        this.upper = new float[dimension];
+        this.lower = new float[dimension];
+        for (int i = 0; i < dimension; i++) {
+            this.mean[i] = (float) (coordinateSum[i] / totalWeight);
+            this.deviation[i] = (float) Math.sqrt(max(0.0, coordinateSumSquare[i] / totalWeight - mean[i] * mean[i]));
+        }
+
+        final long[] packed = new long[n];
+        final double lowerTarget = totalWeight * (1.0 - percentile);
+        final double medianTarget = totalWeight / 2.0;
+        final double upperTarget = totalWeight * percentile;
+        final float[] weights = new float[n];
+        for (int k = 0; k < n; k++) {
+            weights[k] = r.weight(k);
+        }
+        for (int i = 0; i < dimension; i++) {
+            for (int k = 0; k < n; k++) {
+                packed[k] = ((long) sortableInt(r.value(k, i)) << 32) | (k & 0xffffffffL);
+            }
+            Arrays.sort(packed);
+            this.lower[i] = weightedPick(packed, weights, n, lowerTarget);
+            this.median[i] = weightedPick(packed, weights, n, medianTarget);
+            this.upper[i] = weightedPick(packed, weights, n, upperTarget);
         }
     }
 

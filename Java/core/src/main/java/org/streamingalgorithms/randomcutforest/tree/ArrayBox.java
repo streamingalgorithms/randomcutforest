@@ -267,7 +267,7 @@ public class ArrayBox implements IBoundingBoxView {
 
         if (fill) {
             double denom = rangeSum + S;
-            if (denom == 0.0) {
+            if (denom == 0.0 || S == 0.0) {
                 Arrays.fill(halfDimensionalContribution, 0f); // all gaps are 0
             } else {
                 double scale = 1.0 / denom;

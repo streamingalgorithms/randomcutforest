@@ -19,10 +19,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
 import java.util.Optional;
 
-import org.streamingalgorithms.randomcutforest.IComponentModel;
-import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
-import org.streamingalgorithms.randomcutforest.IRFVisitor;
-import org.streamingalgorithms.randomcutforest.IVisitorFactory;
+import org.streamingalgorithms.randomcutforest.*;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
@@ -116,6 +113,11 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
     @Override
     public <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView viewTower) {
         return tree.reusableFoldableTraverse(point, resuableVisitor, viewTower);
+    }
+
+    @Override
+    public <R> NodeView reusableTraverseMulti(float[] point, IRFMultiVisitor<R> resuableVisitor, NodeView viewTower) {
+        return tree.reusableTraverseMulti(point, resuableVisitor, viewTower);
     }
 
     @Override

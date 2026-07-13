@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * This file has changed significantly from its original form which carried
+ * this notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -24,6 +40,7 @@ import java.util.List;
 
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -70,8 +87,11 @@ public class ConditionalSampleSummarizer {
 
     protected int shingleSize = 1;
 
+    protected final IPointStoreView<float[]> store;
+    protected final boolean[] isMissing;
+
     public ConditionalSampleSummarizer(int[] missingDimensions, float[] queryPoint, double centrality, boolean project,
-            int numberOfReps, double shrinkage, int shingleSize) {
+            int numberOfReps, double shrinkage, int shingleSize, IPointStoreView<float[]> store) {
         this.missingDimensions = Arrays.copyOf(missingDimensions, missingDimensions.length);
         this.queryPoint = Arrays.copyOf(queryPoint, queryPoint.length);
         this.centrality = centrality;
@@ -79,6 +99,50 @@ public class ConditionalSampleSummarizer {
         this.numberOfReps = numberOfReps;
         this.shrinkage = shrinkage;
         this.shingleSize = shingleSize;
+        this.store = store;
+        this.isMissing = new boolean[queryPoint.length];
+        for (int d : this.missingDimensions) {
+            this.isMissing[d] = true;
+        }
+    }
+
+    private float coord(ConditionalTreeSample e, int i) {
+        if (store == null) {
+            return e.leafPoint[i]; // test/legacy path: sample carries its own coords
+        }
+        return isMissing[i] ? store.valueAt(e.pointStoreIndex, i) : queryPoint[i];
+    }
+
+    // the coordinate indices the summary is computed over (identity / last-block /
+    // projected-to-missing), computed ONCE per summarize call.
+    private int[] outputIndices() {
+        int dimension = queryPoint.length;
+        if (project) {
+            return missingDimensions; // summary over the missing coords only
+        }
+        if (shingleSize == 1) {
+            int[] all = new int[dimension];
+            for (int i = 0; i < dimension; i++) {
+                all[i] = i;
+            }
+            return all;
+        }
+        int block = dimension / shingleSize; // last shingle block
+        int[] tail = new int[block];
+        for (int j = 0; j < block; j++) {
+            tail[j] = dimension - block + j;
+        }
+        return tail;
+    }
+
+    // one sample -> its coordinate row over outIdx, read query-or-store (owned
+    // array).
+    private float[] rowOf(ConditionalTreeSample e, int[] outIdx) {
+        float[] r = new float[outIdx.length];
+        for (int j = 0; j < outIdx.length; j++) {
+            r[j] = coord(e, outIdx[j]);
+        }
+        return r;
     }
 
     public SampleSummary summarize(List<ConditionalTreeSample> alist) {
@@ -87,60 +151,35 @@ public class ConditionalSampleSummarizer {
     }
 
     public SampleSummary summarize(List<ConditionalTreeSample> alist, boolean addTypical) {
-        /**
-         * first we dedup over the points in the pointStore -- it is likely, and
-         * beneficial that different trees acting as different predictors in an ensemble
-         * predict the same point that has been seen before. This would be specially
-         * true if the time decay is large -- then the whole ensemble starts to behave
-         * as a sliding window.
-         *
-         * note that it is possible that two different *points* predict the same missing
-         * value especially when values are repeated in time. however that check of
-         * equality of points would be expensive -- and one mechanism is to use a tree
-         * (much like an RCT) to test for equality. We will try to not perform such a
-         * test.
-         */
-
         double totalWeight = alist.size();
         List<ConditionalTreeSample> newList = ConditionalTreeSample.dedup(alist);
-
         newList.sort((o1, o2) -> Double.compare(o1.distance, o2.distance));
-        int dimensions = queryPoint.length;
+
+        final int[] outIdx = outputIndices();
 
         if (!addTypical) {
-            ArrayList<Weighted<float[]>> points = new ArrayList<>();
-            newList.stream().forEach(e -> {
-                if (!project) {
-                    if (shingleSize == 1) {
-                        points.add(new Weighted<>(e.leafPoint, (float) e.weight));
-                    } else {
-                        float[] values = Arrays.copyOfRange(e.leafPoint, dimensions - dimensions / shingleSize,
-                                dimensions);
-                        points.add(new Weighted<>(values, (float) e.weight));
-                    }
-                } else {
-                    float[] values = new float[missingDimensions.length];
-                    for (int i = 0; i < missingDimensions.length; i++) {
-                        values[i] = e.leafPoint[missingDimensions[i]];
-                    }
-                    points.add(new Weighted<>(values, (float) e.weight));
+            final List<ConditionalTreeSample> samples = newList;
+            final int[] out = outIdx;
+            return new SampleSummary(new SampleSummary.CoordReader() {
+                public int count() {
+                    return samples.size();
                 }
-            });
 
-            return new SampleSummary(points);
+                public int dimension() {
+                    return out.length;
+                }
+
+                public float value(int k, int j) {
+                    return coord(samples.get(k), out[j]); // query-or-store, zero copy
+                }
+
+                public float weight(int k) {
+                    return (float) samples.get(k).weight;
+                }
+            }, SampleSummary.DEFAULT_PERCENTILE);
         }
 
-        /**
-         * for centrality = 0; there will be no filtration for centrality = 1; at least
-         * half the values will be present -- the sum of distance(P33) + distance(P50)
-         * appears to be slightly more reasonable than 2 * distance(P50) the distance 0
-         * elements correspond to exact matches (on the available fields)
-         *
-         * it is an open question is the weight of such points should be higher. But if
-         * one wants true dynamic adaptability then such a choice to increase weights of
-         * exact matches would go against the dynamic sampling based use of RCF.
-         **/
-
+        // ---- centrality filtering: distance/weight only, coordinates untouched ----
         int num = 0;
         if (centrality > 0) {
             double threshold = centrality * newList.get(0).distance + 1e-6;
@@ -163,9 +202,6 @@ public class ConditionalSampleSummarizer {
                 }
                 currentWeight += newList.get(j).weight;
             }
-            // note that the threshold is currently centrality * (some distance in the list)
-            // thus the sequel uses a convex combination; and setting centrality = 0 removes
-            // the entire filtering based on distances
             threshold += (1 - centrality) * newList.get(newList.size() - 1).distance;
             while (num < newList.size() && newList.get(num).distance <= threshold) {
                 ++num;
@@ -174,23 +210,13 @@ public class ConditionalSampleSummarizer {
             num = newList.size();
         }
 
+        // typical points still wrap in Weighted for Summarizer.summarize (clustering).
+        // That Weighted stays until the deferred columnar PR; the rows are now built
+        // from the store (owned arrays), so nothing reads leafPoint here either.
         ArrayList<Weighted<float[]>> typicalPoints = new ArrayList<>();
         for (int j = 0; j < num; j++) {
             ConditionalTreeSample e = newList.get(j);
-            float[] values;
-            if (project) {
-                values = new float[missingDimensions.length];
-                for (int i = 0; i < missingDimensions.length; i++) {
-                    values[i] = e.leafPoint[missingDimensions[i]];
-                }
-            } else {
-                if (shingleSize == 1) {
-                    values = e.leafPoint;
-                } else {
-                    values = Arrays.copyOfRange(e.leafPoint, dimensions - dimensions / shingleSize, dimensions);
-                }
-            }
-            typicalPoints.add(new Weighted<>(values, (float) e.weight));
+            typicalPoints.add(new Weighted<>(rowOf(e, outIdx), (float) e.weight));
         }
         int maxAllowed = min(queryPoint.length * MAX_NUMBER_OF_TYPICAL_PER_DIMENSION, MAX_NUMBER_OF_TYPICAL_ELEMENTS);
         maxAllowed = min(maxAllowed, num);

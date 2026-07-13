@@ -35,7 +35,7 @@ public class ConditionalTreeSample {
      * used to construct the sample Note that the bounding box is in the projective
      * space defined by the tree
      */
-    protected IBoundingBoxView parentOfLeafBox;
+    public IBoundingBoxView parentOfLeafBox;
 
     /**
      * L1 distance of the sampled point (in the projective space of the tree) L1
@@ -70,9 +70,6 @@ public class ConditionalTreeSample {
                 left.addAll(right);
                 return left;
             }, list -> list);
-    // the collector specifically does not try to sort/dedup since we could (and
-    // would) be running the
-    // collector in a parallel mode
 
     public static List<ConditionalTreeSample> dedup(List<ConditionalTreeSample> list) {
         list.sort(Comparator.comparingInt(o -> o.pointStoreIndex));

@@ -54,6 +54,7 @@ import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import lombok.Getter;
 
 /**
  *
@@ -71,15 +72,22 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      */
 
     private Random testRandom;
+    @Getter
     protected boolean storeSequenceIndexesEnabled;
+    @Getter
     protected boolean centerOfMassEnabled;
+    @Getter
     private long randomSeed;
     protected int root;
     protected IPointStoreView<float[]> pointStoreView;
+    @Getter
     protected int numberOfLeaves;
     protected NodeStore nodeStore;
+    @Getter
     protected double boundingBoxCacheFraction;
+    @Getter
     protected int outputAfter;
+    @Getter
     protected int dimension;
     protected final Int2IntOpenHashMap leafMass;
     protected double[] rangeSumData;
@@ -676,12 +684,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     public int getPointIndex(int index) {
-        checkArgument(index >= numberOfLeaves, () -> " does not have a point associated " + index);
+        checkArgument(index >= numberOfLeaves, " does not have a point associated with this index");
         return index - numberOfLeaves;
     }
 
     public int getLeftChild(int index) {
-        checkArgument(isInternal(index), () -> "incorrect call to get left Index " + index);
+        checkArgument(isInternal(index), "incorrect call to get left Index ");
         return nodeStore.getLeftIndex(index);
     }
 
@@ -1086,7 +1094,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         MultiVisitor<R> visitor = visitorFactory.newVisitor(this, point);
         NodeView currentNodeView = new NodeView(this, pointStoreView, root);
         traverseTreeMulti(point, visitor, currentNodeView, root, 0);
-        return visitorFactory.liftResult(this, visitor.getResult());
+        return visitor.getResult(); // liftResult was identity -> gone
+    }
+
+    public <R> NodeView reusableTraverseMulti(float[] point, IRFMultiVisitor<R> v, NodeView view) {
+        v.prepare(this, point);
+        if (view == null)
+            view = new NodeView(this, pointStoreView, root);
+        else
+            view.rearm(this, root);
+        traverseTreeMulti(point, v, view, root, 0);
+        return view; // result pulled off the slot by the caller
     }
 
     protected <R> void traverseTreeMulti(float[] point, MultiVisitor<R> visitor, NodeView currentNodeView, int node,
@@ -1115,41 +1133,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
-    public int getNumberOfLeaves() {
-        return numberOfLeaves;
-    }
-
-    public boolean isCenterOfMassEnabled() {
-        return centerOfMassEnabled;
-    }
-
-    public boolean isStoreSequenceIndexesEnabled() {
-        return storeSequenceIndexesEnabled;
-    }
-
-    public double getBoundingBoxCacheFraction() {
-        return boundingBoxCacheFraction;
-    }
-
-    public int getDimension() {
-        return dimension;
-    }
-
     /**
      *
      * @return the root of the tree
      */
-
     public Integer getRoot() {
         return (int) root;
-    }
-
-    /**
-     * returns the number of samples that needs to be seen before returning
-     * meaningful inference
-     */
-    public int getOutputAfter() {
-        return outputAfter;
     }
 
     @Override
