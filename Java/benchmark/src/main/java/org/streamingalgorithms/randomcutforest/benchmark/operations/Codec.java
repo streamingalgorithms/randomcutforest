@@ -102,8 +102,11 @@ public interface Codec {
  * module already speaks.
  */
 class ProtostuffCodec implements Codec {
-    private final LinkedBuffer buffer = LinkedBuffer.allocate(512);
     private final String name;
+    private LinkedBuffer buffer; // reused; grows to fit so no overflow chaining
+    private int bufferCap;
+    private Schema<?> schema; // one state class per cell; cache the lookup
+    private Class<?> schemaClass;
 
     ProtostuffCodec(String name) {
         this.name = name;
@@ -113,20 +116,43 @@ class ProtostuffCodec implements Codec {
         return name;
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @Override
+    public void init() {
+        bufferCap = 1 << 16; // 64 KiB seed
+        buffer = LinkedBuffer.allocate(bufferCap);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> Schema<T> schemaFor(Class<T> cls) {
+        if (cls != schemaClass) {
+            schema = RuntimeSchema.getSchema(cls);
+            schemaClass = cls;
+        }
+        return (Schema<T>) schema;
+    }
+
+    @SuppressWarnings("unchecked")
     public byte[] encode(Object state) {
-        Schema schema = RuntimeSchema.getSchema(state.getClass());
+        Schema<Object> s = (Schema<Object>) schemaFor(state.getClass());
+        byte[] out;
         try {
-            return ProtostuffIOUtil.toByteArray(state, schema, buffer);
+            out = ProtostuffIOUtil.toByteArray(state, s, buffer);
         } finally {
             buffer.clear();
         }
+        // After warmup the base node covers the payload => zero chain churn.
+        // The only surviving encode allocation is `out` itself, which is real.
+        if (out.length > bufferCap) {
+            bufferCap = Integer.highestOneBit(out.length) << 1; // next pow2 > size
+            buffer = LinkedBuffer.allocate(bufferCap);
+        }
+        return out;
     }
 
     public <S> S decode(byte[] wire, Class<S> type) {
-        Schema<S> schema = RuntimeSchema.getSchema(type);
-        S msg = schema.newMessage();
-        ProtostuffIOUtil.mergeFrom(wire, msg, schema);
+        Schema<S> s = schemaFor(type);
+        S msg = s.newMessage();
+        ProtostuffIOUtil.mergeFrom(wire, msg, s);
         return msg;
     }
 }

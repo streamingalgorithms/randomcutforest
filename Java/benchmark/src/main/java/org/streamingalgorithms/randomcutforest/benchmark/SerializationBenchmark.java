@@ -60,8 +60,8 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
-@Warmup(iterations = 3, time = 2)
-@Measurement(iterations = 5, time = 2)
+@Warmup(iterations = 8, time = 2)
+@Measurement(iterations = 6, time = 2)
 @Fork(value = 1, jvmArgsAppend = { "-Djdk.attach.allowAttachSelf=true", "-Djol.magicFieldOffset=true" })
 @State(Scope.Benchmark)
 public class SerializationBenchmark {

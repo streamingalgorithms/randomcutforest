@@ -15,13 +15,19 @@
 
 package org.streamingalgorithms.randomcutforest.benchmark;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
+import java.text.ParseException;
 
 import org.apache.fory.logging.LoggerFactory;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.Codec;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.Datasets;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.JolBreakdown;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
+
+import jdk.jfr.Configuration;
+import jdk.jfr.Recording;
 
 /**
  * ===========================================================================
@@ -42,9 +48,9 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
  * quantified on demand. The equality ASSERTION belongs in
  * SerializationFidelityTest, not here.
  * ===========================================================================
- * java -Djdk.attach.allowAttachSelf=true -Djol.magicFieldOffset=true \
- * -XX:+EnableDynamicAgentLoading
- * -XX:StartFlightRecording=filename=proc.jfr,settings=profile \ -cp
+ * ts=$(date +%Y%m%d-%H%M%S) java -Djdk.attach.allowAttachSelf=true
+ * -Djol.magicFieldOffset=true \ -XX:+EnableDynamicAgentLoading
+ * -XX:StartFlightRecording=filename=proc-$ts.jfr,settings=profile \ -cp
  * benchmark/target/benchmarks.jar \
  * org.streamingalgorithms.randomcutforest.benchmark.SerializationColdMain
  */
@@ -52,10 +58,16 @@ public final class SerializationColdMain {
 
     private static final double[] CACHE = { 0.0, 0.2, 0.5, 1.0 };
     private static final long SEED = 99L;
-    private static final int TEST = 500; // round-trips per cell (each rebuilds a forest)
-    private static final int WARM = TEST / 2; // steady window = [WARM, TEST)
+    private static final int TEST = 5000; // round-trips per cell (each rebuilds a forest)
+    private static final int WARM = 2000; // steady window = [WARM, TEST)
     private static final boolean MEASURE_FIDELITY = false;
-
+    // single-cell filters, e.g. -Dbench.model=RCF -Dbench.dataset=D2
+    // -Dbench.codec=STATE -Dbench.cache=0.0
+    private static final String ONLY_MODEL = System.getProperty("bench.model");
+    private static final String ONLY_DATASET = System.getProperty("bench.dataset");
+    private static final String ONLY_CODEC = System.getProperty("bench.codec");
+    private static final Double ONLY_CACHE = System.getProperty("bench.cache") == null ? null
+            : Double.valueOf(System.getProperty("bench.cache"));
     private final com.sun.management.ThreadMXBean mem = (com.sun.management.ThreadMXBean) ManagementFactory
             .getThreadMXBean();
     private final long tid = Thread.currentThread().getId();
@@ -68,8 +80,14 @@ public final class SerializationColdMain {
         SerializationColdMain m = new SerializationColdMain();
         LoggerFactory.disableLogging(); // FORY produces a lot of info
         for (Models.Kind kind : Models.Kind.values()) {
+            if (ONLY_MODEL != null && !kind.name().equalsIgnoreCase(ONLY_MODEL))
+                continue;
             for (Datasets.Id dataset : Datasets.Id.values()) {
+                if (ONLY_DATASET != null && !dataset.name().equalsIgnoreCase(ONLY_DATASET))
+                    continue;
                 for (double cache : CACHE) {
+                    if (ONLY_CACHE != null && ONLY_CACHE.doubleValue() != cache)
+                        continue;
                     if (kind == Models.Kind.CASTER && dataset == Datasets.Id.D1) {
                         System.out.printf("%n==== CASTER | D1 : SKIPPED (needs shingleSize>1) ====%n");
                         continue; // skip all four caches at once
@@ -81,12 +99,14 @@ public final class SerializationColdMain {
                     // note model is shared across codecs -- DO NOT MUTATE
                     double forestMb = JolBreakdown.of(kind, p.model).wholeMb;
                     for (Codec.Id id : Codec.Id.values()) {
+                        if (ONLY_CODEC != null && !id.name().equalsIgnoreCase(ONLY_CODEC))
+                            continue;
                         if (id == Codec.Id.REBUILT && kind != Models.Kind.RCF) {
                             continue; // REBUILD is RCF-only
                         }
                         try {
                             m.runCell(kind, dataset, cache, p, forestMb, Codec.of(id));
-                        } catch (RuntimeException e) {
+                        } catch (RuntimeException | IOException | ParseException e) {
                             Throwable root = e;
                             while (root.getCause() != null)
                                 root = root.getCause();
@@ -101,7 +121,7 @@ public final class SerializationColdMain {
     }
 
     private void runCell(Models.Kind kind, Datasets.Id dataset, double cache, Models.Prepared p, double forestMb,
-            Codec codec) {
+            Codec codec) throws IOException, ParseException {
         Class<?> stateClass = Models.stateClass(kind);
         Models.TreeMode tm = codec.treeMode();
         Object snapshotState = Models.toState(kind, p.model, tm);
@@ -113,7 +133,26 @@ public final class SerializationColdMain {
         long coldRoundTripNs = 0;
         long size = 0;
         long clock = p.clock0;
+        long sink;
+        for (int j = 0; j < WARM; j++) {
+            Object state = control ? snapshotState : codec.decode(wire, stateClass);
+            Object m = Models.toModel(kind, state, tm);
+            Object s2 = Models.toState(kind, m, tm);
+            long acc = m.hashCode() ^ s2.hashCode();
+            if (!control) {
+                acc ^= codec.encode(s2).length;
+            }
+            if (acc == 0x7FFFFFFFFFFFFFFFL)
+                System.out.print(""); // opaque, actually reachable
+        }
 
+        if (control && codec.probesSize()) {
+            size = GraphLayout(snapshotState); // before recording, before the loop
+        }
+
+        Recording rec = new Recording(Configuration.getConfiguration("profile"));
+        rec.setDestination(Path.of("loop-" + kind + "-" + dataset + "-" + codec.name() + ".jfr"));
+        rec.start();
         for (int j = 0; j < TEST; j++) {
             long rt0 = System.nanoTime();
 
@@ -127,10 +166,10 @@ public final class SerializationColdMain {
                 state = codec.decode(wire, stateClass);
                 long t1 = System.nanoTime();
                 long b1 = mem.getThreadAllocatedBytes(tid);
-                if (j >= WARM) {
-                    decodeNs += t1 - t0;
-                    decodeB += b1 - b0;
-                }
+
+                decodeNs += t1 - t0;
+                decodeB += b1 - b0;
+
             }
 
             // --- toModel ---
@@ -139,10 +178,9 @@ public final class SerializationColdMain {
             Object model = Models.toModel(kind, state, tm);
             long mt1 = System.nanoTime();
             long mb1 = mem.getThreadAllocatedBytes(tid);
-            if (j >= WARM) {
-                toModelNs += mt1 - mt0;
-                toModelB += mb1 - mb0;
-            }
+
+            toModelNs += mt1 - mt0;
+            toModelB += mb1 - mb0;
 
             // --- fidelity (own bucket, never summed elsewhere; off by default) ---
             if (MEASURE_FIDELITY) {
@@ -160,10 +198,9 @@ public final class SerializationColdMain {
             Object state2 = Models.toState(kind, model, tm);
             long st1 = System.nanoTime();
             long sb1 = mem.getThreadAllocatedBytes(tid);
-            if (j >= WARM) {
-                toStateNs += st1 - st0;
-                toStateB += sb1 - sb0;
-            }
+
+            toStateNs += st1 - st0;
+            toStateB += sb1 - sb0;
 
             // --- encode ---
             if (!control) {
@@ -173,20 +210,19 @@ public final class SerializationColdMain {
                 long et1 = System.nanoTime();
                 long eb1 = mem.getThreadAllocatedBytes(tid);
                 size = w.length;
-                if (j >= WARM) {
-                    encodeNs += et1 - et0;
-                    encodeB += eb1 - eb0;
-                }
-            } else if (codec.probesSize() && j == 0) {
-                size = GraphLayout(snapshotState); // STATE control: retained state size, informational
+
+                encodeNs += et1 - et0;
+                encodeB += eb1 - eb0;
+
             }
 
             if (j == 0) {
                 coldRoundTripNs = System.nanoTime() - rt0; // the cold first round-trip
             }
         }
-
-        long n = TEST - WARM;
+        rec.stop();
+        rec.close();
+        long n = TEST;
         double codecUs = (decodeNs + encodeNs) / 1e3 / n;
         double codecKb = (decodeB + encodeB) / 1024.0 / n;
         String fid = MEASURE_FIDELITY ? String.format(" | fid %6.1f us", fidelityNs / 1e3 / n) : "";
