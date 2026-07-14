@@ -21,6 +21,7 @@ import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.Scor
 import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
 import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 
 /**
@@ -71,13 +72,15 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
+        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
     }
 
     // reusable path only: allocates pointToScore directly (no copy).
     // prepare(tree, point) fills mass + projection before the first read.
     protected AbstractScoringVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
             ScoreFn scoreUnseenFn, DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
-        this.pointToScore = new float[dimension]; // ← the only line that differs
+        this.pointToScore = new float[dimension];
+        this.expandedPoint = new float[2 * dimension];
         this.treeMass = treeMass;
         this.ignoreLeaf = ignoreLeafMassThreshold > DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
         this.ignoreLeafMassThreshold = ignoreLeafMassThreshold;
@@ -122,7 +125,10 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
         double probabilityOfSeparation;
         if (!(hitDuplicates || ignoreLeaf)) {
-            probabilityOfSeparation = node.probabilityOfSeparation(pointToScore, contributionTarget());
+            probabilityOfSeparation = node.probabilityOfSeparationSimd(expandedPoint, contributionTarget());
+
+            // probabilityOfSeparation = node.probabilityOfSeparation(pointToScore,
+            // contributionTarget());
             if (probabilityOfSeparation <= 0) {
                 // point inside this node's box: nothing above can change the result
                 pointInsideBox = true;
@@ -148,6 +154,7 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
         } else {
             shadowBox.addBox(sib); // grow in place, no allocation
         }
-        return shadowBox.probabilityOfCut(pointToScore, contributionTarget());
+        return shadowBox.probabilityOfCutSimd(expandedPoint, contributionTarget());
+        // return shadowBox.probabilityOfCut(pointToScore, contributionTarget());
     }
 }

@@ -42,6 +42,7 @@ import org.streamingalgorithms.randomcutforest.IRFMultiVisitor;
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 
@@ -60,7 +61,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
 
     protected final boolean[] missing;
     protected float[] queryPoint;
-    /** pristine (post-projection) query, for per-tree restore under reuse. */
+    protected float[] expandedPoint;
     protected final float[] queryPointOriginal;
     protected double anomalyRank;
     protected double distance;
@@ -79,6 +80,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
         checkArgument(centrality <= 1.0, " cannot be more than 1.0");
         this.queryPoint = Arrays.copyOf(queryPoint, queryPoint.length);
         this.queryPointOriginal = Arrays.copyOf(queryPoint, queryPoint.length);
+        this.expandedPoint = ArrayBoxSimd.expand(queryPoint); // allocation
         this.missing = new boolean[queryPoint.length];
         this.centrality = centrality;
         this.randomSeed = randomSeed;

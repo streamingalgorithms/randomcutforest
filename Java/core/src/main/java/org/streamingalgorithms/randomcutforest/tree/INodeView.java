@@ -58,6 +58,8 @@ public interface INodeView {
     // values
     double probabilityOfSeparation(float[] point, float[] components);
 
+    double probabilityOfSeparationSimd(float[] point, float[] components);
+
     /**
      * for a leaf node, return the index in the point store for the leaf point. If
      * this method is invoked on a non-leaf node then it throws an

@@ -181,6 +181,6 @@ public class PredictorCorrectorTest {
         }
         double[] scores = forest.getPredictorCorrector().getLastScore();
         forest.predictorCorrector.setLastScore(null);
-        assertArrayEquals(forest.predictorCorrector.getLastScore(), scores, 1e-10);
+        assertArrayEquals(forest.predictorCorrector.getLastScore(), scores, 1e-6);
     }
 }

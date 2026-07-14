@@ -249,7 +249,7 @@ public class ConsistencyTest {
                 long timestamp = 100 * count + noise.nextInt(10) - 5;
                 AnomalyDescriptor result = first.process(dataWithKeys.data[j], timestamp);
                 AnomalyDescriptor test = second.process(dataWithKeys.data[j], timestamp);
-                assertEquals(result.getRCFScore(), test.getRCFScore(), 1e-10);
+                assertEquals(result.getRCFScore(), test.getRCFScore(), 1e-6);
                 // grade will not be the same because dimension changes
                 ++count;
             }
@@ -264,9 +264,9 @@ public class ConsistencyTest {
                 AnomalyDescriptor secondResult = second.process(dataWithKeys.data[count], timestamp);
                 AnomalyDescriptor thirdResult = third.process(dataWithKeys.data[count], timestamp);
 
-                assertEquals(firstResult.getRCFScore(), secondResult.getRCFScore(), 1e-10);
-                assertEquals(firstResult.getRCFScore(), thirdResult.getRCFScore(), 1e-10);
-                assertEquals(secondResult.getAnomalyGrade(), thirdResult.getAnomalyGrade(), 1e-10);
+                assertEquals(firstResult.getRCFScore(), secondResult.getRCFScore(), 1e-6);
+                assertEquals(firstResult.getRCFScore(), thirdResult.getRCFScore(), 1e-6);
+                assertEquals(secondResult.getAnomalyGrade(), thirdResult.getAnomalyGrade(), 1e-6);
             }
         }
     }

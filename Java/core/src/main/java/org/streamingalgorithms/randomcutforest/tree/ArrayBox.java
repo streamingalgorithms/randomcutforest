@@ -404,4 +404,9 @@ public class ArrayBox implements IBoundingBoxView {
         this.dimensions = dimensions;
     }
 
+    // ArrayBox:
+    public double probabilityOfCutSimd(float[] expandedPoint, float[] components) {
+        return ArrayBoxSimd.gapAttribution(values, offset, dimensions, rangeSum, expandedPoint, 0, components);
+    }
+
 }

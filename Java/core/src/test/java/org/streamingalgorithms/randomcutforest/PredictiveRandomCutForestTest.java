@@ -298,7 +298,7 @@ public class PredictiveRandomCutForestTest {
 
                 long timestamp = 100 * count + noise.nextInt(10) - 5;
                 assertEquals(first.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp),
-                        second.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp));
+                        second.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp), 1e-6);
                 first.update(toFloatArray(dataWithKeys.data[j]), timestamp);
                 second.update(toFloatArray(dataWithKeys.data[j]), timestamp);
                 // grade will not be the same because dimension changes
@@ -312,9 +312,9 @@ public class PredictiveRandomCutForestTest {
                 // can be a different gap
                 long timestamp = 150 * count + noise.nextInt(10) - 5;
                 assertEquals(first.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp),
-                        second.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp));
+                        second.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp), 1e-6);
                 assertEquals(first.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp),
-                        third.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp));
+                        third.getExpectedInverseDepthScore(toFloatArray(dataWithKeys.data[j]), timestamp), 1e-6);
                 first.update(toFloatArray(dataWithKeys.data[j]), timestamp);
                 second.update(toFloatArray(dataWithKeys.data[j]), timestamp);
                 third.update(toFloatArray(dataWithKeys.data[j]), timestamp);

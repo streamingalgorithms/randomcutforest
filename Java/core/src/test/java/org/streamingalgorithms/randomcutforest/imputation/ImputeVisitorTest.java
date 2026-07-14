@@ -123,6 +123,11 @@ public class ImputeVisitorTest {
         public double probabilityOfSeparation(float[] point, float[] components) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public double probabilityOfSeparationSimd(float[] point, float[] components) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private FakeNode leaf(float[] point, int index, int mass) {

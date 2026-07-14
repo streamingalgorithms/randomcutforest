@@ -25,6 +25,7 @@ import org.streamingalgorithms.randomcutforest.IRFVisitor;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 
@@ -64,6 +65,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
+        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
     }
 
     public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
@@ -102,11 +104,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             pointInsideBox = true;
         } else {
             double newScore = scoreUnseenFn.of(depth, mass);
-            // probabilityComponents already sum to prob (normalized in gapAttribution).
-            for (int i = 0; i < directionalAttribution.length; i++) {
-                directionalAttribution[i] = probabilityComponents[i] * newScore
-                        + (1 - prob) * directionalAttribution[i];
-            }
+            ArrayBoxSimd.updateRecurrence(directionalAttribution, probabilityComponents, newScore, 1 - prob);
         }
     }
 

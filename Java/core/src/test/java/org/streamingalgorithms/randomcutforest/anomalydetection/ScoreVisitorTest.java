@@ -167,9 +167,8 @@ public class ScoreVisitorTest {
         int parentMass = 5;
         when(parent.getMass()).thenReturn(parentMass);
         ArrayBox parentBox = new ArrayBox(otherPoint, new float[] { 2.0f, 0.0f });
-        when(parent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
-
+        when(parent.probabilityOfSeparationSimd(any(), any()))
+                .thenAnswer(inv -> parentBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
         visitor.accept(parent, depth);
         double p = parentBox.probabilityOfCut(pointToScore, null);
         double nodeScore = CommonUtils.defaultScoreUnseenFunction(depth, parentMass);
@@ -184,8 +183,8 @@ public class ScoreVisitorTest {
                 .getMergedBox(new ArrayBox(new float[] { -1.0f, -1.0f }).getMergedBox(new float[] { -1.0f, 0.0f }));
         INodeView grandParent = mock(NodeView.class);
         when(grandParent.getMass()).thenReturn(parentMass + 2);
-        when(grandParent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> containingBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+        when(grandParent.probabilityOfSeparationSimd(any(), any()))
+                .thenAnswer(inv -> containingBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(grandParent, depth);
         assertTrue(visitor.isConverged());

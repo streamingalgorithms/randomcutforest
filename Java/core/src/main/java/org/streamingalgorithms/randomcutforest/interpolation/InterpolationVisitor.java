@@ -23,10 +23,7 @@ import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.*;
 
 /**
  * ArrayBox / two-pass port of {@code SimpleInterpolationVisitor}, kept side by
@@ -98,7 +95,8 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     InterpolationVisitor(int dimension, double pointMass, boolean centerOfMass) {
         this.pointMass = pointMass;
         this.centerOfMass = centerOfMass;
-        this.pointToScore = new float[dimension]; // RFVisitor field, no copy
+        this.pointToScore = new float[dimension];
+        this.expandedPoint = new float[2 * dimension];
         this.stored = new DensityOutput(dimension, 0); // sampleSize slot set per-tree in foldOut
         this.folded = new DensityOutput(dimension, 0); // accumulates sampleSize via addToLeft
         this.leafBox = new ArrayBox(dimension);
@@ -110,6 +108,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     public InterpolationVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass) {
         this(pointToScore.length, pointMass, centerOfMass);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
+        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
         this.treeMass = treeMass;
     }
 

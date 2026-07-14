@@ -186,8 +186,8 @@ public class AnomalyAttributionVisitorTest {
         int parentMass = leafMass + 2; // sibling mass = 2
         when(parent.getMass()).thenReturn(parentMass);
         ArrayBox parentBox = new ArrayBox(point, new float[] { 2.0f, -0.5f });
-        when(parent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+        when(parent.probabilityOfSeparationSimd(any(), any()))
+                .thenAnswer(inv -> parentBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(parent, depth);
         result = visitor.observeResult();
@@ -223,8 +223,8 @@ public class AnomalyAttributionVisitorTest {
         when(grandParent.getMass()).thenReturn(parentMass + 2);
         ArrayBox grandParentBox = parentBox
                 .getMergedBox(new ArrayBox(new float[] { -1.0f, 1.0f }).getMergedBox(new float[] { -0.5f, -1.5f }));
-        when(grandParent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> grandParentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+        when(grandParent.probabilityOfSeparationSimd(any(), any()))
+                .thenAnswer(inv -> grandParentBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(grandParent, depth);
         assertTrue(visitor.isConverged()); // NOW it converged — the containment short-circuit fired

@@ -16,12 +16,14 @@
 package org.streamingalgorithms.randomcutforest;
 
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 import lombok.Getter;
 
 public abstract class RFVisitor<R> implements IRFVisitor<R> {
     protected float[] pointToScore;
+    protected float[] expandedPoint; // [p, -p], length 2*dim
     protected int treeMass; // the tree-bound scalar; sampleSize at full
     @Getter
     protected boolean pointInsideBox;
@@ -31,9 +33,12 @@ public abstract class RFVisitor<R> implements IRFVisitor<R> {
     @Override
     public final void prepare(ITree<?, ?> tree, float[] rawPoint) {
         float[] p = tree.projectToTree(rawPoint);
-        if (p != pointToScore)
+        if (p != pointToScore) {
             System.arraycopy(p, 0, pointToScore, 0, pointToScore.length);
+            ArrayBoxSimd.expandInto(pointToScore, expandedPoint);
+        }
         this.treeMass = tree.getMass();
+
         reset();
     }
 

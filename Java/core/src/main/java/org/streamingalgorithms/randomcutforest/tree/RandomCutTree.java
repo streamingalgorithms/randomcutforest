@@ -879,6 +879,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
+    public double probabilityOfCutSimd(int node, float[] expandedPoint, ArrayBox otherBox, float[] components) {
+        int nodeIdx = translate(node);
+        if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
+            int base = 2 * nodeIdx * dimension; // <-- THE surface: flat float slice
+            return ArrayBoxSimd.gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint,
+                    0, components);
+        } else if (otherBox != null) { // cold: pathBox sentinel
+            return otherBox.probabilityOfCutSimd(expandedPoint, components);
+        } else { // fallback: reconstruct (allocates, as today)
+            return getArrayBox(node).probabilityOfCutSimd(expandedPoint, components);
+        }
+    }
+
     /// additional information at nodes
 
     public float[] getPointSum(int index) {

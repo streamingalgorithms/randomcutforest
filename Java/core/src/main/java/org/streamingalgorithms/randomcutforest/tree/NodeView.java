@@ -113,6 +113,11 @@ public class NodeView implements INodeView {
     }
 
     @Override
+    public double probabilityOfSeparationSimd(float[] expandedPoint, float[] components) {
+        return tree.probabilityOfCutSimd(currentNodeOffset, expandedPoint, currentBox, components);
+    }
+
+    @Override
     public double probabilityOfSeparation(float[] point, float[] components) {
         return tree.probabilityOfCut(currentNodeOffset, point, currentBox, components);
     }
