@@ -33,7 +33,12 @@ public interface IVisitorFactory<R> {
         return false;
     }
 
+    default boolean isReusableAcrossQueries() {
+        return false;
+    }
+
     default IRFVisitor<R> newReusableVisitor(float[] point) {
         throw new UnsupportedOperationException("not a reusable factory");
     }
+
 }

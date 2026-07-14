@@ -144,17 +144,6 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
     protected final double acceptShadowBox(INodeView node) {
         ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox(pointToScore);
-        if (shadowBoxActive == false) {
-            if (shadowBox == null) {
-                shadowBox = sib.copy(); // one-time allocation of the visitor's own reused box
-            } else {
-                shadowBox.copyFrom(sib);
-            }
-            shadowBoxActive = true;
-        } else {
-            shadowBox.addBox(sib); // grow in place, no allocation
-        }
-        return shadowBox.probabilityOfCutSimd(expandedPoint, contributionTarget());
-        // return shadowBox.probabilityOfCut(pointToScore, contributionTarget());
+        return growShadow(sib).probabilityOfCutSimd(expandedPoint, contributionTarget());
     }
 }

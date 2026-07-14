@@ -48,16 +48,21 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
 
     private <R, S> S foldForest(float[] point, IVisitorFactory<R> vf, ConvergingAccumulator<R> conv,
             Function<R, S> finisher) {
+        /// slotFor(vf, point) can be used someday.
         IRFVisitor<R> slot = vf.newReusableVisitor(point);
-        NodeView viewTower = null; // a viewing structure (not the view); trees arm the view
-        for (ITraversable c : components) {
-            viewTower = c.reusableFoldableTraverse(point, slot, viewTower); // arms + walks; per-tree buffer full
-            if (conv != null) {
-                conv.acceptValue(slot.convergingValue()); // probe FIRST (before foldOut may scale buffer)
+        NodeView viewTower = null;
+        if (conv == null) { // EXACT-foldable spine
+            for (ITraversable c : components) {
+                viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+                slot.foldOut();
             }
-            slot.foldOut(); // fold into the visitor's own accumulator
-            if (conv != null && conv.isConverged()) {
-                break;
+        } else { // APPROX spine
+            for (ITraversable c : components) {
+                viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+                conv.acceptValue(slot.convergingValue());
+                slot.foldOut();
+                if (conv.isConverged())
+                    break;
             }
         }
         return finisher.apply(vf.liftResult(null, slot.getFoldResult()));
@@ -156,5 +161,22 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
             acc.accept(container, slot.getResult()); // detached per-tree sample; no lift, no sink
         }
         return collector.finisher().apply(container);
+    }
+
+    // SequentialForestTraversalExecutor — cache the reusable slot across queries.
+    // Safe ONLY here: sequential executor is single-threaded per instance;
+    // the parallel executor keeps its own copy-per-tree path untouched.
+    private IRFVisitor<?> cachedSlot;
+    private IVisitorFactory<?> cachedFor;
+
+    @SuppressWarnings("unchecked")
+    private <R> IRFVisitor<R> slotFor(IVisitorFactory<R> vf, float[] point) {
+        if (cachedFor != vf) { // factory identity changed → rebuild once
+            cachedSlot = vf.newReusableVisitor(point);
+            cachedFor = vf;
+        } else {
+            ((IRFVisitor<R>) cachedSlot).resetAcrossQueries(point); // re-arm existing arrays
+        }
+        return (IRFVisitor<R>) cachedSlot;
     }
 }

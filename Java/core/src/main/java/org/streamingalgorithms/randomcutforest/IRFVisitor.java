@@ -40,4 +40,7 @@ public interface IRFVisitor<R> extends Visitor<R> {
         throw new UnsupportedOperationException("not foldable");
     }
 
+    default void resetAcrossQueries(float[] point) {
+        throw new UnsupportedOperationException("not reusable yet");
+    }
 }

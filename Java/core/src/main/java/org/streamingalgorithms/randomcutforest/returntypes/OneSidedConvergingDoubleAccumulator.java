@@ -65,4 +65,14 @@ public class OneSidedConvergingDoubleAccumulator extends OneSidedStDevAccumulato
     protected void accumulateValue(Double result) {
         accumulatedValue += result;
     }
+
+    @Override
+    public boolean isPrimitive() {
+        return true;
+    }
+
+    @Override
+    public void acceptValue(double convergingValue) {
+        super.acceptValue(convergingValue); // the stdev/witness bookkeeping, no boxing
+    }
 }

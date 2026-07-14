@@ -937,7 +937,7 @@ public class RandomCutForest {
             return new DensityOutput(dimensions, sampleSize);
         }
 
-        Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scale(1.0 / numberOfTrees);
+        Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
 
         return new DensityOutput(traverseForest(transformToShingledPoint(point),
                 InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled), InterpolationMeasure::addToLeft,
@@ -1663,7 +1663,7 @@ public class RandomCutForest {
         ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,
                 highIsCritical, precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
 
-        Function<DiVector, DiVector> finisher = vector -> vector.scale(1.0 / accumulator.getValuesAccepted());
+        Function<DiVector, DiVector> finisher = vector -> vector.scaleInPlace(1.0 / accumulator.getValuesAccepted());
 
         return traverseForest(transformToShingledPoint(point), visitorFactory, accumulator, finisher);
     }

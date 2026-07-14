@@ -15,8 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
-import static java.lang.Math.max;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
+import static org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd.multiply;
 
 import java.util.Arrays;
 
@@ -130,20 +130,16 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             // no better option than an equal attribution
             Arrays.fill(directionalAttribution, savedScore / (2 * pointToScore.length));
         } else {
-            double sum = 0;
-            for (int i = 0; i < dimension; i++) {
-                float y = pointToScore[i] - leafPoint[i];
-                float y1 = max(0, y);
-                float y2 = max(0, -y);
-                probabilityComponents[i] = y1;
-                probabilityComponents[i + dimension] = y2;
-                sum += y1 + (double) y2;
-            }
-            double factor = (sum == 0) ? 0 : 1.0 / sum;
-            for (int i = 0; i < probabilityComponents.length; i++) {
-                probabilityComponents[i] *= factor;
-                directionalAttribution[i] = savedScore * probabilityComponents[i];
-            }
+            // AttributionVisitor, else-branch — replaces the whole scalar loop + normalize
+            // loop:
+            double sum = ArrayBoxSimd.signedGapInto(expandedPoint, 0, +1f, leafPoint, 0, probabilityComponents, 0,
+                    dimension)
+                    + ArrayBoxSimd.signedGapInto(expandedPoint, dimension, -1f, leafPoint, 0, probabilityComponents,
+                            dimension, dimension);
+            double factor = (sum == 0) ? 0.0 : savedScore / sum;
+            for (int i = 0; i < directionalAttribution.length; i++)
+                directionalAttribution[i] = probabilityComponents[i];
+            multiply(directionalAttribution, factor);
         }
     }
 
@@ -151,11 +147,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         double factor = normalizer.scale(treeMass);
         if (savedScore > 0) {
             if (hitDuplicates || ignoreLeaf) {
-                double sum = 0;
-                for (int i = 0; i < directionalAttribution.length; i++) {
-                    sum += directionalAttribution[i];
-                }
-                factor *= savedScore / sum;
+                factor *= savedScore / ArrayBoxSimd.sum(directionalAttribution);
             }
         } else {
             factor = 0;
@@ -176,11 +168,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     @Override
     public double convergingValue() {
         double factor = idempotentRefactor();
-        double sum = 0.0;
-        for (int i = 0; i < directionalAttribution.length; i++) {
-            sum += directionalAttribution[i];
-        }
-        return sum * factor; // == foldContribution().getHighLowSum(), no DiVector allocated
+        return sum(directionalAttribution) * factor;
     }
 
     @Override
@@ -191,7 +179,8 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         // foldedAttribution deliberately NOT cleared — it accumulates across trees
     }
 
-    public DiVector observeResult() {
+    // following is for testing
+    protected DiVector observeResult() {
         double factor = idempotentRefactor();
         double[] out = Arrays.copyOf(directionalAttribution, directionalAttribution.length);
         for (int i = 0; i < out.length; i++) {
@@ -202,9 +191,8 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
 
     // after each tree: scale this tree's result, add into the running sum
     public void foldOut() {
-        double factor = idempotentRefactor(); // getResult's factor math, extracted, non-mutating read
-        for (int i = 0; i < directionalAttribution.length; i++)
-            foldedAttribution[i] += directionalAttribution[i] * factor; // read dir, write folded
+        double factor = idempotentRefactor();
+        ArrayBoxSimd.axpyInto(foldedAttribution, directionalAttribution, factor);
     }
 
     public static IVisitorFactory<DiVector> reusableFactory(int ignoreLeafMassThreshold,
@@ -235,6 +223,13 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
                         scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
             }
         };
+    }
+
+    public static double sum(double[] a) {
+        double s = 0.0;
+        for (int i = 0; i < a.length; i++)
+            s += a[i];
+        return s;
     }
 
 }

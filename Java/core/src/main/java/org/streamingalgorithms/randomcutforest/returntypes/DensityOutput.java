@@ -44,7 +44,7 @@ public class DensityOutput extends InterpolationMeasure {
      * @param base An InterpolationMeasure instance that we want to copy.
      */
     public DensityOutput(InterpolationMeasure base) {
-        super(base);
+        super(base, true);
     }
 
     /**

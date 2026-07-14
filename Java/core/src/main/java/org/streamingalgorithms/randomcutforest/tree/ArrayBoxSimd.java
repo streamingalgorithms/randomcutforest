@@ -24,25 +24,12 @@ import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 
-/**
- * SIMD kernels for ArrayBox + the AttributionVisitor accumulators.
- *
- * PRECISION POLICY: - gaps = max(0, nv - v) -> float (independent per-coord
- * rounding = noise) - S = sum of gaps -> DOUBLE ACROSS CHUNKS: per-chunk float
- * horizontal reduceLanes (less or equal LANES terms) promoted to double,
- * accumulated in double. ~1e-6 relative -- already below the noise floor; the
- * full F2D-widen double accumulation (see JDK25+ block) cost 2x on JDK 21 for
- * ~1e-8 you cannot use. Revisit on JDK 25 where F2D widening intrinsifies. -
- * scale = 1/denom -> float broadcast. Shared ~0.5ulp factor: perturbs magnitude
- * by ~6e-8, leaves all ratios (the directional info) exact.
- */
 public final class ArrayBoxSimd {
 
     private static final VectorSpecies<Float> SP = FloatVector.SPECIES_PREFERRED;
     private static final VectorSpecies<Double> DP = DoubleVector.SPECIES_PREFERRED;
     private static final int LANES = SP.length();
     private static final int F_PARTS = SP.length() / DP.length(); // = 2 on NEON/AVX2/AVX-512
-    static final int SIMD_MIN_SLICE = 2 * LANES;
 
     private ArrayBoxSimd() {
     }
@@ -92,33 +79,9 @@ public final class ArrayBoxSimd {
         return probability;
     }
 
-    /*
-     * ==== JDK 25+ VARIANT: full double accumulation of S ====================
-     * Retest on JDK 25 where convertShape(F2D) intrinsifies to fcvtl/fcvtl2. On JDK
-     * 21 this scalarized the widen and ran ~2x slower for ~1e-8 you don't need.
-     * Swap the reduction loop above for:
-     * 
-     * DoubleVector sAcc = DoubleVector.zero(DP); for (; i < bound; i += LANES) {
-     * FloatVector gap = FloatVector.fromArray(SP, newValues, nvOffset + i)
-     * .sub(FloatVector.fromArray(SP, values, offset + i)) .max(ZERO); if (fill)
-     * gap.intoArray(contrib, i); for (int part = 0; part < F_PARTS; part++) sAcc =
-     * sAcc.add((DoubleVector) gap.convertShape(VectorOperators.F2D, DP, part)); }
-     * double S = sAcc.reduceLanes(VectorOperators.ADD); // + scalar tail
-     * =======================================================================
-     */
-
     // ---- box U= box (whole slice, single lanewise max; float reduction) -
     public static double addSlice(float[] values, int offset, int dimensions, float[] other, int otherOffset) {
         final int n = 2 * dimensions;
-        if (n < SIMD_MIN_SLICE) {
-            double s = 0.0;
-            for (int k = 0; k < n; k++) {
-                float mx = max(values[offset + k], other[otherOffset + k]);
-                values[offset + k] = mx;
-                s += mx;
-            }
-            return s;
-        }
         double sum = 0.0;
         int i = 0;
         final int bound = SP.loopBound(n);
@@ -174,7 +137,7 @@ public final class ArrayBoxSimd {
      * slow on JDK 21. Microbench this in isolation before wiring; on 21 it may be a
      * wash, on 25 a win.
      */
-    public static void updateRecurrence(double[] dir, float[] comp, double a, double decay) {
+    public static void updateRecurrenceA(double[] dir, float[] comp, double a, double decay) {
         final int n = dir.length;
         final DoubleVector va = DoubleVector.broadcast(DP, a);
         final DoubleVector vd = DoubleVector.broadcast(DP, decay);
@@ -191,6 +154,23 @@ public final class ArrayBoxSimd {
         }
         for (; i < n; i++)
             dir[i] = comp[i] * a + decay * dir[i];
+    }
+
+    public static void multiply(double[] dir, double decay) {
+        final int n = dir.length;
+        final DoubleVector vd = DoubleVector.broadcast(DP, decay);
+        int i = 0;
+        for (; i < DP.loopBound(n); i += DP.length())
+            DoubleVector.fromArray(DP, dir, i).mul(vd).intoArray(dir, i);
+        for (; i < n; i++)
+            dir[i] = decay * dir[i];
+    }
+
+    public static void updateRecurrence(double[] dir, float[] comp, double a, double decay) {
+        final int n = dir.length;
+        multiply(dir, decay);
+        for (int i = 0; i < n; i++)
+            dir[i] = Math.fma(comp[i], a, dir[i]);
     }
 
     /**
@@ -217,7 +197,7 @@ public final class ArrayBoxSimd {
      * PER-TREE sum reduction (idempotentRefactor / convergingValue). Same
      * autovectorize caveat.
      */
-    public static double sum(double[] a) {
+    public static double sumvec(double[] a) {
         final int n = a.length;
         DoubleVector acc = DoubleVector.zero(DP);
         int i = 0;
@@ -229,4 +209,108 @@ public final class ArrayBoxSimd {
             s += a[i];
         return s;
     }
+
+    public static double sum(double[] a) {
+        double s = 0;
+        for (int i = 0; i < a.length; i++)
+            s += a[i];
+        return s;
+    }
+
+    /**
+     * dst[dstOff+i] = max(0, exp[expOff+i] - sign*pt[ptOff+i]); returns Σ over the
+     * half. exp = canonical [p,-p] (read-only); pt = RAW point, length dim. Two
+     * calls do the leaf: high: (exp,0, +1f, pt,0, dst,0, dim) -> max(0, p - pt) low
+     * : (exp,dim, -1f, pt,0, dst,dim, dim) -> max(0, pt - p) No leaf box, no copy
+     * of exp.
+     */
+    public static double signedGapInto(float[] exp, int expOff, float sign, float[] pt, int ptOff, float[] dst,
+            int dstOff, int dim) {
+        final FloatVector ZERO = FloatVector.zero(SP), vs = FloatVector.broadcast(SP, sign);
+        double s = 0.0;
+        int i = 0;
+        final int bound = SP.loopBound(dim);
+        for (; i < bound; i += LANES) {
+            FloatVector g = FloatVector.fromArray(SP, exp, expOff + i)
+                    .sub(FloatVector.fromArray(SP, pt, ptOff + i).mul(vs)).max(ZERO);
+            g.intoArray(dst, dstOff + i);
+            s += (double) g.reduceLanes(VectorOperators.ADD);
+        }
+        for (; i < dim; i++) {
+            float g = max(0f, exp[expOff + i] - sign * pt[ptOff + i]);
+            dst[dstOff + i] = g;
+            s += g;
+        }
+        return s;
+    }
+
+    /** shadow path: raw box-vs-box gap dst = max(0, nv - v); returns sum. */
+    public static double gapInto(float[] nv, int nvOff, float[] v, int vOff, float[] dst, int dstOff, int n) {
+        final FloatVector ZERO = FloatVector.zero(SP);
+        double s = 0.0;
+        int i = 0;
+        final int bound = SP.loopBound(n);
+        for (; i < bound; i += LANES) {
+            FloatVector g = FloatVector.fromArray(SP, nv, nvOff + i).sub(FloatVector.fromArray(SP, v, vOff + i))
+                    .max(ZERO);
+            g.intoArray(dst, dstOff + i);
+            s += (double) g.reduceLanes(VectorOperators.ADD);
+        }
+        for (; i < n; i++) {
+            float g = max(0f, nv[nvOff + i] - v[vOff + i]);
+            dst[dstOff + i] = g;
+            s += g;
+        }
+        return s;
+    }
+
+    /**
+     * gap -> prob in place; dist = prob*(gap + oldRange), oldRange read inline from
+     * the SMALL box: oldRange[i] = box[boxOff+i] + box[boxOff+i+dim] (= max_i -
+     * min_i), identical across both halves.
+     */
+    public static void probAndDistInto(float[] gap, float[] dist, float[] box, int boxOff, int dim, double invSumNew) {
+        final float inv = (float) invSumNew;
+        final FloatVector vInv = FloatVector.broadcast(SP, inv);
+        for (int half = 0; half < 2; half++) {
+            final int off = half * dim;
+            int i = 0;
+            final int bound = SP.loopBound(dim);
+            for (; i < bound; i += LANES) {
+                FloatVector g = FloatVector.fromArray(SP, gap, off + i);
+                FloatVector prob = g.mul(vInv);
+                prob.intoArray(gap, off + i);
+                FloatVector oldR = FloatVector.fromArray(SP, box, boxOff + i)
+                        .add(FloatVector.fromArray(SP, box, boxOff + i + dim));
+                prob.mul(g.add(oldR)).intoArray(dist, off + i);
+            }
+            for (; i < dim; i++) {
+                float g = gap[off + i], p = g * inv;
+                gap[off + i] = p;
+                dist[off + i] = p * (g + box[boxOff + i] + box[boxOff + i + dim]);
+            }
+        }
+    }
+
+    /**
+     * leaf seed: prob = gap*inv (in place), dist = prob*gap. oldRange ≡ 0
+     * (degenerate box).
+     */
+    public static void probOnlyInto(float[] gap, float[] dist, int len, double invSumNew) {
+        final float inv = (float) invSumNew;
+        final FloatVector vInv = FloatVector.broadcast(SP, inv);
+        int i = 0;
+        final int bound = SP.loopBound(len);
+        for (; i < bound; i += LANES) {
+            FloatVector g = FloatVector.fromArray(SP, gap, i), p = g.mul(vInv);
+            p.intoArray(gap, i);
+            p.mul(g).intoArray(dist, i);
+        }
+        for (; i < len; i++) {
+            float g = gap[i], p = g * inv;
+            gap[i] = p;
+            dist[i] = p * g;
+        }
+    }
+
 }

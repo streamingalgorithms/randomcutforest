@@ -67,4 +67,14 @@ public class OneSidedConvergingDiVectorAccumulator extends OneSidedStDevAccumula
     protected void accumulateValue(DiVector result) {
         DiVector.addToLeft(accumulatedValue, result);
     }
+
+    @Override
+    public boolean isPrimitive() {
+        return true;
+    }
+
+    @Override
+    public void acceptValue(double convergingValue) {
+        super.acceptValue(convergingValue); // the stdev/witness bookkeeping, no boxing
+    }
 }

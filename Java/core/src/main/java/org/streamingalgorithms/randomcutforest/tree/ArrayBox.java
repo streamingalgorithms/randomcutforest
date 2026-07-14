@@ -36,10 +36,10 @@ import java.util.Arrays;
 public class ArrayBox implements IBoundingBoxView {
 
     /** Backing store. This box uses [offset, offset + 2*dimensions). */
-    protected final float[] values;
+    public final float[] values;
 
     /** Start of this box's slice inside `values`. */
-    final int offset;
+    public final int offset;
 
     /** Real dimension count; the slice length is 2 * dimensions. */
     private final int dimensions;

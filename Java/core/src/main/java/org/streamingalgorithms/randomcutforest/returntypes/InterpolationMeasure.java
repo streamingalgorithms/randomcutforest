@@ -60,15 +60,15 @@ public class InterpolationMeasure {
      *
      * @param base An InterpolationMeasure instance that we want to copy.
      */
-    public InterpolationMeasure(InterpolationMeasure base) {
+    public InterpolationMeasure(InterpolationMeasure base, boolean consume) {
         this.sampleSize = base.sampleSize;
         this.dimensions = base.dimensions;
-        measure = new DiVector(base.measure);
-        distances = new DiVector(base.distances);
-        probMass = new DiVector(base.probMass);
+        measure = (consume) ? base.measure : new DiVector(base.measure);
+        distances = (consume) ? base.distances : new DiVector(base.distances);
+        probMass = (consume) ? base.probMass : new DiVector(base.probMass);
     }
 
-    protected InterpolationMeasure(int sampleSize, DiVector measure, DiVector distances, DiVector probMass) {
+    public InterpolationMeasure(int sampleSize, DiVector measure, DiVector distances, DiVector probMass) {
 
         checkArgument(measure.getDimensions() == distances.getDimensions(),
                 "measure.getDimensions() should be equal to distances.getDimensions()");

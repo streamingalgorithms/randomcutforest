@@ -21,90 +21,77 @@ import org.streamingalgorithms.randomcutforest.IRFVisitor;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.Visitor;
-import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
-import org.streamingalgorithms.randomcutforest.tree.*;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
+import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
+import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 /**
- * ArrayBox / two-pass port of {@code SimpleInterpolationVisitor}, kept side by
- * side with it for A/B validation.
+ * Flat 2*dim interpolation walk (follows AttributionVisitor). Three
+ * double[2*dim] accumulators, [0,dim)=high / [dim,2*dim)=low;
+ * InterpolationMeasure materialized only at the getResult / getFoldResult
+ * boundary via DiVector(double[]).
  *
- * <p>
- * Deliberately standalone rather than a subclass of
- * {@code AbstractScoringVisitor}: interpolation's shadow-path counterfactual
- * uses the actual node box as the "large" side (it weights by real node mass),
- * whereas the scalar/attribution base uses {@code shadow ∪ point}. That
- * semantic difference means it cannot ride the base's {@code final accept}. It
- * does adopt the family flavor: it reads the *conceptual* box through
- * {@link IBoundingBoxView} (an {@link ArrayBox} works; no {@code BoundingBox}
- * data structure required), reuses one {@link ArrayBox} as the shadow
- * accumulator via in-place {@code addBox}, and never materializes the per-node
- * gap / directional-distance scratch vectors — pass 1 reduces, pass 2
- * recomputes and distributes.
- *
- * <p>
- * Two things are preserved verbatim from the original for parity, both worth
- * flagging:
- * <ul>
- * <li>The gap / range math stays in <b>double</b> (the original used
- * {@code Math.max(..., 0.0)} on double-widened box values). This is NOT the
- * float gap path used by scalar/attribution; SIMD/float questions are deferred
- * so the A/B compares like for like.</li>
- * <li>The directional-distance "max side wins" quirk: when both maxGap and
- * minGap are positive (only possible on the shadow path, where large is the
- * node box), only the high half of {@code distances} receives a contribution.
- * Reproduced exactly; flag separately if it should be revisited.</li>
- * </ul>
- *
- * <p>
- * The scoring functions (field / influence / self) are kept as identical
- * protected methods, NOT lifted to functional fields, on purpose: the A/B test
- * should isolate the box/allocation rewrite from any change to the functions.
- * Lift them to the family's functional-interface style once parity is
- * confirmed.
+ * Gap is computed ONCE per node via a single gapInto over the SMALL box: point
+ * mode -> newValues = expandedPoint [p,-p] shadow mode -> newValues = node box
+ * slice sumOfNewRange = small.rangeSum + S (the rangeSum field already holds Σ
+ * oldRange). oldRange for the distance term is read inline from the small box
+ * in probAndDistInto.
  */
+
 public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
     private final double pointMass;
     private final boolean centerOfMass;
 
-    /** Per-tree measure, filled by the walk, cleared each tree. */
-    public DensityOutput stored;
-    /** Per-query sum across trees. NOT cleared in reset(). */
-    private final DensityOutput folded;
+    private final int dim;
+    private final int len; // 2 * dim
 
-    /**
-     * (c) Linear score channel — telescopes to sum(measure). NOT the density
-     * scalar.
-     */
+    // flat accumulators: [0,dim)=high, [dim,2*dim)=low
+    private final double[] measure;
+    private final double[] distances;
+    private final double[] probMass;
+    private int sampleSize;
+
+    // per-query folds — NOT cleared in reset()
+    private final double[] foldedMeasure;
+    private final double[] foldedDistances;
+    private final double[] foldedProbMass;
+    private int foldedSampleSize;
+
     private double savedScore;
-    private double foldedScore; // per-query linear-score sum; NOT cleared in reset()
+    private double foldedScore; // NOT cleared in reset()
 
-    private boolean pointEqualsLeaf; // hitDuplicates analog (density-specific meaning)
+    private boolean pointEqualsLeaf;
     private double savedMass;
 
-    private final ArrayBox leafBox; // reused degenerate leaf box
-    // shadowBox + shadowBoxActive inherited from RFVisitor
+    // float scratch, fully overwritten per node — never cleared
+    private final float[] gap; // expandedPoint gap -> prob, in place
+    private final float[] distComp; // prob * (gap + oldRange)
 
     private double sumOfNewRange;
     private double sumOfDifferenceInRange;
-    private boolean coordInsideBox[];
 
-    // ---- reusable constructor: sizes by dimension, unarmed (treeMass filled by
-    // prepare) ----
     InterpolationVisitor(int dimension, double pointMass, boolean centerOfMass) {
         this.pointMass = pointMass;
         this.centerOfMass = centerOfMass;
+        this.dim = dimension;
+        this.len = 2 * dimension;
         this.pointToScore = new float[dimension];
-        this.expandedPoint = new float[2 * dimension];
-        this.stored = new DensityOutput(dimension, 0); // sampleSize slot set per-tree in foldOut
-        this.folded = new DensityOutput(dimension, 0); // accumulates sampleSize via addToLeft
-        this.leafBox = new ArrayBox(dimension);
-        this.coordInsideBox = new boolean[dimension];
+        this.expandedPoint = new float[len];
+        this.measure = new double[len];
+        this.distances = new double[len];
+        this.probMass = new double[len];
+        this.foldedMeasure = new double[len];
+        this.foldedDistances = new double[len];
+        this.foldedProbMass = new double[len];
+        this.gap = new float[len];
+        this.distComp = new float[len];
         setDefaults();
     }
 
-    // ---- legacy constructor: copies point in, arms immediately ----
     public InterpolationVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass) {
         this(pointToScore.length, pointMass, centerOfMass);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
@@ -117,15 +104,40 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         pointEqualsLeaf = false;
         pointInsideBox = false;
         shadowBoxActive = false;
-        Arrays.fill(coordInsideBox, false);
-        stored.clear(); // zero all three DiVectors + sampleSize, in place
-        // folded, foldedScore deliberately NOT cleared
+        sampleSize = 0;
+        Arrays.fill(measure, 0.0);
+        Arrays.fill(distances, 0.0);
+        Arrays.fill(probMass, 0.0);
+        // folded*, foldedScore deliberately NOT cleared
     }
 
     @Override
     protected void reset() {
-        // super.reset();
         setDefaults();
+    }
+
+    /**
+     * One gapInto over the small box. Sets sumOfDifferenceInRange (S),
+     * sumOfNewRange; returns S.
+     */
+    private double computeGap(ArrayBox small, ArrayBox large, boolean pointMode) {
+        float[] nv = pointMode ? expandedPoint : large.values;
+        int nvOff = pointMode ? 0 : large.offset;
+        double S = ArrayBoxSimd.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
+        sumOfDifferenceInRange = S;
+        sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
+        return S;
+    }
+
+    /**
+     * gap -> prob + distComp (reads small box for oldRange), then the three
+     * recurrences. decay = 0 seeds the leaf (comp*a, no prior); 1 - probOfCut on
+     * interior nodes.
+     */
+    private void recur(double fieldVal, double influenceVal, double decay) {
+        ArrayBoxSimd.updateRecurrence(measure, gap, fieldVal, decay);
+        ArrayBoxSimd.updateRecurrence(probMass, gap, influenceVal, decay);
+        ArrayBoxSimd.updateRecurrence(distances, distComp, influenceVal, decay);
     }
 
     @Override
@@ -134,33 +146,21 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             return;
         }
 
-        IBoundingBoxView small;
-        IBoundingBoxView large; // null => large = small ∪ pointToScore, computed inline
+        ArrayBox small, large;
         boolean pointMode;
 
         if (pointEqualsLeaf) {
-            ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox(pointToScore);
-            if (!shadowBoxActive) { // per-tree guard: reuse-correct
-                if (shadowBox == null)
-                    shadowBox = sib.copy();
-                else
-                    shadowBox.copyFrom(sib);
-                shadowBoxActive = true;
-            } else {
-                shadowBox.addBox(sib);
-            }
-            small = shadowBox;
-            large = node.getBoundingBox();
+            small = growShadow((ArrayBox) node.getSiblingBoundingBox(pointToScore));
+            large = (ArrayBox) node.getBoundingBox();
             pointMode = false;
         } else {
-            small = node.getBoundingBox();
+            small = (ArrayBox) node.getBoundingBox();
             large = null;
             pointMode = true;
         }
 
-        reduce(small, large, pointMode);
-
-        double probOfCut = (sumOfNewRange == 0.0) ? 0.0 : sumOfDifferenceInRange / sumOfNewRange;
+        double S = computeGap(small, large, pointMode);
+        double probOfCut = (sumOfNewRange == 0.0) ? 0.0 : S / sumOfNewRange;
         if (probOfCut <= 0) {
             pointInsideBox = true;
             return;
@@ -168,149 +168,78 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
         double fieldVal = fieldExt(node, centerOfMass, savedMass, pointToScore);
         double influenceVal = influenceExt(node, centerOfMass, savedMass, pointToScore);
-        distribute(small, large, pointMode, fieldVal, influenceVal, 1.0 - probOfCut, true);
+        double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
+        ArrayBoxSimd.probAndDistInto(gap, distComp, small.values, small.offset, dim, invSumNew);
+        recur(fieldVal, influenceVal, 1.0 - probOfCut);
 
-        // (c) linear score recurrence — telescopes to sum(measure). Same form as
-        // attribution's savedScore.
         savedScore = probOfCut * fieldVal + (1.0 - probOfCut) * savedScore;
     }
 
     @Override
     public void acceptLeaf(INodeView leafNode, int depthOfNode) {
-        leafBox.fromPoint(leafNode.getLeafPoint());
-        reduce(leafBox, null, true);
-        if (sumOfDifferenceInRange <= 0) {
+
+        // InterpolationVisitor.acceptLeaf — leafBox field and fromPoint call both
+        // DELETED:
+        float[] leaf = leafNode.getLeafPoint();
+        double S = ArrayBoxSimd.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
+                + ArrayBoxSimd.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
+        sumOfDifferenceInRange = S;
+        sumOfNewRange = S; // leaf rangeSum ≡ 0
+        if (S <= 0) {
             savedMass = pointMass + leafNode.getMass();
             pointEqualsLeaf = true;
-            double selfF = 0.5 * selfField(leafNode, savedMass) / pointToScore.length;
-            double selfI = 0.5 * selfInfluence(leafNode, savedMass) / pointToScore.length;
-            for (int i = 0; i < pointToScore.length; i++) {
-                stored.measure.high[i] = stored.measure.low[i] = selfF;
-                stored.probMass.high[i] = stored.probMass.low[i] = selfI;
-            }
-            Arrays.fill(coordInsideBox, false); // ← ADD THIS — matches legacy; shadow path re-evaluates containment
-            savedScore = selfF * 2 * pointToScore.length;
+            double selfF = 0.5 * selfField(leafNode, savedMass) / dim;
+            double selfI = 0.5 * selfInfluence(leafNode, savedMass) / dim;
+            Arrays.fill(measure, selfF);
+            Arrays.fill(probMass, selfI);
+            savedScore = selfF * 2 * dim;
         } else {
             savedMass = pointMass;
             double fieldVal = fieldPoint(leafNode, savedMass, pointToScore);
             double influenceVal = influencePoint(leafNode, savedMass, pointToScore);
-            distribute(leafBox, null, true, fieldVal, influenceVal, 0.0, false);
-            // (c) linear score seed = fieldVal * probOfCut (first-touch, sum(measure) at
-            // leaf)
-            savedScore = (sumOfNewRange == 0) ? 0.0 : fieldVal * (sumOfDifferenceInRange / sumOfNewRange);
+            double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
+            ArrayBoxSimd.probOnlyInto(gap, distComp, len, invSumNew);
+            recur(fieldVal, influenceVal, 0.0); // sumOfNewRange == S here
+            savedScore = (sumOfNewRange == 0) ? 0.0 : fieldVal * (S / sumOfNewRange);
         }
     }
 
-    // ---- fold: reuse addToLeft (in-place vector + sampleSize sum) — matches
-    // legacy collector exactly ----
     public void foldOut() {
-        stored.setSampleSize(treeMass); // per-tree normalizer = live mass (matches legacy path)
-        InterpolationMeasure.addToLeft(folded, stored); // sums measure/distances/probMass + sampleSize into folded
-        foldedScore += savedScore; // (c) linear channel rides along
+        sampleSize = treeMass;
+        foldedSampleSize += sampleSize;
+        ArrayBoxSimd.axpyInto(foldedMeasure, measure, 1.0);
+        ArrayBoxSimd.axpyInto(foldedDistances, distances, 1.0);
+        ArrayBoxSimd.axpyInto(foldedProbMass, probMass, 1.0);
+        foldedScore += savedScore;
     }
 
-    // InterpolationVisitor
     @Override
     public InterpolationMeasure getResult() {
-        return stored;
-    } // per-tree — was returning folded, FIX
+        return toMeasure(measure, distances, probMass, sampleSize);
+    }
 
     @Override
     public InterpolationMeasure getFoldResult() {
-        return folded;
-    } // per-query
+        return toMeasure(foldedMeasure, foldedDistances, foldedProbMass, foldedSampleSize);
+    }
 
-    /**
-     * (c) LINEAR score from the same walk — this is sum(measure), NOT the density
-     * estimate.
-     */
+    public void resetAcrossQueries(float[] point) { // note: takes the new point
+        System.arraycopy(point, 0, pointToScore, 0, point.length);
+        ArrayBoxSimd.expandInto(pointToScore, expandedPoint);
+        reset(); // clears measure/distances/probMass + flags
+    }
+
+    /** LINEAR score — sum(measure), NOT the density estimate. */
     public double getLinearScore() {
         return foldedScore;
     }
 
-    private void reduce(IBoundingBoxView small, IBoundingBoxView large, boolean pointMode) {
-        sumOfNewRange = 0.0;
-        sumOfDifferenceInRange = 0.0;
-        for (int i = 0; i < pointToScore.length; i++) {
-            double smallMax = small.getMaxValue(i), smallMin = small.getMinValue(i);
-            double largeMax, largeMin;
-            if (pointMode) {
-                double p = pointToScore[i];
-                largeMax = Math.max(smallMax, p);
-                largeMin = Math.min(smallMin, p);
-            } else {
-                largeMax = large.getMaxValue(i);
-                largeMin = large.getMinValue(i);
-            }
-
-            sumOfNewRange += (largeMax - largeMin); // accumulated for ALL coords, even contained
-            if (coordInsideBox[i]) {
-                continue; // already contained: contributes nothing further
-            }
-
-            double maxGap = Math.max(largeMax - smallMax, 0.0);
-            double minGap = Math.max(smallMin - largeMin, 0.0);
-            if (maxGap + minGap > 0.0) {
-                sumOfDifferenceInRange += (maxGap + minGap);
-            } else {
-                coordInsideBox[i] = true; // newly contained: skip from now on
-            }
-        }
+    private InterpolationMeasure toMeasure(double[] m, double[] d, double[] p, int ss) {
+        return new InterpolationMeasure(ss, new DiVector(m), new DiVector(d), new DiVector(p));
     }
 
-    private void distribute(IBoundingBoxView small, IBoundingBoxView large, boolean pointMode, double fieldVal,
-            double influenceVal, double decay, boolean accumulate) {
-        double invSumNew = (sumOfNewRange == 0) ? 0.0 : 1.0 / sumOfNewRange;
-        for (int i = 0; i < pointToScore.length; i++) {
-            double probHigh, probLow, ddHigh, ddLow;
-            if (coordInsideBox[i]) {
-                probHigh = probLow = ddHigh = ddLow = 0.0; // contained: zero contribution, but STILL decay the prior
-            } else {
-                double smallMax = small.getMaxValue(i), smallMin = small.getMinValue(i);
-                double largeMax, largeMin;
-                if (pointMode) {
-                    double p = pointToScore[i];
-                    largeMax = Math.max(smallMax, p);
-                    largeMin = Math.min(smallMin, p);
-                } else {
-                    largeMax = large.getMaxValue(i);
-                    largeMin = large.getMinValue(i);
-                }
-                double oldRange = smallMax - smallMin;
-                double maxGap = Math.max(largeMax - smallMax, 0.0);
-                double minGap = Math.max(smallMin - largeMin, 0.0);
-                probHigh = maxGap * invSumNew;
-                probLow = minGap * invSumNew;
-                if (maxGap > 0.0) {
-                    ddHigh = maxGap + oldRange;
-                    ddLow = 0.0;
-                } else {
-                    ddHigh = 0.0;
-                    ddLow = minGap + oldRange;
-                }
-            }
-
-            if (accumulate) {
-                stored.probMass.high[i] = probHigh * influenceVal + decay * stored.probMass.high[i];
-                stored.measure.high[i] = probHigh * fieldVal + decay * stored.measure.high[i];
-                stored.distances.high[i] = probHigh * ddHigh * influenceVal + decay * stored.distances.high[i];
-                stored.probMass.low[i] = probLow * influenceVal + decay * stored.probMass.low[i];
-                stored.measure.low[i] = probLow * fieldVal + decay * stored.measure.low[i];
-                stored.distances.low[i] = probLow * ddLow * influenceVal + decay * stored.distances.low[i];
-            } else {
-                stored.probMass.high[i] = probHigh * influenceVal;
-                stored.measure.high[i] = probHigh * fieldVal;
-                stored.distances.high[i] = probHigh * ddHigh * influenceVal;
-                stored.probMass.low[i] = probLow * influenceVal;
-                stored.measure.low[i] = probLow * fieldVal;
-                stored.distances.low[i] = probLow * ddLow * influenceVal;
-            }
-        }
-    }
-
-    // InterpolationVisitor — per-tree result, for unit tests and A/B
     InterpolationMeasure observeResult() {
-        return stored;
+        return getResult();
     }
 
     double fieldExt(INodeView n, boolean c, double m, float[] loc) {

@@ -48,4 +48,18 @@ public abstract class RFVisitor<R> implements IRFVisitor<R> {
     public final boolean isConverged() {
         return pointInsideBox;
     }
+
+    // shadowbox is the contrafactual if the query was not there
+    protected final ArrayBox growShadow(ArrayBox sib) {
+        if (!shadowBoxActive) {
+            if (shadowBox == null)
+                shadowBox = sib.copy(); // once per visitor lifetime
+            else
+                shadowBox.copyFrom(sib);
+            shadowBoxActive = true;
+        } else {
+            shadowBox.addBox(sib); // grow in place
+        }
+        return shadowBox;
+    }
 }

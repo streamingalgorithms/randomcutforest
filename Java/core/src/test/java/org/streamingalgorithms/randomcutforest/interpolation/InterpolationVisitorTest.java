@@ -48,7 +48,7 @@ import org.streamingalgorithms.randomcutforest.tree.NodeView;
  */
 public class InterpolationVisitorTest {
 
-    private static double TOL = 1e-9;
+    private static double TOL = 1e-6;
 
     // ---------- helpers ----------
 

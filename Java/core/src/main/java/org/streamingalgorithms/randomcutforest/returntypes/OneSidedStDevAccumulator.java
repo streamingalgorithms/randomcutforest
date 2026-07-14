@@ -129,16 +129,17 @@ public abstract class OneSidedStDevAccumulator<R> implements ConvergingAccumulat
     public void acceptValue(double value) {
         sumConvergeVal += value;
         sumSqConvergeVal += value * value;
-        valuesAccepted++;
+        final int n = ++valuesAccepted;
 
-        if (valuesAccepted >= minValuesAccepted) {
-            // note that using the last seen value in the deviation dampens its effect
+        final double mean = sumConvergeVal / n; // n>=1: getMean guard dead, inlined out
+        double var = Math.max(0.0, sumSqConvergeVal / n - mean * mean); // maxsd intrinsic, no branch
+        final double dev = Math.sqrt((double) n * var / (n - 1)); // n==1 -> +Inf, provably masked below
 
-            // floating point comparisons!
-            if (sign * (value - getMean()) + 1e-6 > ALPHA * getDeviation()) {
-                witnesses++;
-            }
-        }
+        // (n >= minValuesAccepted) ? 1 : 0, branch-free via sign bit
+        final int active = ((n - minValuesAccepted) >> 31) + 1;
+        // (sign*(value-mean)+1e-6 > ALPHA*dev) ? 1 : 0, lowers to setcc/cinc, no branch
+        final int witness = (sign * (value - mean) + 1e-6 > ALPHA * dev) ? 1 : 0;
+        witnesses += active & witness;
     }
 
     @Override
