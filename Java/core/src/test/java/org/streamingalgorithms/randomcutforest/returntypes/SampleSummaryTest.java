@@ -75,7 +75,7 @@ public class SampleSummaryTest {
         assertDoesNotThrow(() -> new SampleSummary(weighted));
         weighted.get(1).index = new float[newDimensions + 1];
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
-
+        assertThrows(IllegalArgumentException.class,()-> new SampleSummary(new float[5][],new float[0],0) );
         weighted.get(1).index = new float[newDimensions];
         weighted.get(1).index[0] = Float.NaN;
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
@@ -83,6 +83,10 @@ public class SampleSummaryTest {
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
         weighted.get(1).index[0] = -1.0f;
         SampleSummary summary = new SampleSummary(weighted);
+        for(int i=0;i<newDimensions;i++){
+            assertTrue(summary.upper[i]>=summary.median[i]);
+            assertTrue(summary.median[i]>=summary.lower[i]);
+        }
     }
 
     @Test
@@ -96,17 +100,17 @@ public class SampleSummaryTest {
         float[] weights = new float[points.length];
         long[] entries = new long[points.length];
         double sum = 0;
-        double max =-Double.MAX_VALUE;
-        for(int i=0;i<points.length;i++){
+        double max = -Double.MAX_VALUE;
+        for (int i = 0; i < points.length; i++) {
             weights[i] = abs(points[i][0]);
             long sortableBits = sortableInt(weights[i]);
             entries[i] = (sortableBits << 32) | (i & 0xffffffffL);
-            assertEquals(decodeValue(((long) sortableInt(entries[i])) << 32),entries[i]);
+            assertEquals(decodeValue(((long) sortableInt(entries[i])) << 32), entries[i]);
             sum += weights[i];
-            max = max(max,weights[i]);
+            max = max(max, weights[i]);
         }
         Arrays.sort(entries);
-        assertEquals(weightedPick(entries,weights,points.length,sum+100),max,1e-6);
+        assertEquals(weightedPick(entries, weights, points.length, sum + 100), max, 1e-6);
 
         SampleSummary summary = new SampleSummary(weighted);
         assertThrows(IllegalArgumentException.class,
