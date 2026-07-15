@@ -20,6 +20,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
+import lombok.Getter;
+
 /**
  * Single precision bounding box backed by ONE float[] viewed at an offset.
  *
@@ -42,9 +44,11 @@ public class ArrayBox implements IBoundingBoxView {
     public final int offset;
 
     /** Real dimension count; the slice length is 2 * dimensions. */
+    @Getter
     private final int dimensions;
 
     /** Sum of side lengths, accumulated in double. */
+    @Getter
     protected double rangeSum;
 
     // ---- constructors ------------------------------------------------------
@@ -123,13 +127,6 @@ public class ArrayBox implements IBoundingBoxView {
         System.arraycopy(values, offset, dest, destOffset, 2 * dimensions);
     }
 
-    /**
-     * Loads this box's encoded state IN PLACE from `source` starting at
-     * `srcOffset`, then recomputes rangeSum. No allocation. The caller is
-     * responsible for `source` holding a valid encoded slice of the matching
-     * dimension. rangeSum is recovered as sum over the slice of (values[i] +
-     * values[i+dimensions]) == sum_i (max_i - min_i).
-     */
     public ArrayBox copyFromSlice(float[] source, int srcOffset, double sum) {
         System.arraycopy(source, srcOffset, values, offset, 2 * dimensions);
         rangeSum = sum;
@@ -147,6 +144,7 @@ public class ArrayBox implements IBoundingBoxView {
         return new ArrayBox(c, 0, dimensions, rangeSum);
     }
 
+    // all of its user are for tests and legacy
     public ArrayBox getMergedBox(IBoundingBoxView otherBox) {
         float[] merged = new float[2 * dimensions];
         double sum = 0.0;
@@ -158,6 +156,7 @@ public class ArrayBox implements IBoundingBoxView {
         return new ArrayBox(merged, 0, dimensions, sum);
     }
 
+    // tests and legacy
     public ArrayBox getMergedBox(float[] point) {
         checkArgument(point.length == dimensions, "incorrect length");
         return copy().addPoint(point);
@@ -170,124 +169,25 @@ public class ArrayBox implements IBoundingBoxView {
     }
 
     public ArrayBox addPoint(float[] point, int pointOffset) {
-        rangeSum = addPointInPlace(values, offset, dimensions, point, pointOffset);
+        rangeSum = VectorSupport.addPointInPlace(values, offset, dimensions, point, pointOffset);
         return this;
     }
 
     public static double addPointInPlace(float[] values, int offset, int dimensions, float[] point, int pointOffset) {
-        checkArgument(point.length >= pointOffset + dimensions, "incorrect length");
-        double sum = 0.0;
-        for (int i = 0; i < dimensions; ++i) {
-            float mx = max(values[offset + i], point[i + pointOffset]);
-            float negMin = max(values[offset + i + dimensions], -point[i + pointOffset]);
-            values[offset + i] = mx;
-            values[offset + i + dimensions] = negMin;
-            sum += (mx + negMin);
-        }
-        return sum;
-    }
-
-    public ArrayBox addPointCoordinates(float value, int i) {
-        double sum = values[offset + i] + values[offset + i + dimensions];
-        float mx = max(values[offset + i], value);
-        float negMin = max(values[offset + i + dimensions], -value);
-        values[offset + i] = mx;
-        values[offset + i + dimensions] = negMin;
-        rangeSum += negMin + mx - sum;
-        return this;
+        return VectorSupport.addPointInPlace(values, offset, dimensions, point, pointOffset);
     }
 
     public ArrayBox addBox(ArrayBox otherBox) {
-        rangeSum = addSlice(values, offset, dimensions, otherBox.values, otherBox.offset);
+        rangeSum = VectorSupport.addSlice(values, offset, dimensions, otherBox.values, otherBox.offset);
         return this;
     }
 
     public ArrayBox addSlice(float[] otherValues, int otherOffset) {
-        rangeSum = addSlice(values, offset, dimensions, otherValues, otherOffset);
+        rangeSum = VectorSupport.addSlice(values, offset, dimensions, otherValues, otherOffset);
         return this;
     }
 
-    public static double addSlice(float[] values, int offset, int dimensions, float[] otherValues, int otherOffset) {
-        double sum = 0.0;
-        for (int i = 0; i < dimensions; ++i) {
-            float mx = max(values[offset + i], otherValues[otherOffset + i]);
-            float negMin = max(values[offset + i + dimensions], otherValues[otherOffset + i + dimensions]);
-            values[offset + i] = mx;
-            values[offset + i + dimensions] = negMin;
-            sum += (mx + negMin);
-        }
-        return sum;
-    }
-
-    // ---- gap / cut probability --------------------------------------------
-
-    public double probabilityOfCut(float[] point, float[] components) {
-        return gapAttribution(values, offset, dimensions, rangeSum, point, components);
-    }
-
-    /**
-     * a single source of probability computation Returns S / (S + rangeSum) and, if
-     * halfDimensionalContribution is non-null (length == 2 * dimensions, indexed
-     * from 0), fills it with the per-half- dimension attribution max(0f,
-     * newValues[i] - values[offset+i]) / (rangeSum + S), so the entries sum to the
-     * returned probability. Per-coordinate gaps stay float; the reduction into S is
-     * done in double. Passing null takes the exact same path and just returns the
-     * probability.
-     */
-    protected static double gapAttribution(float[] values, int offset, int dimensions, double rangeSum, float[] point,
-            float[] halfDimensionalContribution) {
-
-        checkArgument(point.length == dimensions, "incorrect length");
-        boolean fill = halfDimensionalContribution != null;
-        if (fill) {
-            checkArgument(halfDimensionalContribution.length == 2 * dimensions,
-                    "contribution array must have length 2 * dimensions");
-        }
-
-        double S = 0.0;
-        for (int i = 0; i < dimensions; ++i) {
-            float gapMax = max(0f, point[i] - values[offset + i]); // point above max
-            float gapMin = max(0f, (-point[i]) - values[offset + i + dimensions]); // point below min
-            S += gapMax; // float coordinate, promoted to double on accumulation
-            S += gapMin;
-            if (fill) {
-                halfDimensionalContribution[i] = gapMax;
-                halfDimensionalContribution[i + dimensions] = gapMin;
-            }
-        }
-
-        double probability;
-        if (S == 0.0) {
-            probability = 0.0;
-        } else if (rangeSum == 0.0) {
-            probability = 1.0;
-        } else {
-            probability = S / (S + rangeSum);
-        }
-
-        if (fill) {
-            double denom = rangeSum + S;
-            if (denom == 0.0 || S == 0.0) {
-                Arrays.fill(halfDimensionalContribution, 0f); // all gaps are 0
-            } else {
-                double scale = 1.0 / denom;
-                for (int i = 0; i < halfDimensionalContribution.length; ++i) {
-                    halfDimensionalContribution[i] = (float) (halfDimensionalContribution[i] * scale);
-                }
-            }
-        }
-        return probability;
-    }
-
     // ---- accessors ---------------------------------------------------------
-
-    public int getDimensions() {
-        return dimensions;
-    }
-
-    public double getRangeSum() {
-        return rangeSum;
-    }
 
     public float getMaxValue(final int dimension) {
         return values[offset + dimension];
@@ -386,16 +286,6 @@ public class ArrayBox implements IBoundingBoxView {
         rangeSum = box.rangeSum;
     }
 
-    public ArrayBox from(BoundingBox box) {
-        checkArgument(dimensions == box.minValues.length, "incorrect");
-        System.arraycopy(box.maxValues, 0, values, offset, dimensions);
-        for (int i = 0; i < dimensions; i++) {
-            values[i + dimensions + offset] = -box.getMinValue(i);
-        }
-        rangeSum = box.rangeSum;
-        return this;
-    }
-
     public ArrayBox(int dimensions) {
         checkArgument(dimensions > 0, "incorrect dimensions");
         values = new float[2 * dimensions];
@@ -404,9 +294,9 @@ public class ArrayBox implements IBoundingBoxView {
         this.dimensions = dimensions;
     }
 
-    // ArrayBox:
-    public double probabilityOfCutSimd(float[] expandedPoint, float[] components) {
-        return ArrayBoxSimd.gapAttribution(values, offset, dimensions, rangeSum, expandedPoint, 0, components);
+    //
+    public double probabilityOfCut(float[] expandedPoint, float[] components) {
+        return VectorSupport.gapAttribution(values, offset, dimensions, rangeSum, expandedPoint, 0, components);
     }
 
 }

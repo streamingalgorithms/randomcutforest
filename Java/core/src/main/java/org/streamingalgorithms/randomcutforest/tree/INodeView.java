@@ -44,21 +44,11 @@ public interface INodeView {
      */
     HashMap<Long, Integer> getSequenceIndexes();
 
-    /**
-     * provides the probability of separation vis-a-vis the bounding box at the node
-     * 
-     * @param point input piint being evaluated
-     * @return the probability of separation
-     */
-
-    double probabilityOfSeparation(float[] point);
-
-    // same as above, but shows the components over the 2*dimension half-dimensions
+    // computes the probability from an expanded point and if the vector is non-null
+    // fills it with the components over the 2*dimension half-dimensions
     // the first half correspond to the max values and the second half for min
     // values
     double probabilityOfSeparation(float[] point, float[] components);
-
-    double probabilityOfSeparationSimd(float[] point, float[] components);
 
     /**
      * for a leaf node, return the index in the point store for the leaf point. If

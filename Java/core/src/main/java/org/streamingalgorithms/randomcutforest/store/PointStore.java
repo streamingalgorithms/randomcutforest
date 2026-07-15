@@ -44,8 +44,8 @@ import java.util.function.BiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.Column;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
 import org.streamingalgorithms.randomcutforest.util.ArrayUtils;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
@@ -969,31 +969,27 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     @Override
-    public void setAsArrayBox(int index, ArrayBox aBox) {
+    public void setAsSlice(int index, float[] values, int offset) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
-        checkArgument(aBox != null && aBox.getDimensions() == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
         if (!rotationEnabled) {
-            aBox.fromPoint(store, address);
+            VectorSupport.expandInto(store, address, values, offset, dimensions);
         } else {
-            aBox.fromPoint(getNumericVector(index));
+            VectorSupport.expandInto(getNumericVector(index), 0, values, offset, dimensions);
         }
     }
 
     @Override
-    public void addToArrayBox(int index, ArrayBox aBox) {
+    // return the rangesum
+    public double addToSlice(int index, float[] boxLocation, int offset) {
         checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
-        checkArgument(aBox != null && aBox.getDimensions() == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
         if (!rotationEnabled) {
-            aBox.addPoint(store, address);
+            return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, store, address);
         } else {
-            // clearly every cell
-            for (int i = 0; i < dimensions; i++) {
-                aBox.addPointCoordinates(store[address + i], (address + i) % dimensions);
-            }
+            return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, getNumericVector(index), 0);
         }
     }
 

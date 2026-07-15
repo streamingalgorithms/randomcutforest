@@ -32,6 +32,7 @@ import org.streamingalgorithms.randomcutforest.CommonUtils;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
  * Port of {@code AnomalyScoreVisitorTest} to the unified {@code ScoreVisitor}.
@@ -167,10 +168,13 @@ public class ScoreVisitorTest {
         int parentMass = 5;
         when(parent.getMass()).thenReturn(parentMass);
         ArrayBox parentBox = new ArrayBox(otherPoint, new float[] { 2.0f, 0.0f });
-        when(parent.probabilityOfSeparationSimd(any(), any()))
-                .thenAnswer(inv -> parentBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
+        when(parent.probabilityOfSeparation(any(), any()))
+                .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
         visitor.accept(parent, depth);
-        double p = parentBox.probabilityOfCut(pointToScore, null);
+        float[] expandedPoint = new float[pointToScore.length * 2];
+        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
+
+        double p = parentBox.probabilityOfCut(expandedPoint, null);
         double nodeScore = CommonUtils.defaultScoreUnseenFunction(depth, parentMass);
         expectedScore = p * nodeScore + (1 - p) * expectedScore;
         assertThat(visitor.getResult(),
@@ -183,8 +187,8 @@ public class ScoreVisitorTest {
                 .getMergedBox(new ArrayBox(new float[] { -1.0f, -1.0f }).getMergedBox(new float[] { -1.0f, 0.0f }));
         INodeView grandParent = mock(NodeView.class);
         when(grandParent.getMass()).thenReturn(parentMass + 2);
-        when(grandParent.probabilityOfSeparationSimd(any(), any()))
-                .thenAnswer(inv -> containingBox.probabilityOfCutSimd(inv.getArgument(0), inv.getArgument(1)));
+        when(grandParent.probabilityOfSeparation(any(), any()))
+                .thenAnswer(inv -> containingBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
 
         visitor.accept(grandParent, depth);
         assertTrue(visitor.isConverged());
@@ -223,7 +227,9 @@ public class ScoreVisitorTest {
 
         // expected: exactly one update score = p*scoreUnseen + (1-p)*baseScore
         ArrayBox shadow = new ArrayBox(new float[] { 1.0f, 1.0f }, new float[] { 2.0f, 2.0f });
-        double p = shadow.probabilityOfCut(pointToScore, null);
+        float[] expandedPoint = new float[pointToScore.length * 2];
+        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
+        double p = shadow.probabilityOfCut(expandedPoint, null);
         double nodeScore = CommonUtils.defaultScoreUnseenFunction(depth, parentMass);
         double expected = p * nodeScore + (1 - p) * baseScore;
         assertEquals(expected, visitor.savedScore, EPSILON);

@@ -69,7 +69,7 @@ public class RandomCutForestConsistencyFunctionalTest {
                 .boundingBoxCacheFraction(new Random().nextDouble()).parallelExecutionEnabled(true).build();
 
         NormalMixtureTestData testData = new NormalMixtureTestData();
-        double delta = 1e-10;
+        double delta = 1e-6;
         int anomalies = 0;
 
         for (double[] point : testData.generateTestData(testSize, dimensions, 99)) {

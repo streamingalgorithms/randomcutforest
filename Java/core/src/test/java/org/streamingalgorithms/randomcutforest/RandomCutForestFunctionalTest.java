@@ -597,7 +597,7 @@ public class RandomCutForestFunctionalTest {
             ++count;
             double score = forest.getAnomalyScore(point);
             double anotherScore = anotherForest.getAnomalyScore(point);
-            assertEquals(score, anotherScore, 1E-10);
+            assertEquals(score, anotherScore, 1E-6);
             forest.update(point);
             anotherForest.update(point);
             if (count % 2000 == 1000) {

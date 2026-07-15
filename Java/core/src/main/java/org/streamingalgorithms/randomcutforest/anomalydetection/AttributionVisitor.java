@@ -16,7 +16,7 @@
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
-import static org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd.multiply;
+import static org.streamingalgorithms.randomcutforest.tree.VectorSupport.multiply;
 
 import java.util.Arrays;
 
@@ -25,9 +25,9 @@ import org.streamingalgorithms.randomcutforest.IRFVisitor;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
  * Directional-attribution visitor. Shares all traversal scaffolding with
@@ -65,7 +65,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
+        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
     }
 
     public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
@@ -104,7 +104,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             pointInsideBox = true;
         } else {
             double newScore = scoreUnseenFn.of(depth, mass);
-            ArrayBoxSimd.updateRecurrence(directionalAttribution, probabilityComponents, newScore, 1 - prob);
+            VectorSupport.updateRecurrence(directionalAttribution, probabilityComponents, newScore, 1 - prob);
         }
     }
 
@@ -132,9 +132,9 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         } else {
             // AttributionVisitor, else-branch — replaces the whole scalar loop + normalize
             // loop:
-            double sum = ArrayBoxSimd.signedGapInto(expandedPoint, 0, +1f, leafPoint, 0, probabilityComponents, 0,
+            double sum = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leafPoint, 0, probabilityComponents, 0,
                     dimension)
-                    + ArrayBoxSimd.signedGapInto(expandedPoint, dimension, -1f, leafPoint, 0, probabilityComponents,
+                    + VectorSupport.signedGapInto(expandedPoint, dimension, -1f, leafPoint, 0, probabilityComponents,
                             dimension, dimension);
             double factor = (sum == 0) ? 0.0 : savedScore / sum;
             for (int i = 0; i < directionalAttribution.length; i++)
@@ -147,7 +147,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         double factor = normalizer.scale(treeMass);
         if (savedScore > 0) {
             if (hitDuplicates || ignoreLeaf) {
-                factor *= savedScore / ArrayBoxSimd.sum(directionalAttribution);
+                factor *= savedScore / VectorSupport.sum(directionalAttribution);
             }
         } else {
             factor = 0;
@@ -192,7 +192,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     // after each tree: scale this tree's result, add into the running sum
     public void foldOut() {
         double factor = idempotentRefactor();
-        ArrayBoxSimd.axpyInto(foldedAttribution, directionalAttribution, factor);
+        VectorSupport.axpyInto(foldedAttribution, directionalAttribution, factor);
     }
 
     public static IVisitorFactory<DiVector> reusableFactory(int ignoreLeafMassThreshold,

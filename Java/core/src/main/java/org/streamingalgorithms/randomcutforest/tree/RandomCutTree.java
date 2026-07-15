@@ -36,10 +36,9 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 import static org.streamingalgorithms.randomcutforest.sampler.CompactSampler.SEQUENCE_INDEX_NA;
-import static org.streamingalgorithms.randomcutforest.tree.ArrayBox.gapAttribution;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.DEFAULT_STORE_PARENT;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
-import static org.streamingalgorithms.randomcutforest.tree.NodeStore.nodeStore;
+import static org.streamingalgorithms.randomcutforest.tree.VectorSupport.gapAttribution;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -385,7 +384,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                     if (boxScratch.contains(point) || parent == Null) {
                         break;
                     } else {
-                        growArrayBox(boxScratch, pointStoreView, parent, sibling);
+                        growArrayBox(boxScratch, pointStoreView, sibling);
                         int[] next = pathToRoot.pop();
                         node = next[0];
                         sibling = next[1];
@@ -535,14 +534,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             if (boundingBoxCacheFraction > 0.0) {
                 int idx = translate(index);
                 if (idx != Integer.MAX_VALUE) {
-                    rangeSumData[idx] = 0;
-                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * idx * dimension, dimension, 0);
-                    reconstructArrayBox(inPlace, index, pointStoreView);
-                    // double priorSum = rangeSumData[idx];
+                    rangeSumData[idx] = buildInto(boundingBoxData, 2 * idx * dimension, index, pointStoreView);
                     rangeSumData[idx] = ArrayBox.addPointInPlace(boundingBoxData, 2 * idx * dimension, dimension, point,
                             0);
-                    // checkContainsAndRebuildBox(index, point, pointStoreView);
-                    // addPointInPlace(index, point);
                 }
             }
         }
@@ -782,44 +776,70 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return answer;
     }
 
-    // RandomCutTree — fill caller's box, no allocation
-    public void fillArrayBox(int index, ArrayBox aBox) {
+    /**
+     * Overwrite data[base .. base+2*dim) with index's box. Warms the cache slot if
+     * index has one. Returns rangeSum.
+     */
+    double fillInto(float[] data, int base, int index, IPointStoreView<float[]> psv) {
         if (isLeaf(index)) {
-            pointStoreView.setAsArrayBox(getPointIndex(index), aBox);
-        } else {
-            int idx = translate(index);
-            if (idx != Integer.MAX_VALUE) {
-                if (rangeSumData[idx] == 0) {
-                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * idx * dimension, dimension, 0);
-                    reconstructArrayBox(inPlace, index, pointStoreView);
-                    rangeSumData[idx] = inPlace.getRangeSum();
-                }
-                aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]); // in-place, no alloc
-            } else {
-                reconstructArrayBox(aBox, index, pointStoreView);
-            }
+            psv.setAsSlice(getPointIndex(index), data, base);
+            return 0;
         }
+        checkArgument(isInternal(index), () -> " incomplete state " + index);
+        int idx = translate(index);
+        if (idx == Integer.MAX_VALUE) {
+            return buildInto(data, base, index, psv); // uncached: straight into destination
+        }
+        int slot = 2 * idx * dimension;
+        if (rangeSumData[idx] == 0) {
+            rangeSumData[idx] = buildInto(boundingBoxData, slot, index, psv);
+        }
+        if (data != boundingBoxData || base != slot) {
+            System.arraycopy(boundingBoxData, slot, data, base, 2 * dimension);
+        }
+        return rangeSumData[idx];
+    }
+
+    /**
+     * Rebuild index's box from its CHILDREN into data[base..). Never consults
+     * index's own slot.
+     */
+    double buildInto(float[] data, int base, int index, IPointStoreView<float[]> psv) {
+        fillInto(data, base, nodeStore.getLeftIndex(index), psv);
+        return growInto(data, base, nodeStore.getRightIndex(index), psv);
+    }
+
+    /** Union sibling's box into data[base..). Returns updated rangeSum. */
+    double growInto(float[] data, int base, int sibling, IPointStoreView<float[]> psv) {
+        if (isLeaf(sibling)) {
+            return psv.addToSlice(getPointIndex(sibling), data, base);
+        }
+        checkArgument(isInternal(sibling), () -> " incomplete state " + sibling);
+        int sidx = translate(sibling);
+        if (sidx != Integer.MAX_VALUE) {
+            int slot = 2 * sidx * dimension;
+            if (rangeSumData[sidx] == 0) {
+                rangeSumData[sidx] = buildInto(boundingBoxData, slot, sibling, psv);
+            }
+            return VectorSupport.addSlice(data, base, dimension, boundingBoxData, slot);
+        }
+        growInto(data, base, nodeStore.getLeftIndex(sibling), psv);
+        return growInto(data, base, nodeStore.getRightIndex(sibling), psv);
+    }
+
+    void fillArrayBox(int index, ArrayBox aBox) {
+        aBox.rangeSum = fillInto(aBox.values, aBox.offset, index, pointStoreView);
+    }
+
+    void growArrayBox(ArrayBox aBox, IPointStoreView<float[]> psv, int sibling) {
+        checkArgument(aBox != null, "box cannot be null");
+        aBox.rangeSum = growInto(aBox.values, aBox.offset, sibling, psv);
     }
 
     public ArrayBox getArrayBox(int index) {
         ArrayBox aBox = new ArrayBox(dimension);
         fillArrayBox(index, aBox);
         return aBox;
-    }
-
-    void reconstructArrayBox(ArrayBox aBox, int index, IPointStoreView<float[]> pointStoreView) {
-        if (isLeaf(index)) {
-            pointStoreView.setAsArrayBox(getPointIndex(index), aBox);
-            return;
-        }
-        int idx = translate(index);
-        if (idx != Integer.MAX_VALUE && rangeSumData[idx] != 0) {
-            aBox.copyFromSlice(boundingBoxData, 2 * idx * dimension, rangeSumData[idx]);
-            return;
-        }
-        // rebuild THIS node's box from its children into aBox
-        reconstructArrayBox(aBox, nodeStore.getLeftIndex(index), pointStoreView);
-        growArrayBox(aBox, pointStoreView, index, nodeStore.getRightIndex(index));
     }
 
     boolean checkContainsAndRebuildBox(int index, float[] point, IPointStoreView<float[]> pointStoreView) {
@@ -831,11 +851,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 inside = (point[i] < boundingBoxData[base + i]) && (-point[i] < boundingBoxData[base + i + dimension]);
             }
             if (!inside) {
-                rangeSumData[idx] = 0; // force rebuild
-                // object creation
-                ArrayBox inPlace = new ArrayBox(boundingBoxData, base, dimension, 0);
-                reconstructArrayBox(inPlace, index, pointStoreView);
-                rangeSumData[idx] = inPlace.getRangeSum();
+                rangeSumData[idx] = buildInto(boundingBoxData, base, index, pointStoreView);
                 return false;
             }
             return true;
@@ -843,52 +859,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return false;
     }
 
-    void growArrayBox(ArrayBox aBox, IPointStoreView<float[]> pointStoreView, int node, int sibling) {
-        if (isLeaf(sibling)) {
-            // project-to-tree on the point is ignored for now.
-            pointStoreView.addToArrayBox(getPointIndex(sibling), aBox);
-        } else {
-            if (!isInternal(sibling)) {
-                throw new IllegalStateException(" incomplete state " + sibling);
-            }
-            int siblingIdx = translate(sibling);
-            if (siblingIdx != Integer.MAX_VALUE) {
-                if (rangeSumData[siblingIdx] == 0) {
-                    ArrayBox inPlace = new ArrayBox(boundingBoxData, 2 * siblingIdx * dimension, dimension, 0);
-                    reconstructArrayBox(inPlace, sibling, pointStoreView);
-                    rangeSumData[siblingIdx] = inPlace.getRangeSum();
-                }
-                aBox.addSlice(boundingBoxData, 2 * siblingIdx * dimension);
-                return;
-            }
-            growArrayBox(aBox, pointStoreView, sibling, nodeStore.getLeftIndex(sibling));
-            growArrayBox(aBox, pointStoreView, sibling, nodeStore.getRightIndex(sibling));
-        }
-    }
-
-    public double probabilityOfCut(int node, float[] point, ArrayBox otherBox, float[] components) {
-        int nodeIdx = translate(node);
-        if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
-            int base = 2 * nodeIdx * dimension;
-            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], point, components);
-        } else if (otherBox != null) {
-            return otherBox.probabilityOfCut(point, components);
-        } else {
-            ArrayBox box = getArrayBox(node);
-            return box.probabilityOfCut(point, components);
-        }
-    }
-
-    public double probabilityOfCutSimd(int node, float[] expandedPoint, ArrayBox otherBox, float[] components) {
+    // the following is over 2*d space
+    public double probabilityOfCutExpanded(int node, float[] expandedPoint, ArrayBox otherBox, float[] components,
+            ArrayBox reusableBox) {
         int nodeIdx = translate(node);
         if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
             int base = 2 * nodeIdx * dimension; // <-- THE surface: flat float slice
-            return ArrayBoxSimd.gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint,
-                    0, components);
-        } else if (otherBox != null) { // cold: pathBox sentinel
-            return otherBox.probabilityOfCutSimd(expandedPoint, components);
+            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint, 0,
+                    components);
+        } else if (otherBox != null) {
+            return otherBox.probabilityOfCut(expandedPoint, components);
         } else { // fallback: reconstruct (allocates, as today)
-            return getArrayBox(node).probabilityOfCutSimd(expandedPoint, components);
+            fillArrayBox(node, reusableBox);
+            return reusableBox.probabilityOfCut(expandedPoint, components);
         }
     }
 

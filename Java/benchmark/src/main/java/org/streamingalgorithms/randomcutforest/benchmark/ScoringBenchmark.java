@@ -83,7 +83,7 @@ public class ScoringBenchmark {
     @Param({ "D1", "D2" })
     Datasets.Id dataset;
 
-    @Param({ "0.0", "0.2", "0.5", "1.0" })
+    @Param({ "0.0", "0.2", "0.5", "0.7", "0.8", "0.9", "1.0" })
     double cacheFraction;
 
     // No explicit value list on an enum @Param -> JMH enumerates ALL constants.

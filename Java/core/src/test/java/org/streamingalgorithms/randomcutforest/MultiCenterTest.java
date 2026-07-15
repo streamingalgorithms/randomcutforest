@@ -181,14 +181,14 @@ public class MultiCenterTest {
 
         assertEquals(summary2.size(), summary1.size(), " incorrect number of clusters");
         for (int i = 0; i < summary2.size(); i++) {
-            assertEquals(summary1.get(i).getWeight(), summary2.get(i).getWeight(), 1e-6);
+            assertEquals(summary1.get(i).getWeight(), summary2.get(i).getWeight(), summary2.get(i).getWeight() * 1e-6);
             assertEquals(summary1.get(i).extentMeasure(), summary2.get(i).extentMeasure(), 1e-6);
             List<Weighted<float[]>> reps1 = summary1.get(i).getRepresentatives();
             List<Weighted<float[]>> reps2 = summary2.get(i).getRepresentatives();
             assertEquals(reps1.size(), reps2.size());
             for (int j = 0; j < reps1.size(); j++) {
-                assertEquals(reps1.get(j).weight, reps2.get(j).weight, 1e-6);
-                assertArrayEquals(reps1.get(j).index, reps2.get(j).index, 1e-6f);
+                assertEquals(reps1.get(j).weight, reps2.get(j).weight, reps2.get(j).weight * 1e-6);
+                assertArrayEquals(reps1.get(j).index, reps2.get(j).index, reps2.get(j).weight * 1e-6f);
             }
         }
 

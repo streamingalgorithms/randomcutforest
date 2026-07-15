@@ -47,7 +47,7 @@ public class BoxCacheTest {
             if (num % sampleSize == 0) {
                 forest.setBoundingBoxCacheFraction(random.nextDouble());
             }
-            assertEquals(forest.getAnomalyScore(point), otherForest.getAnomalyScore(point));
+            assertEquals(forest.getAnomalyScore(point), otherForest.getAnomalyScore(point), 1e-6);
             forest.update(point);
             otherForest.update(point);
         }

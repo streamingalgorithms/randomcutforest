@@ -33,7 +33,7 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
  * ===========================================================================
@@ -127,10 +127,11 @@ public class ArrayBoxScoringBench {
         // Query spread wider than the boxes so some coords land outside (positive
         // gap) and some inside (zero gap): a realistic mixed S, never all-zero.
         point = new float[dim];
+        expanded = new float[2 * dim];
         for (int i = 0; i < dim; i++) {
             point[i] = (float) (rng.nextGaussian() * 1.5);
         }
-        expanded = ArrayBoxSimd.expand(point);
+        VectorSupport.expandInto(point, 0, expanded, 0, dim);
 
         for (int j = 0; j < NBOXES; j++) {
             final int off = j * slice;
@@ -163,7 +164,7 @@ public class ArrayBoxScoringBench {
         double worst = 0.0;
         for (int j = 0; j < NBOXES; j++) {
             double pa = boxes[j].probabilityOfCut(point, cA);
-            double pb = ArrayBoxSimd.gapAttribution(buffer, offsets[j], dim, rangeSums[j], expanded, 0, cB);
+            double pb = VectorSupport.gapAttribution(buffer, offsets[j], dim, rangeSums[j], expanded, 0, cB);
             worst = Math.max(worst, Math.abs(pa - pb) / Math.max(1e-12, Math.abs(pa)));
             for (int k = 0; k < slice; k++) {
                 worst = Math.max(worst, Math.abs(cA[k] - cB[k]));
@@ -199,7 +200,7 @@ public class ArrayBoxScoringBench {
         final int d = dim;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += ArrayBoxSimd.gapAttribution(buf, offs[j], d, rs[j], ex, 0, null);
+            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, null);
         }
         return checksum;
     }
@@ -231,7 +232,7 @@ public class ArrayBoxScoringBench {
         final int d = dim;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += ArrayBoxSimd.gapAttribution(buf, offs[j], d, rs[j], ex, 0, c);
+            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, c);
             bh.consume(c);
         }
         return checksum;

@@ -21,8 +21,8 @@ import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.Scor
 import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
 import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
  * Shared traversal scaffolding for the scalar and attribution scoring visitors.
@@ -72,7 +72,7 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
+        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
     }
 
     // reusable path only: allocates pointToScore directly (no copy).
@@ -125,10 +125,7 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
         double probabilityOfSeparation;
         if (!(hitDuplicates || ignoreLeaf)) {
-            probabilityOfSeparation = node.probabilityOfSeparationSimd(expandedPoint, contributionTarget());
-
-            // probabilityOfSeparation = node.probabilityOfSeparation(pointToScore,
-            // contributionTarget());
+            probabilityOfSeparation = node.probabilityOfSeparation(expandedPoint, contributionTarget());
             if (probabilityOfSeparation <= 0) {
                 // point inside this node's box: nothing above can change the result
                 pointInsideBox = true;
@@ -144,6 +141,6 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
     protected final double acceptShadowBox(INodeView node) {
         ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox(pointToScore);
-        return growShadow(sib).probabilityOfCutSimd(expandedPoint, contributionTarget());
+        return growShadow(sib).probabilityOfCut(expandedPoint, contributionTarget());
     }
 }

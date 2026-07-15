@@ -16,8 +16,8 @@
 package org.streamingalgorithms.randomcutforest;
 
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 import lombok.Getter;
 
@@ -35,7 +35,7 @@ public abstract class RFVisitor<R> implements IRFVisitor<R> {
         float[] p = tree.projectToTree(rawPoint);
         if (p != pointToScore) {
             System.arraycopy(p, 0, pointToScore, 0, pointToScore.length);
-            ArrayBoxSimd.expandInto(pointToScore, expandedPoint);
+            VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
         }
         this.treeMass = tree.getMass();
 

@@ -124,10 +124,6 @@ public class ImputeVisitorTest {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public double probabilityOfSeparationSimd(float[] point, float[] components) {
-            throw new UnsupportedOperationException();
-        }
     }
 
     private FakeNode leaf(float[] point, int index, int mass) {
@@ -233,7 +229,7 @@ public class ImputeVisitorTest {
         float[] lo = new float[] { -10, -10, -100 };
         float[] hi = new float[] { 10, 10, 100 };
         ArrayBox box = new ArrayBox(lo, hi);
-        double p = box.probabilityOfCut(visitor.queryPoint, null);
+        double p = box.probabilityOfCut(visitor.expandedPoint, null);
         assertEquals(0.0, p, EPS); // precondition: this box gives p==0
 
         FakeNode node = new FakeNode();
@@ -254,7 +250,7 @@ public class ImputeVisitorTest {
         float[] lo = new float[] { 500, 500, 500 };
         float[] hi = new float[] { 600, 600, 600 };
         ArrayBox box = new ArrayBox(lo, hi);
-        double p = box.probabilityOfCut(visitor.queryPoint, null);
+        double p = box.probabilityOfCut(visitor.expandedPoint, null);
         assertTrue(p > 0); // precondition
 
         FakeNode node = new FakeNode();

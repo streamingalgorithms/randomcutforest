@@ -41,10 +41,7 @@ import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
 import org.streamingalgorithms.randomcutforest.IRFMultiVisitor;
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.*;
 
 /**
  * A MultiVisitor which imputes missing values in a point. Reuse-capable: one
@@ -80,7 +77,8 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
         checkArgument(centrality <= 1.0, " cannot be more than 1.0");
         this.queryPoint = Arrays.copyOf(queryPoint, queryPoint.length);
         this.queryPointOriginal = Arrays.copyOf(queryPoint, queryPoint.length);
-        this.expandedPoint = ArrayBoxSimd.expand(queryPoint); // allocation
+        this.expandedPoint = new float[2 * queryPoint.length];
+        VectorSupport.expandInto(queryPoint, 0, expandedPoint, 0, queryPoint.length); // allocation
         this.missing = new boolean[queryPoint.length];
         this.centrality = centrality;
         this.randomSeed = randomSeed;
@@ -124,7 +122,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
 
     public void accept(final INodeView node, final int depthOfNode) {
         // note querypoint now has values filled -- either expand or we do not use simd
-        double p = ((ArrayBox) node.getBoundingBox()).probabilityOfCut(queryPoint, null);
+        double p = ((ArrayBox) node.getBoundingBox()).probabilityOfCut(expandedPoint, null);
         converged = (p == 0);
         if (p <= 0)
             return;
@@ -144,7 +142,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
                 distance += Math.abs(t);
             }
         }
-
+        VectorSupport.expandInto(queryPoint, 0, expandedPoint, 0, queryPoint.length);
         if (centrality < 1.0) {
             // Random rng = new Random(randomSeed);
             randomSeed = rng.nextLong();
@@ -197,6 +195,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
         // original.queryPoint.length); // the ONE it must own
         this.queryPoint = original.queryPoint;
         this.queryPointOriginal = original.queryPointOriginal; // immutable; forks never call prepare
+        this.expandedPoint = original.expandedPoint;
         this.missing = original.missing; // immutable after construction
         this.dimensionsUsed = original.dimensionsUsed; // write-only (trigger++), never read
         this.centrality = original.centrality;

@@ -23,10 +23,7 @@ import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.Visitor;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
-import org.streamingalgorithms.randomcutforest.tree.ArrayBoxSimd;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.*;
 
 /**
  * Flat 2*dim interpolation walk (follows AttributionVisitor). Three
@@ -95,7 +92,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     public InterpolationVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass) {
         this(pointToScore.length, pointMass, centerOfMass);
         System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        ArrayBoxSimd.expandInto(this.pointToScore, this.expandedPoint);
+        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
         this.treeMass = treeMass;
     }
 
@@ -123,7 +120,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     private double computeGap(ArrayBox small, ArrayBox large, boolean pointMode) {
         float[] nv = pointMode ? expandedPoint : large.values;
         int nvOff = pointMode ? 0 : large.offset;
-        double S = ArrayBoxSimd.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
+        double S = VectorSupport.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
         sumOfDifferenceInRange = S;
         sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
         return S;
@@ -135,9 +132,9 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
      * interior nodes.
      */
     private void recur(double fieldVal, double influenceVal, double decay) {
-        ArrayBoxSimd.updateRecurrence(measure, gap, fieldVal, decay);
-        ArrayBoxSimd.updateRecurrence(probMass, gap, influenceVal, decay);
-        ArrayBoxSimd.updateRecurrence(distances, distComp, influenceVal, decay);
+        VectorSupport.updateRecurrence(measure, gap, fieldVal, decay);
+        VectorSupport.updateRecurrence(probMass, gap, influenceVal, decay);
+        VectorSupport.updateRecurrence(distances, distComp, influenceVal, decay);
     }
 
     @Override
@@ -169,7 +166,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         double fieldVal = fieldExt(node, centerOfMass, savedMass, pointToScore);
         double influenceVal = influenceExt(node, centerOfMass, savedMass, pointToScore);
         double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
-        ArrayBoxSimd.probAndDistInto(gap, distComp, small.values, small.offset, dim, invSumNew);
+        VectorSupport.probAndDistInto(gap, distComp, small.values, small.offset, dim, invSumNew);
         recur(fieldVal, influenceVal, 1.0 - probOfCut);
 
         savedScore = probOfCut * fieldVal + (1.0 - probOfCut) * savedScore;
@@ -181,8 +178,8 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         // InterpolationVisitor.acceptLeaf — leafBox field and fromPoint call both
         // DELETED:
         float[] leaf = leafNode.getLeafPoint();
-        double S = ArrayBoxSimd.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
-                + ArrayBoxSimd.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
+        double S = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
+                + VectorSupport.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
         sumOfDifferenceInRange = S;
         sumOfNewRange = S; // leaf rangeSum ≡ 0
         if (S <= 0) {
@@ -198,7 +195,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             double fieldVal = fieldPoint(leafNode, savedMass, pointToScore);
             double influenceVal = influencePoint(leafNode, savedMass, pointToScore);
             double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
-            ArrayBoxSimd.probOnlyInto(gap, distComp, len, invSumNew);
+            VectorSupport.probOnlyInto(gap, distComp, len, invSumNew);
             recur(fieldVal, influenceVal, 0.0); // sumOfNewRange == S here
             savedScore = (sumOfNewRange == 0) ? 0.0 : fieldVal * (S / sumOfNewRange);
         }
@@ -207,9 +204,9 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     public void foldOut() {
         sampleSize = treeMass;
         foldedSampleSize += sampleSize;
-        ArrayBoxSimd.axpyInto(foldedMeasure, measure, 1.0);
-        ArrayBoxSimd.axpyInto(foldedDistances, distances, 1.0);
-        ArrayBoxSimd.axpyInto(foldedProbMass, probMass, 1.0);
+        VectorSupport.axpyInto(foldedMeasure, measure, 1.0);
+        VectorSupport.axpyInto(foldedDistances, distances, 1.0);
+        VectorSupport.axpyInto(foldedProbMass, probMass, 1.0);
         foldedScore += savedScore;
     }
 
@@ -225,7 +222,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
     public void resetAcrossQueries(float[] point) { // note: takes the new point
         System.arraycopy(point, 0, pointToScore, 0, point.length);
-        ArrayBoxSimd.expandInto(pointToScore, expandedPoint);
+        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
         reset(); // clears measure/distances/probMass + flags
     }
 
