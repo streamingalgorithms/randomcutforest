@@ -20,15 +20,13 @@ package org.streamingalgorithms.randomcutforest.returntypes;
  * accumulator tests the submitted values for convergence and returns the sum of
  * all submitted values.
  */
-public class OneSidedConvergingDoubleAccumulator extends OneSidedStDevAccumulator<Double> {
+public class OneSidedConvergingDoubleAccumulator extends StandardDevAccumulator<Double> {
 
     /**
      * Create a new converging accumulator that uses a one-sided standard deviation
      * test.
      *
-     * @param highIsCritical    Set to 'true' if we care more about high values of
-     *                          the converging scalar than low values. Set to
-     *                          'false' if the opposite is true.
+     * @param direction         Critical direction of divergence
      * @param precision         The number of witnesses required before declaring
      *                          convergence will be at least 1.0 / precision.
      * @param minValuesAccepted The user-specified minimum number of values visited
@@ -38,9 +36,9 @@ public class OneSidedConvergingDoubleAccumulator extends OneSidedStDevAccumulato
      * @param maxValuesAccepted The maximum number of values that will be accepted
      *                          by this accumulator.
      */
-    public OneSidedConvergingDoubleAccumulator(boolean highIsCritical, double precision, int minValuesAccepted,
+    public OneSidedConvergingDoubleAccumulator(CriticalDirection direction, double precision, int minValuesAccepted,
             int maxValuesAccepted) {
-        super(highIsCritical, precision, minValuesAccepted, maxValuesAccepted);
+        super(direction, precision, minValuesAccepted, maxValuesAccepted);
         accumulatedValue = 0.0;
     }
 

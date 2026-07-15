@@ -21,7 +21,7 @@ package org.streamingalgorithms.randomcutforest.returntypes;
  * submitted DiVectors for convergence and returns the sum of all submitted
  * DiVectors.
  */
-public class OneSidedConvergingDiVectorAccumulator extends OneSidedStDevAccumulator<DiVector> {
+public class OneSidedConvergingDiVectorAccumulator extends StandardDevAccumulator<DiVector> {
 
     /**
      * Create a new converging accumulator that uses a one-sided standard deviation
@@ -29,9 +29,7 @@ public class OneSidedConvergingDiVectorAccumulator extends OneSidedStDevAccumula
      *
      * @param dimensions        The number of dimensions in the DiVectors being
      *                          accumulated.
-     * @param highIsCritical    Set to 'true' if we care more about high values of
-     *                          the converging scalar than low values. Set to
-     *                          'false' if the opposite is true.
+     * @param direction         critical direction of divergence
      * @param precision         The number of witnesses required before declaring
      *                          convergence will be at least 1.0 / precision.
      * @param minValuesAccepted The user-specified minimum number of values visited
@@ -41,9 +39,9 @@ public class OneSidedConvergingDiVectorAccumulator extends OneSidedStDevAccumula
      * @param maxValuesAccepted The maximum number of values that will be accepted
      *                          by this accumulator.
      */
-    public OneSidedConvergingDiVectorAccumulator(int dimensions, boolean highIsCritical, double precision,
+    public OneSidedConvergingDiVectorAccumulator(int dimensions, CriticalDirection direction, double precision,
             int minValuesAccepted, int maxValuesAccepted) {
-        super(highIsCritical, precision, minValuesAccepted, maxValuesAccepted);
+        super(direction, precision, minValuesAccepted, maxValuesAccepted);
         accumulatedValue = new DiVector(dimensions);
     }
 

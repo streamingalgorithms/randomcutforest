@@ -21,6 +21,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
+import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.DEFAULT_SEPARATION_RATIO_FOR_MERGE;
 
 import java.util.ArrayList;
@@ -1642,7 +1643,7 @@ public class RandomCutForest {
         IVisitorFactory<Double> visitorFactory = ScoreVisitor.reusableFactory(ignoreLeafMassThreshold, seen, unseen,
                 damp, normalizer);
 
-        ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(highIsCritical, precision,
+        ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(HIGH, precision,
                 DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
 
         Function<Double, Double> finisher = sum -> sum / accumulator.getValuesAccepted();
@@ -1660,8 +1661,8 @@ public class RandomCutForest {
         IVisitorFactory<DiVector> visitorFactory = AttributionVisitor.reusableFactory(ignoreLeafMassThreshold, seen,
                 unseen, damp, normalizer);
 
-        ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions,
-                highIsCritical, precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
+        ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions, HIGH,
+                precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
 
         Function<DiVector, DiVector> finisher = vector -> vector.scaleInPlace(1.0 / accumulator.getValuesAccepted());
 

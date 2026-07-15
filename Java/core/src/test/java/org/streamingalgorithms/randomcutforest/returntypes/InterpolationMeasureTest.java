@@ -15,10 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +49,14 @@ public class InterpolationMeasureTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new InterpolationMeasure(1, new DiVector(2), new DiVector(2), new DiVector(3)));
         assertDoesNotThrow(() -> new InterpolationMeasure(1, new DiVector(2), new DiVector(2), new DiVector(2)));
+        InterpolationMeasure another = new InterpolationMeasure(output, true);
+        assertTrue(another.measure == output.measure);
+        assertTrue(another.probMass == output.probMass);
+        assertTrue(another.distances == output.distances);
+        InterpolationMeasure again = new InterpolationMeasure(output, false);
+        assertFalse(again.measure == output.measure);
+        assertFalse(again.probMass == output.probMass);
+        assertFalse(again.distances == output.distances);
     }
 
     @Test
@@ -144,6 +149,19 @@ public class InterpolationMeasureTest {
             assertEquals((6 * i + 3) * 0.9, result.measure.low[i]);
 
         }
+        assertNotEquals(2 * 1 * 0.9, output.probMass.high[1]);
+        output.scaleInPlace(0.9);
+        for (int i = 0; i < dimensions; i++) {
+            assertEquals(2 * i * 0.9, output.probMass.high[i]);
+            assertEquals(4 * i * 0.9, output.distances.high[i]);
+            assertEquals(6 * i * 0.9, output.measure.high[i]);
+            assertEquals((2 * i + 1) * 0.9, output.probMass.low[i]);
+            assertEquals((4 * i + 2) * 0.9, output.distances.low[i]);
+            assertEquals((6 * i + 3) * 0.9, output.measure.low[i]);
+
+        }
+
+
 
     }
 

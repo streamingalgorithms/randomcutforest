@@ -39,8 +39,8 @@ public class OneSidedConvergingDoubleAccumulatorTest {
         precision = 0.1;
         minValuesAccepted = 5;
         maxValuesAccepted = 100;
-        accumulator = new OneSidedConvergingDoubleAccumulator(highIsCritical, precision, minValuesAccepted,
-                maxValuesAccepted);
+        accumulator = new OneSidedConvergingDoubleAccumulator(ConvergingAccumulator.CriticalDirection.HIGH, precision,
+                minValuesAccepted, maxValuesAccepted);
     }
 
     @Test
@@ -99,8 +99,8 @@ public class OneSidedConvergingDoubleAccumulatorTest {
     @Test
     public void testConvergenceLowIsCritical() {
         highIsCritical = false;
-        accumulator = new OneSidedConvergingDoubleAccumulator(highIsCritical, precision, minValuesAccepted,
-                maxValuesAccepted);
+        accumulator = new OneSidedConvergingDoubleAccumulator(ConvergingAccumulator.CriticalDirection.LOW, precision,
+                minValuesAccepted, maxValuesAccepted);
 
         accumulator.accept(0.0);
         accumulator.accept(10.0);

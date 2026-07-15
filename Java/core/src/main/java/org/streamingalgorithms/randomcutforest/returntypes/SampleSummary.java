@@ -172,12 +172,12 @@ public class SampleSummary {
 
     // ---- helpers (add as private static members) ----
 
-    private static int sortableInt(float f) {
+    protected static int sortableInt(float f) {
         int b = Float.floatToIntBits(f);
         return b ^ ((b >> 31) & 0x7fffffff);
     }
 
-    private static float decodeValue(long key) {
+    protected static float decodeValue(long key) {
         int sk = (int) (key >> 32);
         int bits = sk ^ ((sk >> 31) & 0x7fffffff); // inverse of sortableInt
         return Float.intBitsToFloat(bits);
@@ -185,11 +185,11 @@ public class SampleSummary {
 
     // Weighted prefix quantile over the sorted packed keys.
 
-    private static float weightedPick(long[] sorted, float[] w, int n, double target) {
-        double cum = 0.0;
+    protected static float weightedPick(long[] sorted, float[] w, int n, double target) {
+        double cumulative = 0.0;
         for (int t = 0; t < n; t++) {
-            cum += w[(int) (sorted[t] & 0xffffffffL)];
-            if (cum >= target) { // <-- verify: prefixPick uses >= or > ? and this clamp?
+            cumulative += w[(int) (sorted[t] & 0xffffffffL)];
+            if (cumulative >= target) {
                 return decodeValue(sorted[t]);
             }
         }
@@ -254,11 +254,6 @@ public class SampleSummary {
             this.median[i] = weightedPick(packed, weights, n, medianTarget);
             this.upper[i] = weightedPick(packed, weights, n, upperTarget);
         }
-    }
-
-    // --- convenience: default percentile ---
-    public SampleSummary(float[][] coords, float[] weights) {
-        this(coords, weights, DEFAULT_PERCENTILE);
     }
 
     // --- ADAPTER

@@ -18,6 +18,7 @@ package org.streamingalgorithms.randomcutforest.returntypes;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,8 +39,8 @@ public class OneSidedConvergingDiVectorTest {
         minValuesAccepted = 5;
         maxValuesAccepted = 100;
         dimensions = 2;
-        accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions, highIsCritical, precision,
-                minValuesAccepted, maxValuesAccepted);
+        accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions, HIGH, precision, minValuesAccepted,
+                maxValuesAccepted);
     }
 
     @Test
