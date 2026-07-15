@@ -99,46 +99,6 @@ public class CommonUtils {
     }
 
     /**
-     * Compute the probability of separation for a bounding box adn a point. This
-     * method considers the bounding box created by merging the query point into the
-     * existing bounding box, and computes the probability that a random cut would
-     * separate the query point from the merged bounding box.
-     *
-     * @param boundingBox is the bounding box used in RandomCutTree
-     * @param queryPoint  is the multidimensional point
-     * @return the probability of separation choosing a random cut
-     */
-
-    public static double getProbabilityOfSeparation(final IBoundingBoxView boundingBox, float[] queryPoint) {
-        double sumOfNewRange = 0d;
-        double sumOfDifferenceInRange = 0d;
-
-        for (int i = 0; i < queryPoint.length; ++i) {
-            double maxVal = boundingBox.getMaxValue(i);
-            double minVal = boundingBox.getMinValue(i);
-            double oldRange = maxVal - minVal;
-
-            if (maxVal < queryPoint[i]) {
-                maxVal = queryPoint[i];
-            } else if (minVal > queryPoint[i]) {
-                minVal = queryPoint[i];
-            } else {
-                sumOfNewRange += oldRange;
-                continue;
-            }
-
-            double newRange = maxVal - minVal;
-            sumOfNewRange += newRange;
-            sumOfDifferenceInRange += (newRange - oldRange);
-        }
-
-        if (sumOfNewRange <= 0) {
-            return 0;
-        } else
-            return sumOfDifferenceInRange / sumOfNewRange;
-    }
-
-    /**
      * The default anomaly scoring function for points that contained in a tree.
      *
      * @param depth The depth of the leaf node where this method is invoked
@@ -239,39 +199,4 @@ public class CommonUtils {
         return (array == null) ? null : toFloatArray(array);
     }
 
-    public static int[] toIntArray(byte[] values) {
-        checkNotNull(values, "array must not be null");
-        int[] result = new int[values.length];
-        for (int i = 0; i < values.length; i++) {
-            result[i] = values[i] & 0xff;
-        }
-        return result;
-    }
-
-    public static int[] toIntArray(char[] values) {
-        checkNotNull(values, "array must not be null");
-        int[] result = new int[values.length];
-        for (int i = 0; i < values.length; i++) {
-            result[i] = values[i];
-        }
-        return result;
-    }
-
-    public static char[] toCharArray(int[] values) {
-        checkNotNull(values, "array must not be null");
-        char[] result = new char[values.length];
-        for (int i = 0; i < values.length; i++) {
-            result[i] = (char) values[i];
-        }
-        return result;
-    }
-
-    public static byte[] toByteArray(int[] values) {
-        checkNotNull(values, "array must not be null");
-        byte[] result = new byte[values.length];
-        for (int i = 0; i < values.length; i++) {
-            result[i] = (byte) values[i];
-        }
-        return result;
-    }
 }

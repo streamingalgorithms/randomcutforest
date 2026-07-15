@@ -15,13 +15,16 @@
 
 package org.streamingalgorithms.randomcutforest.serialize.json.v2;
 
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.state.Version.V2_0;
 import static org.streamingalgorithms.randomcutforest.state.Version.V2_1;
+import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.logMax;
 
 import java.nio.ByteBuffer;
 import java.nio.DoubleBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -41,7 +44,6 @@ import org.streamingalgorithms.randomcutforest.state.store.PointStoreState;
 import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeContext;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
-import org.streamingalgorithms.randomcutforest.util.ArrayPacking;
 
 public class V2StateToV3ForestConverter {
 
@@ -66,9 +68,9 @@ public class V2StateToV3ForestConverter {
         int dimensions = state.getDimensions();
         float[] store = unpackDoublesAsFloats(state.getPointData(), state.getCurrentStoreCapacity() * dimensions);
         int startOfFreeSegment = state.getStartOfFreeSegment();
-        int[] refCount = ArrayPacking.unpackInts(state.getRefCount(), indexCapacity, state.isCompressed());
+        int[] refCount = unpackInts(state.getRefCount(), indexCapacity, state.isCompressed());
         int[] locationList = new int[indexCapacity];
-        int[] tempList = ArrayPacking.unpackInts(state.getLocationList(), state.isCompressed());
+        int[] tempList = unpackInts(state.getLocationList(), state.isCompressed());
         System.arraycopy(tempList, 0, locationList, 0, tempList.length);
         if (!state.getVersion().equals(Version.V3_0)) {
             transformArray(locationList, dimensions / state.getShingleSize());
@@ -91,7 +93,7 @@ public class V2StateToV3ForestConverter {
 
         DoubleBuffer buf = ByteBuffer.wrap(bytes).asDoubleBuffer();
         float[] result = new float[length];
-        int m = Math.min(length, bytes.length / Double.BYTES);
+        int m = min(length, bytes.length / Double.BYTES);
         for (int i = 0; i < m; i++) {
             double d = buf.get();
             result[i] = (d == 0) ? 0 : (float) d;
@@ -164,5 +166,49 @@ public class V2StateToV3ForestConverter {
             forest.pauseSampling();
         }
         return forest;
+    }
+
+    public static int[] unpackInts(int[] packedArray, int length, boolean decompress) {
+        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+        checkArgument(length >= 0, "incorrect length parameter");
+
+        if (packedArray.length < 3 || !decompress) {
+            return Arrays.copyOf(packedArray, length);
+        }
+        int min = packedArray[0];
+        int max = packedArray[1];
+        int[] output = new int[length];
+        if (min == max) {
+            if (packedArray[2] >= length) {
+                Arrays.fill(output, min);
+            } else {
+                for (int i = 0; i < packedArray[2]; i++) {
+                    output[i] = min;
+                }
+            }
+        } else {
+            long base = ((long) max - min + 1);
+            int packNum = logMax(base);
+            int count = 0;
+            for (int i = 3; i < packedArray.length; i++) {
+                long code = packedArray[i];
+                for (int j = 0; j < packNum && count < min(packedArray[2], length); j++) {
+                    output[count++] = (int) (min + code % base);
+                    code = (int) (code / base);
+                }
+            }
+        }
+        return output;
+    }
+
+    public static int[] unpackInts(int[] packedArray, boolean decompress) {
+        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+
+        if (!decompress) {
+            return Arrays.copyOf(packedArray, packedArray.length);
+        }
+
+        return (packedArray.length < 3) ? unpackInts(packedArray, packedArray.length, decompress)
+                : unpackInts(packedArray, packedArray[2], decompress);
     }
 }

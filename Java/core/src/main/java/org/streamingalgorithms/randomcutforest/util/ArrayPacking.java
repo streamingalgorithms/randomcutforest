@@ -53,19 +53,6 @@ public class ArrayPacking {
      * the input.
      *
      * @param inputArray An array of ints to pack.
-     * @param compress   A flag indicating whether to apply arithmetic compression.
-     * @return an array of packed ints.
-     */
-    public static int[] pack(int[] inputArray, boolean compress) {
-        return pack(inputArray, inputArray.length, compress);
-    }
-
-    /**
-     * Pack an array of ints. If {@code compress} is true, then this method will
-     * apply arithmetic compression to the inputs, otherwise it returns a copy of
-     * the input.
-     *
-     * @param inputArray An array of ints to pack.
      * @param length     The length of the output array. Only the first
      *                   {@code length} values in {@code inputArray} will be packed.
      * @param compress   A flag indicating whether to apply arithmetic compression.
@@ -111,80 +98,6 @@ public class ArrayPacking {
             // checkArgument(used + 3 == output.length, "incorrect state");
             return output;
         }
-    }
-
-    /**
-     * Unpack an array previously created by {@link #pack(int[], int, boolean)}.
-     * 
-     * @param packedArray An array previously created by
-     *                    {@link #pack(int[], int, boolean)}.
-     * @param decompress  A flag indicating whether the packed array was created
-     *                    with arithmetic compression enabled.
-     * @return the array of unpacked ints.
-     */
-    public static int[] unpackInts(int[] packedArray, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-
-        if (!decompress) {
-            return Arrays.copyOf(packedArray, packedArray.length);
-        }
-
-        return (packedArray.length < 3) ? unpackInts(packedArray, packedArray.length, decompress)
-                : unpackInts(packedArray, packedArray[2], decompress);
-    }
-
-    /**
-     * Unpack an array previously created by {@link #pack(int[], int, boolean)}.
-     * 
-     * @param packedArray An array previously created by
-     *                    {@link #pack(int[], int, boolean)}.
-     * @param length      The desired length of the output array. If this number is
-     *                    different from the length of the array that was originally
-     *                    packed, then the result will be truncated or padded with
-     *                    zeros as needed.
-     * @param decompress  A flag indicating whether the packed array was created
-     *                    with arithmetic compression enabled.
-     * @return the array of unpacked ints.
-     */
-    public static int[] unpackInts(int[] packedArray, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-        checkArgument(length >= 0, "incorrect length parameter");
-
-        if (packedArray.length < 3 || !decompress) {
-            return Arrays.copyOf(packedArray, length);
-        }
-        int min = packedArray[0];
-        int max = packedArray[1];
-        int[] output = new int[length];
-        if (min == max) {
-            if (packedArray[2] >= length) {
-                Arrays.fill(output, min);
-            } else {
-                for (int i = 0; i < packedArray[2]; i++) {
-                    output[i] = min;
-                }
-            }
-        } else {
-            long base = ((long) max - min + 1);
-            int packNum = logMax(base);
-            int count = 0;
-            for (int i = 3; i < packedArray.length; i++) {
-                long code = packedArray[i];
-                for (int j = 0; j < packNum && count < min(packedArray[2], length); j++) {
-                    output[count++] = (int) (min + code % base);
-                    code = (int) (code / base);
-                }
-            }
-        }
-        return output;
-    }
-
-    private static short[] copyToShort(int[] array, int length) {
-        short[] ret = new short[length];
-        for (int i = 0; i < Math.min(length, array.length); i++) {
-            ret[i] = (short) array[i];
-        }
-        return ret;
     }
 
     /**

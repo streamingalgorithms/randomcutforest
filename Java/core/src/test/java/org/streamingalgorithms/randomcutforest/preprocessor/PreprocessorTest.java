@@ -229,7 +229,8 @@ public class PreprocessorTest {
                     if (currentScore > 1.5) {
                         float[] value = forest.imputeMissingValues(shingle, 1, new int[] { shingle.length - 1 });
                         double expected = preprocessor.getExpectedValue(0, dataWithKey.data[i], shingle, value)[0];
-                        System.out.println(" expected " + expected + " in place of " + dataWithKey.data[i][0]);
+                        // System.out.println(" expected " + expected + " in place of " +
+                        // dataWithKey.data[i][0]);
                     }
                     score += currentScore;
                 }

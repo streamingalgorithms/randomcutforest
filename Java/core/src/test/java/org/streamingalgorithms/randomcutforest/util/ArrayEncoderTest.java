@@ -111,30 +111,6 @@ class ArrayEncoderTest {
         assertArrayEquals(fromLibrary, fromCore, c.name() + ": encodeCore != ArrayPacking.moveAndPack");
     }
 
-    /**
-     * decodeCore must byte-match ArrayPacking.unpackInts on the SAME packed array.
-     */
-    @ParameterizedTest(name = "decode {0}")
-    @MethodSource("cases")
-    void decodeMatchesLibrary(Case c) {
-        int size = c.values().length;
-        int[] map = new int[size];
-        for (int i = 0; i < size; i++)
-            map[i] = i;
-        int[] packed = ArrayPacking.moveAndPack(map, size, c.compress(), m -> c.values()[m]);
-
-        int[] fromLibrary = ArrayPacking.unpackInts(packed, size, c.compress());
-
-        final int[] fromCore = new int[size];
-        if (!c.compress() || packed.length < 3) {
-            System.arraycopy(packed, 0, fromCore, 0, Math.min(size, packed.length));
-        } else {
-            int[] cur = { 0 };
-            ArrayEncoder.decodeCore(packed, size, true, v -> fromCore[cur[0]++] = v);
-        }
-        assertArrayEquals(fromLibrary, fromCore, c.name() + ": decodeCore != ArrayPacking.unpackInts");
-    }
-
     /** Full round trip: encode then decode must return the original values. */
     @ParameterizedTest(name = "roundtrip {0}")
     @MethodSource("cases")
