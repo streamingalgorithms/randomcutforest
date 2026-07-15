@@ -35,9 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.pack;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackInts;
-import static org.streamingalgorithms.randomcutforest.util.ArrayPacking.unpackShorts;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.pack;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.unpackInts;
 
 import java.util.Arrays;
 import java.util.Random;
@@ -87,17 +86,6 @@ public class ArrayPackingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = { 0, 1, 2, 3, 17, 100 })
-    public void testShortsPackRoundTrip(int inputLength) {
-        short[] inputArray = new short[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = (short) (rng.nextInt() % 100);
-        }
-        assertArrayEquals(inputArray, ArrayPacking.unpackShorts(ArrayPacking.pack(inputArray, false), false));
-        assertArrayEquals(inputArray, ArrayPacking.unpackShorts(ArrayPacking.pack(inputArray, true), true));
-    }
-
-    @ParameterizedTest
     @ValueSource(ints = { 0, 1, 2, 3, 11, 100 })
     public void testIdenticalInts(int inputLength) {
         int[] inputArray = new int[inputLength];
@@ -106,20 +94,6 @@ public class ArrayPackingTest {
         int[] result = ArrayPacking.pack(inputArray, true);
         assertTrue(result.length == 3 || inputLength < 3 && result.length == inputLength);
         assertArrayEquals(inputArray, ArrayPacking.unpackInts(result, true));
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = { 0, 1, 2, 3, 17, 100 })
-    public void testIdenticalShorts(int inputLength) {
-        short item = (short) (rng.nextInt() % 100);
-        short[] inputArray = new short[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = item;
-        }
-        assertArrayEquals(inputArray, ArrayPacking.unpackShorts(ArrayPacking.pack(inputArray, false), false));
-        int[] result = ArrayPacking.pack(inputArray, true);
-        assertTrue(result.length == 3 || inputLength < 3 && result.length == inputLength);
-        assertArrayEquals(inputArray, ArrayPacking.unpackShorts(result, true));
     }
 
     @Test
@@ -159,54 +133,6 @@ public class ArrayPackingTest {
         for (int i = 100; i < 200; i++) {
             assertEquals(0, result[i]);
         }
-    }
-
-    @Test
-    public void testUnpackShortsWithLengthGiven() {
-        int inputLength = 100;
-        short[] inputArray = new short[50];
-        Arrays.fill(inputArray, (short) 2);
-        short[] test = new short[2];
-        short[] test2 = new short[3];
-        int[] uncompressed = ArrayPacking.pack(inputArray, false);
-        int[] compressed = ArrayPacking.pack(inputArray, true);
-
-        assertArrayEquals(test, unpackShorts(new int[2], true));
-        assertArrayEquals(test, unpackShorts(new int[2], false));
-        assertArrayEquals(test2, unpackShorts(new int[3], false));
-
-        assertThrows(IllegalArgumentException.class, () -> unpackShorts(uncompressed, -1, false));
-
-        short[] result = ArrayPacking.unpackShorts(uncompressed, 50, false);
-        assertEquals(50, result.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, 50), result);
-
-        result = ArrayPacking.unpackShorts(compressed, 100, true);
-        assertEquals(100, result.length);
-        for (int y = 0; y < 50; y++) {
-            assertTrue(result[y] == 2);
-        }
-        for (int y = 50; y < 100; y++) {
-            assertTrue(result[y] == 0);
-        }
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = { true, false })
-    public void testPackShortsWithLength(boolean compress) {
-        int inputLength = 100;
-        int packLength = 76;
-        short[] inputArray = new short[inputLength];
-        for (int i = 0; i < inputLength; i++) {
-            inputArray[i] = (short) (rng.nextInt() % 100);
-        }
-        assertThrows(IllegalArgumentException.class, () -> pack(inputArray, inputLength + 10, compress));
-        assertThrows(IllegalArgumentException.class, () -> pack(inputArray, -10, compress));
-        int[] array = ArrayPacking.pack(inputArray, packLength, compress);
-        short[] outputArray = ArrayPacking.unpackShorts(array, compress);
-
-        assertEquals(packLength, outputArray.length);
-        assertArrayEquals(Arrays.copyOf(inputArray, packLength), outputArray);
     }
 
     /**

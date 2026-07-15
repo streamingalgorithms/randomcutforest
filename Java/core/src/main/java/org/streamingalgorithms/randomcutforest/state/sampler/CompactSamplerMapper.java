@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.state.sampler;
 
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.unpackInts;
+
 import java.util.Arrays;
 
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
@@ -49,7 +51,7 @@ public class CompactSamplerMapper implements IStateMapper<CompactSampler, Compac
         int size = state.getSize();
         System.arraycopy(state.getWeight(), 0, weight, 0, size);
         int[] pointIndex = new int[state.getCapacity()];
-        ArrayPacking.unpackInts(state.getPointIndex(), pointIndex, size, state.isCompressed());
+        unpackInts(state.getPointIndex(), pointIndex, size, state.isCompressed());
         if (state.isStoreSequenceIndicesEnabled()) {
             sequenceIndex = new long[state.getCapacity()];
             System.arraycopy(state.getSequenceIndex(), 0, sequenceIndex, 0, size);

@@ -17,10 +17,11 @@ package org.streamingalgorithms.randomcutforest.serialize.json.v2;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.state.Version.V2_0;
 import static org.streamingalgorithms.randomcutforest.state.Version.V2_1;
 
+import java.nio.ByteBuffer;
+import java.nio.DoubleBuffer;
 import java.util.List;
 import java.util.Random;
 
@@ -63,8 +64,7 @@ public class V2StateToV3ForestConverter {
                 "precision must be " + Precision.FLOAT_64);
         int indexCapacity = state.getIndexCapacity();
         int dimensions = state.getDimensions();
-        float[] store = toFloatArray(
-                ArrayPacking.unpackDoubles(state.getPointData(), state.getCurrentStoreCapacity() * dimensions));
+        float[] store = unpackDoublesAsFloats(state.getPointData(), state.getCurrentStoreCapacity() * dimensions);
         int startOfFreeSegment = state.getStartOfFreeSegment();
         int[] refCount = ArrayPacking.unpackInts(state.getRefCount(), indexCapacity, state.isCompressed());
         int[] locationList = new int[indexCapacity];
@@ -82,6 +82,21 @@ public class V2StateToV3ForestConverter {
                 .shingleSize(state.getShingleSize()).dimensions(state.getDimensions()).locationList(locationList)
                 .nextTimeStamp(state.getLastTimeStamp()).startOfFreeSegment(startOfFreeSegment).refCount(refCount)
                 .knownShingle(state.getInternalShingle()).store(store).build();
+    }
+
+    public static float[] unpackDoublesAsFloats(byte[] bytes, int length) {
+        checkNotNull(bytes, "bytes must not be null");
+        checkArgument(length >= 0, "length must be greater than or equal to 0");
+        checkArgument(bytes.length % Double.BYTES == 0, "bytes.length must be divisible by Double.BYTES");
+
+        DoubleBuffer buf = ByteBuffer.wrap(bytes).asDoubleBuffer();
+        float[] result = new float[length];
+        int m = Math.min(length, bytes.length / Double.BYTES);
+        for (int i = 0; i < m; i++) {
+            double d = buf.get();
+            result[i] = (d == 0) ? 0 : (float) d;
+        }
+        return result;
     }
 
     void transformArray(int[] location, int baseDimension) {
