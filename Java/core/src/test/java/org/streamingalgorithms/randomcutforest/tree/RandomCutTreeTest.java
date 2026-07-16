@@ -716,8 +716,13 @@ public class RandomCutTreeTest {
         assertThrows(IllegalArgumentException.class, () -> tree.cleanup(1.5, box, null, newCut));
         assertThrows(IllegalArgumentException.class, () -> tree.cleanup(1.5, box, new float[tree.dimension], newCut));
         assertThrows(IllegalArgumentException.class, () -> tree.randomCut(0.1, null, newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.randomCut(0.1, null, newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.randomCut(0.1, box, newCut));
+        assertThrows(IllegalArgumentException.class,
+                () -> tree.randomCut(0.1, new float[tree.dimension], box, new double[0], false, newCut));
         assertThrows(IllegalArgumentException.class,
                 () -> tree.randomCut(0.1, new float[tree.dimension], box, new double[0], true, newCut));
+
         double[] oracle = new double[tree.dimension];
         Arrays.fill(oracle, -1);
         assertThrows(IllegalArgumentException.class,
@@ -744,10 +749,6 @@ public class RandomCutTreeTest {
         double seen = tree.traverse(p, ScoreVisitor.reusableFactory(0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3,
                 DefaultScoreFunctions.Normalizer.IDENTITY));
         assertEquals(seen, 3.75); // damp*seen
-        double again = tree.reusableTraverse(p, ScoreVisitor
-                .reusableFactory(0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY)
-                .newReusableVisitor(p));
-        assertEquals(again, 3.75);
     }
 
     @Test

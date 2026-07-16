@@ -68,13 +68,6 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
     }
 
-    public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
-            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
-            DefaultScoreFunctions.DampFn dampFn) {
-        this(pointToScore, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn,
-                DefaultScoreFunctions.NO_NORMALIZER);
-    }
-
     public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold) {
         this(pointToScore, treeMass, ignoreLeafMassThreshold, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
                 DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,

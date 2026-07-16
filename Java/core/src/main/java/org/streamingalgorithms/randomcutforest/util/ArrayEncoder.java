@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.function.IntUnaryOperator;
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import lombok.NonNull;
 
 /**
  * Encode/decode cores for the RCF arithmetic array codec.
@@ -338,12 +339,8 @@ public final class ArrayEncoder {
             return;
         }
         int min = packed[0], max = packed[1];
+        checkArgument(min != max, "cannot have base 2");
         int lim = Math.min(packed[2], limit);
-        if (min == max) { // base==1 (all-same)
-            for (int i = 0; i < lim; i++)
-                sink.accept(min);
-            return;
-        }
         int count = 0; // base==2 bits
         for (int i = 3; i < packed.length && count < lim; i++) {
             int code = packed[i];
@@ -355,43 +352,40 @@ public final class ArrayEncoder {
         }
     }
 
-    public static int[] unpackInts(int[] packedArray, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
+    static void validate(int[] input, int length) {
+        checkNotNull(input, " array unpacking invoked on null arrays");
         checkArgument(length >= 0, "incorrect length parameter");
+    }
+
+    static <T> void validateOut(int[] input, int length, int outLength) {
+        validate(input, length);
+        checkArgument(outLength >= length, "output buffer too small");
+    }
+
+    public static int[] unpackInts(int[] packedArray, int length, boolean decompress) {
+        validate(packedArray, length);
         int[] out = new int[length];
         ArrayEncoder.decodeCore(packedArray, length, decompress, (i, v) -> out[i] = v);
         return out;
     }
 
-    public static void unpackInts(int[] packedArray, int[] out, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-        checkNotNull(out, "output cannot be null");
-        checkArgument(length >= 0, "incorrect length parameter");
-        checkArgument(out.length >= length, "output buffer too small");
+    public static void unpackInts(int[] packedArray, @NonNull int[] out, int length, boolean decompress) {
+        validateOut(packedArray, length, out.length);
         ArrayEncoder.decodeCore(packedArray, length, decompress, (i, v) -> out[i] = v);
     }
 
-    public static void unpackInts(int[] packedArray, char[] out, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-        checkNotNull(out, "output cannot be null");
-        checkArgument(length >= 0, "incorrect length parameter");
-        checkArgument(out.length >= length, "output buffer too small");
+    public static void unpackInts(int[] packedArray, @NonNull char[] out, int length, boolean decompress) {
+        validateOut(packedArray, length, out.length);
         ArrayEncoder.decodeCore(packedArray, length, decompress, (i, v) -> out[i] = (char) v);
     }
 
     public static void unpackInts(int[] packedArray, byte[] out, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-        checkNotNull(out, "output cannot be null");
-        checkArgument(length >= 0, "incorrect length parameter");
-        checkArgument(out.length >= length, "output buffer too small");
+        validateOut(packedArray, length, out.length);
         ArrayEncoder.decodeCore(packedArray, length, decompress, (i, v) -> out[i] = (byte) v);
     }
 
     public static Int2IntOpenHashMap unpackRefCounts(int[] packedArray, byte[] out, int length, boolean decompress) {
-        checkNotNull(packedArray, " array unpacking invoked on null arrays");
-        checkNotNull(out, "output cannot be null");
-        checkArgument(length >= 0, "incorrect length parameter");
-        checkArgument(out.length >= length, "output buffer too small");
+        validateOut(packedArray, length, out.length);
         Int2IntOpenHashMap[] overflow = { null }; // holder: lambda can't reassign a captured local
         ArrayEncoder.decodeCore(packedArray, length, decompress, (i, v) -> {
             out[i] = (byte) Math.min(v, 255);

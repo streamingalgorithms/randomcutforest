@@ -17,11 +17,13 @@ package org.streamingalgorithms.randomcutforest.util;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.unpackFloats;
+import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.validateOut;
 
 import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -86,12 +88,15 @@ class ArrayEncoderTest {
     static Stream<Case> bitCases() {
         return Stream.of(
                 // base==2 : the NodeStore 0/1 mask case
+                new Case("bits_two", bits(2, 0.5, 1), true), new Case("bits_", bits(2, 0.5, 1), true),
                 new Case("bits_0.5_100", bits(100, 0.5, 1), true), new Case("bits_0.1_1000", bits(1000, 0.1, 2), true),
                 new Case("bits_0.9_1000", bits(1000, 0.9, 3), true), new Case("bits_all0_500", bits(500, 0.0, 4), true), // collapses
                                                                                                                          // to
                                                                                                                          // base==1
                 new Case("bits_all1_500", bits(500, 1.0, 5), true), // base==1
-                new Case("bits_exact30", bits(30, 0.5, 6), true), // one code word
+                new Case("bits_all0_500", bits(500, 0.0, 5), true), new Case("bits_exact30", bits(30, 0.5, 6), true), // one
+                                                                                                                      // code
+                                                                                                                      // word
                 new Case("bits_31", bits(31, 0.5, 7), true), new Case("bits_60", bits(60, 0.5, 8), true),
                 new Case("bits_nocomp", bits(100, 0.5, 9), false));
     }
@@ -133,7 +138,7 @@ class ArrayEncoderTest {
         int size = c.values().length;
         int[] packed = ArrayEncoder.bitEncode(size, c.compress(), k -> c.values()[k]);
         final int[] out = new int[size];
-        if (!c.compress() || packed.length < 3) {
+        if (!c.compress()) {
             System.arraycopy(packed, 0, out, 0, Math.min(size, packed.length));
         } else {
             int[] cur = { 0 };
@@ -142,6 +147,7 @@ class ArrayEncoderTest {
         assertArrayEquals(c.values(), out, c.name() + ": bit round trip lost data");
     }
 
+    @Test
     public void testPackFloatsWithLength() {
         int inputLength = 100;
         int packLength = 76;
@@ -158,5 +164,10 @@ class ArrayEncoderTest {
         assertArrayEquals(Arrays.copyOf(inputArray, packLength), outputArray);
         assertDoesNotThrow(() -> ArrayEncoder.pack(new float[0], 0));
         assertThrows(IllegalArgumentException.class, () -> ArrayEncoder.pack(new float[10], -1));
+    }
+
+    @Test
+    void testValidate() {
+        assertThrows(IllegalArgumentException.class, () -> validateOut(new int[2], 10, 2));
     }
 }

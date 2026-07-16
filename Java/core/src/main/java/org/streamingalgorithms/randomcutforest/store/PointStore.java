@@ -202,6 +202,7 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     int getLocation(int index) {
+        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         return baseDimension * location.get(index);
     }
 
@@ -804,12 +805,13 @@ public class PointStore implements IPointStore<Integer, float[]> {
         if (builder.refCountBytes != null || builder.location != null || builder.knownShingle != null
                 || builder.refCount != null || builder.locationList != null) {
             checkArgument(builder.refCountBytes != null || builder.refCount != null, "reference count must be present");
-            checkArgument(builder.location != null, "location list must be present");
+            checkArgument(builder.location != null || builder.locationList != null, "location column must be present");
             int length = (builder.refCountBytes != null) ? builder.refCountBytes.length
                     : (builder.refCount != null) ? builder.refCount.length : 0;
             checkArgument(length == builder.indexCapacity, "incorrect reference count length");
-            checkArgument(builder.location != null || builder.locationList != null, "location column must be present");
-            checkArgument(builder.location.length() == builder.indexCapacity, " incorrect length of locations");
+            int locLength = (builder.location != null) ? builder.location.length()
+                    : (builder.locationList != null) ? builder.locationList.length : 0;
+            checkArgument(locLength == builder.indexCapacity, " incorrect length of locations");
             checkArgument(
                     builder.knownShingle == null
                             || builder.internalShinglingEnabled && builder.knownShingle.length == builder.dimensions,
@@ -879,15 +881,9 @@ public class PointStore implements IPointStore<Integer, float[]> {
      * Build the location column from a legacy int[] locationList on deserialize.
      * <p>
      * Legacy empties are encoded as {@code -1} (old Large) or {@code 65535} (old
-     * Small, char sentinel widened to int). We do NOT normalize by matching those
-     * values: {@code 65535} is a legitimate live quotient in a Large / INT-tier
-     * store, so value-matching would silently drop a live entry. Instead we take
-     * liveness from {@code refCount} (authoritative: dead <=> refCount 0 <=>
-     * location was sentinel, kept in sync at every decrementRefCount) and write the
-     * fresh column's sentinel for every dead slot — normalizing both legacy
-     * encodings for free.
+     * Small, char sentinel widened to int).
      */
-    private static Column columnFrom(int[] legacyRaw, long maxValue, byte[] refCount) {
+    protected static Column columnFrom(int[] legacyRaw, long maxValue, byte[] refCount) {
         Column col = Column.of(legacyRaw.length, maxValue, true);
         for (int i = 0; i < legacyRaw.length; i++) {
             if ((refCount[i] & 0xff) != 0) {
@@ -953,10 +949,9 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     void getNumericVectorInto(int index, float[] answer, int offset) {
-        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
-        checkArgument(answer != null && answer.length == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
+        checkArgument(answer != null && answer.length == dimensions, "incorrect array for 0-alloc");
 
         if (!rotationEnabled) {
             System.arraycopy(store, address, answer, offset, dimensions);
@@ -970,7 +965,6 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     @Override
     public void setAsSlice(int index, float[] values, int offset) {
-        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         int address = getLocation(index);
         checkFeasible(index);
         if (!rotationEnabled) {
@@ -983,7 +977,6 @@ public class PointStore implements IPointStore<Integer, float[]> {
     @Override
     // return the rangesum
     public double addToSlice(int index, float[] boxLocation, int offset) {
-        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         int address = getLocation(index);
         checkFeasible(index);
         if (!rotationEnabled) {
@@ -995,10 +988,9 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     @Override
     public boolean isEqual(int index, float[] candidate) {
-        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
-        checkArgument(candidate != null && candidate.length == dimensions, "incorrect array for 0-alloc");
         int address = getLocation(index);
         checkFeasible(index);
+        checkArgument(candidate != null && candidate.length == dimensions, "incorrect array for 0-alloc");
 
         if (!rotationEnabled) {
             return Arrays.equals(store, address, address + dimensions, candidate, 0, dimensions);
@@ -1015,7 +1007,6 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     @Override
     public float valueAt(int index, int coord) {
-        checkArgument(index >= 0 && index < locationListLength(), " index not supported by store");
         checkArgument(coord < dimensions, "incorrect coord in valueAt");
         int address = getLocation(index);
         checkFeasible(index);

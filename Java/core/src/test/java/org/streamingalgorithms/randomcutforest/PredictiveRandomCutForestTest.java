@@ -85,7 +85,8 @@ public class PredictiveRandomCutForestTest {
                         .startNormalization(111).stopNormalization(100).build());
     }
 
-    public void simpleExample(int dataSize, TransformMethod method, ForestMode mode, double error) {
+    public void simpleExample(int dataSize, TransformMethod method, ForestMode mode, double error,
+            double boundingBoxCache) {
         int shingleSize = 1;
         int numberOfTrees = 100;
         int sampleSize = 256;
@@ -95,7 +96,8 @@ public class PredictiveRandomCutForestTest {
 
         PredictiveRandomCutForest forest = new PredictiveRandomCutForest.Builder<>().inputDimensions(baseDimensions)
                 .randomSeed(0).numberOfTrees(numberOfTrees).shingleSize(shingleSize).sampleSize(sampleSize)
-                .forestMode(mode).startNormalization(32).transformMethod(method).build();
+                .boundingBoxCacheFraction(boundingBoxCache).forestMode(mode).startNormalization(32)
+                .transformMethod(method).build();
 
         long seed = 17;
 
@@ -142,10 +144,10 @@ public class PredictiveRandomCutForestTest {
 
     @Test
     public void configTest() {
-        simpleExample(1000, NORMALIZE, STANDARD, 2);
-        simpleExample(1000, NORMALIZE, TIME_AUGMENTED, 2);
-        simpleExample(1000, NONE, STANDARD, 2);
-        simpleExample(1000, NONE, TIME_AUGMENTED, 2);
+        simpleExample(1000, NORMALIZE, STANDARD, 2, 1.0);
+        simpleExample(1000, NORMALIZE, TIME_AUGMENTED, 2, 0.5);
+        simpleExample(1000, NONE, STANDARD, 2, 0);
+        simpleExample(1000, NONE, TIME_AUGMENTED, 2, 1.0);
     }
 
     float[] generateRecordKey(Random random) {

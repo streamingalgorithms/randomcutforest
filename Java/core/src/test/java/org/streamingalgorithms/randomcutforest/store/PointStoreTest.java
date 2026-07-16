@@ -29,6 +29,7 @@ import java.util.Random;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.streamingalgorithms.randomcutforest.tree.Column;
 
 public class PointStoreTest {
 
@@ -84,6 +85,26 @@ public class PointStoreTest {
         assertEquals(large.size(), 0);
         large.add(new float[2], 0L);
         assertEquals(large.size(), 1);
+        PointStore.Builder b = new PointStore.Builder().capacity(2).dimensions(2).shingleSize(2);
+        assertThrows(IllegalArgumentException.class, () -> b.refCount(new int[1]).build());
+        assertThrows(IllegalArgumentException.class, () -> b.refCount(new int[1]).locationList(new int[2]).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> b.refCount(new int[1]).locationList(new int[2]).indexCapacity(1).build());
+        assertThrows(IllegalArgumentException.class, () -> b.refCount(new int[1]).locationList(new int[1])
+                .indexCapacity(1).knownShingle(new double[3]).build());
+        assertThrows(IllegalArgumentException.class, () -> b.refCount(new int[1]).locationList(new int[1])
+                .indexCapacity(1).internalShinglingEnabled(true).knownShingle(new double[3]).build());
+        assertDoesNotThrow(() -> b.refCount(new int[1]).locationList(new int[1]).indexCapacity(1)
+                .internalShinglingEnabled(true).knownShingle(new double[2]).build());
+    }
+
+    @Test
+    void legacyColumnTest() {
+        int[] a = new int[] { 2, 7 };
+        byte[] refcount = new byte[] { 1, 0 };
+        Column c = pointStore.columnFrom(a, 7, refcount);
+        assertTrue(c.get(0) == 2);
+        assertTrue(c.get(1) == 255);
     }
 
     @Test

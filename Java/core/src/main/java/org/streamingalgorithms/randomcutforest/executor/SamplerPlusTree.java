@@ -106,13 +106,8 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
     }
 
     @Override
-    public <R> R reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor) {
-        return tree.reusableTraverse(point, resuableVisitor);
-    }
-
-    @Override
-    public <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView viewTower) {
-        return tree.reusableFoldableTraverse(point, resuableVisitor, viewTower);
+    public <R> NodeView reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView viewTower) {
+        return tree.reusableTraverse(point, resuableVisitor, viewTower);
     }
 
     @Override

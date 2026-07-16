@@ -300,7 +300,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the following is just for testing and not to disturb the 100s of tests
     protected Cut randomCut(double factor, float[] point, BoundingBox box) {
         Cut output = new Cut(0, 0);
-        randomCut(factor, point, new ArrayBox(box), null, true, output);
+        randomCut(factor, point, new ArrayBox(box.minValues, box.maxValues), null, true, output);
         return output;
     }
 
@@ -1031,22 +1031,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return visitorFactory.liftResult(this, visitor.getResult());
     }
 
-    @Override
-    public <R> R reusableTraverse(float[] point, IRFVisitor<R> v) {
-        v.prepare(this, point); // self-arm: I supply my own projection + mass
-        NodeView view = new NodeView(this, pointStoreView, root);
-        traversePathToLeafAndVisitNodes(point, v, view, root, 0);
-        return v.getResult(); // raw; lift in executor
-    }
-
-    public <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> v, NodeView view) {
+    public <R> NodeView reusableTraverse(float[] point, IRFVisitor<R> v, NodeView view) {
         v.prepare(this, point); // self-arm: I supply my own projection + mass
         if (view == null)
             view = new NodeView(this, pointStoreView, root);
         else
             view.rearm(this, root);
         traversePathToLeafAndVisitNodes(point, v, view, root, 0);
-        // result extracted from visitor
+        // result extracted from visitor; one can do v.getResult()
         // the viewing tower (not the view) passed along
         return view;
     }

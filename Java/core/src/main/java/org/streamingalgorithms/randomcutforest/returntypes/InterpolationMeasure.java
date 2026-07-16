@@ -19,7 +19,6 @@ import static java.lang.Math.round;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
-import java.util.function.Function;
 import java.util.stream.Collector;
 
 import lombok.Getter;
@@ -138,14 +137,6 @@ public class InterpolationMeasure {
                 probMass.scale(z));
     }
 
-    public InterpolationMeasure lift(Function<double[], double[]> projection) {
-        // return new InterpolationMeasure(sampleSize, measure.lift(projection),
-        // distances.lift(projection),
-        // probMass.lift(projection));
-        // for now, with 1 class of trees
-        return this;
-    }
-
     // InterpolationMeasure — in-place variants for the fold path
     public InterpolationMeasure scaleInPlace(double z) {
         sampleSize = (int) round(sampleSize * z);
@@ -155,22 +146,7 @@ public class InterpolationMeasure {
         return this;
     }
 
-    // addToLeft already mutates left in place — reuse it directly, no new method
-    // needed.
-// folded.addFrom(stored):
-    public InterpolationMeasure addFrom(InterpolationMeasure right) {
-        return addToLeft(this, right); // sums sampleSize + all three DiVectors into this
-    }
-
     public void setSampleSize(int sampleSize) {
         this.sampleSize = sampleSize;
-    }
-
-    // InterpolationMeasure
-    public void clear() {
-        measure.clear();
-        distances.clear();
-        probMass.clear();
-        sampleSize = 0;
     }
 }

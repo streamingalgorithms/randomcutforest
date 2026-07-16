@@ -88,11 +88,9 @@ public interface ITraversable {
      * @return the return value of the visitor
      */
 
-    <R> R reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor);
-
     // visitor keeps the score (no pun intended)
     // and it strings along a nodeviewer (reused across trees)
-    <R> NodeView reusableFoldableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView view);
+    <R> NodeView reusableTraverse(float[] point, IRFVisitor<R> resuableVisitor, NodeView view);
 
     // resuable multivisitor traversal
     <R> NodeView reusableTraverseMulti(float[] point, IRFMultiVisitor<R> v, NodeView view);

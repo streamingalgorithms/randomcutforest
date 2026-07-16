@@ -66,11 +66,6 @@ public class ArrayBox implements IBoundingBoxView {
         this.rangeSum = sum;
     }
 
-    /** Convenience: whole array is the box, offset 0, dimensions = length / 2. */
-    public ArrayBox(final float[] encoded, double sum) {
-        this(encoded, 0, encoded.length / 2, sum);
-    }
-
     /**
      * Degenerate box around a single point (min == max == point). Kept for the
      * tests/callers that build a point box. Allocates its own 2*dimensions array at
@@ -118,14 +113,6 @@ public class ArrayBox implements IBoundingBoxView {
     }
 
     // ---- raw slice movement (no allocation) --------------------------------
-
-    /**
-     * Copies this box's encoded 2*dimensions floats out to `dest` starting at
-     * `destOffset`. Pure System.arraycopy; nothing is allocated.
-     */
-    public void to(float[] dest, int destOffset) {
-        System.arraycopy(values, offset, dest, destOffset, 2 * dimensions);
-    }
 
     public ArrayBox copyFromSlice(float[] source, int srcOffset, double sum) {
         System.arraycopy(source, srcOffset, values, offset, 2 * dimensions);
@@ -182,11 +169,6 @@ public class ArrayBox implements IBoundingBoxView {
         return this;
     }
 
-    public ArrayBox addSlice(float[] otherValues, int otherOffset) {
-        rangeSum = VectorSupport.addSlice(values, offset, dimensions, otherValues, otherOffset);
-        return this;
-    }
-
     // ---- accessors ---------------------------------------------------------
 
     public float getMaxValue(final int dimension) {
@@ -225,65 +207,10 @@ public class ArrayBox implements IBoundingBoxView {
         return true;
     }
 
-    public boolean contains(ArrayBox otherBox) {
-        checkArgument(otherBox.dimensions == dimensions, " incorrect lengths");
-        // contains <=> this.max >= other.max AND this.min <= other.min,
-        // which under the encoding is just values >= other.values across the slice.
-        for (int i = 0; i < 2 * dimensions; ++i) {
-            if (values[offset + i] < otherBox.values[otherBox.offset + i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     @Override
     public String toString() {
         return String.format("BoundingBox(min=%s, max=%s)", Arrays.toString(getMinValues()),
                 Arrays.toString(getMaxValues()));
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (!(other instanceof ArrayBox)) {
-            return false;
-        }
-        ArrayBox otherBox = (ArrayBox) other;
-        return dimensions == otherBox.dimensions && Arrays.equals(values, offset, offset + 2 * dimensions,
-                otherBox.values, otherBox.offset, otherBox.offset + 2 * dimensions);
-    }
-
-    @Override
-    public int hashCode() {
-        int result = 1;
-        for (int i = 0; i < 2 * dimensions; ++i) {
-            result = 31 * result + Float.floatToIntBits(values[offset + i]);
-        }
-        return result;
-    }
-
-    public BoundingBox getBoundingBox() {
-        return getBoundingBox(values, offset, dimensions, rangeSum);
-    }
-
-    protected static BoundingBox getBoundingBox(float[] values, int offset, int dimensions, double rangeSum) {
-        float[] minvalues = new float[dimensions];
-        for (int i = 0; i < dimensions; i++) {
-            minvalues[i] = -values[offset + dimensions + i];
-        }
-        float[] maxValues = Arrays.copyOfRange(values, offset, offset + dimensions);
-        return new BoundingBox(minvalues, maxValues, rangeSum);
-    }
-
-    public ArrayBox(BoundingBox box) {
-        dimensions = box.minValues.length;
-        values = new float[2 * dimensions];
-        offset = 0;
-        System.arraycopy(box.maxValues, 0, values, 0, dimensions);
-        for (int i = 0; i < dimensions; i++) {
-            values[i + dimensions] = -box.getMinValue(i);
-        }
-        rangeSum = box.rangeSum;
     }
 
     public ArrayBox(int dimensions) {

@@ -156,7 +156,7 @@ public class ImputeVisitorTest {
                 () -> new ImputeVisitor(queryPoint, queryPoint, null, new int[] { -1 }, 1.0, 42));
         assertThrows(IllegalArgumentException.class,
                 () -> new ImputeVisitor(queryPoint, queryPoint, null, new int[] { 3 }, 1.0, 42));
-        assertDoesNotThrow(()->new ImputeVisitor(queryPoint,queryPoint,null,null,1.0,42));
+        assertDoesNotThrow(() -> new ImputeVisitor(queryPoint, queryPoint, null, null, 1.0, 42));
     }
 
     // ---- getResult contract: index + distance only; leafPoint/box null; fresh

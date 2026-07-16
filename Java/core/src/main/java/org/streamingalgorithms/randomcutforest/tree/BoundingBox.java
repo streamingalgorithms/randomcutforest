@@ -16,9 +16,10 @@
 package org.streamingalgorithms.randomcutforest.tree;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 
 import java.util.Arrays;
+
+import lombok.Getter;
 
 /**
  * A single precision implementation of AbstractBoundingBox which also satisfies
@@ -39,6 +40,7 @@ public class BoundingBox implements IBoundingBoxView {
     /**
      * The sum of side lengths defined by this bounding box.
      */
+    @Getter
     protected double rangeSum;
 
     public BoundingBox(float[] point) {
@@ -133,30 +135,8 @@ public class BoundingBox implements IBoundingBoxView {
         return this;
     }
 
-    public BoundingBox addBox(BoundingBox otherBox) {
-        checkState(minValues != maxValues, "not a mutable box");
-        rangeSum = 0;
-        for (int i = 0; i < minValues.length; ++i) {
-            minValues[i] = Math.min(minValues[i], otherBox.minValues[i]);
-        }
-        for (int i = 0; i < minValues.length; ++i) {
-            maxValues[i] = Math.max(maxValues[i], otherBox.maxValues[i]);
-        }
-        for (int i = 0; i < minValues.length; ++i) {
-            rangeSum += maxValues[i] - minValues[i];
-        }
-        return this;
-    }
-
     public int getDimensions() {
         return minValues.length;
-    }
-
-    /**
-     * @return the sum of side lengths for this BoundingBox.
-     */
-    public double getRangeSum() {
-        return rangeSum;
     }
 
     /**

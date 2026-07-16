@@ -226,11 +226,6 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         reset(); // clears measure/distances/probMass + flags
     }
 
-    /** LINEAR score — sum(measure), NOT the density estimate. */
-    public double getLinearScore() {
-        return foldedScore;
-    }
-
     private InterpolationMeasure toMeasure(double[] m, double[] d, double[] p, int ss) {
         return new InterpolationMeasure(ss, new DiVector(m), new DiVector(d), new DiVector(p));
     }

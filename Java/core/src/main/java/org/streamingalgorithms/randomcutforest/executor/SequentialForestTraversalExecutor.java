@@ -53,12 +53,12 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         NodeView viewTower = null;
         if (conv == null) { // EXACT-foldable spine
             for (ITraversable c : components) {
-                viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+                viewTower = c.reusableTraverse(point, slot, viewTower);
                 slot.foldOut();
             }
         } else { // APPROX spine
             for (ITraversable c : components) {
-                viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+                viewTower = c.reusableTraverse(point, slot, viewTower);
                 conv.acceptValue(slot.convergingValue());
                 slot.foldOut();
                 if (conv.isConverged())
@@ -84,7 +84,7 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         NodeView viewTower = null;
         R acc = null;
         for (ITraversable c : components) {
-            viewTower = c.reusableFoldableTraverse(point, slot, viewTower);
+            viewTower = c.reusableTraverse(point, slot, viewTower);
             R r = visitorFactory.liftResult(null, slot.getResult()); // detached per-tree result
             acc = (acc == null) ? r : accumulator.apply(acc, r);
         }
@@ -105,7 +105,7 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         BiConsumer<A, R> acc = collector.accumulator();
         NodeView viewTower = null;
         for (ITraversable c : components) {
-            viewTower = c.reusableFoldableTraverse(point, slot, viewTower); // threads the view; no foldOut
+            viewTower = c.reusableTraverse(point, slot, viewTower); // threads the view; no foldOut
             acc.accept(container, vf.liftResult(null, slot.getResult())); // getResult() MUST be detached per tree
         }
         return collector.finisher().apply(container);
@@ -161,22 +161,5 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
             acc.accept(container, slot.getResult()); // detached per-tree sample; no lift, no sink
         }
         return collector.finisher().apply(container);
-    }
-
-    // SequentialForestTraversalExecutor — cache the reusable slot across queries.
-    // Safe ONLY here: sequential executor is single-threaded per instance;
-    // the parallel executor keeps its own copy-per-tree path untouched.
-    private IRFVisitor<?> cachedSlot;
-    private IVisitorFactory<?> cachedFor;
-
-    @SuppressWarnings("unchecked")
-    private <R> IRFVisitor<R> slotFor(IVisitorFactory<R> vf, float[] point) {
-        if (cachedFor != vf) { // factory identity changed → rebuild once
-            cachedSlot = vf.newReusableVisitor(point);
-            cachedFor = vf;
-        } else {
-            ((IRFVisitor<R>) cachedSlot).resetAcrossQueries(point); // re-arm existing arrays
-        }
-        return (IRFVisitor<R>) cachedSlot;
     }
 }
