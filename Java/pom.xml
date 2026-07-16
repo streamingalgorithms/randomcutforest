@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0                       http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.streamingalgorithms</groupId>
@@ -33,7 +33,10 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <vector.addmodules>jdk.incubator.vector</vector.addmodules>
+        <vector.compile.addmodules>jdk.incubator.vector</vector.compile.addmodules>
+        <vector.runtime.addmodules>jdk.incubator.vector</vector.runtime.addmodules>
+        <argLine></argLine>
+        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <modules>
@@ -47,6 +50,12 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+                <scope>provided</scope>
+            </dependency>
             <dependency>
                 <groupId>org.openjdk.jol</groupId>
                 <artifactId>jol-core</artifactId>
@@ -100,13 +109,13 @@
                 <version>3.15.0</version>
                 <configuration>
                     <compilerArgs>
-                        <arg>--add-modules=${vector.addmodules}</arg>
+                        <arg>--add-modules=${vector.compile.addmodules}</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.46</version>
+                            <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
@@ -116,14 +125,14 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.6</version>
                 <configuration>
-                    <argLine>@{argLine} -ea --add-modules=${vector.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} -ea --add-modules=${vector.runtime.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.5.6</version>
                 <configuration>
-                    <argLine>@{argLine} -ea --add-modules=${vector.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} -ea --add-modules=${vector.runtime.addmodules} --add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <plugin>
@@ -209,13 +218,13 @@
                 <configuration>
                     <additionalOptions>
                         <additionalOption>--add-modules</additionalOption>
-                        <additionalOption>jdk.incubator.vector</additionalOption>
+                        <additionalOption>${vector.compile.addmodules}</additionalOption>
                     </additionalOptions>
 
-                    <failOnError>true</failOnError>       <!-- real errors DO fail the build -->
-                    <failOnWarnings>false</failOnWarnings> <!-- warnings do NOT -->
-                    <quiet>true</quiet>                    <!-- kill progress chatter, keep warnings+errors -->
-                    <doclint>all,-missing</doclint>        <!-- check refs/HTML/syntax; don't nag missing tags -->
+                    <failOnError>true</failOnError>
+                    <failOnWarnings>false</failOnWarnings>
+                    <quiet>true</quiet>
+                    <doclint>all,-missing</doclint>
                 </configuration>
                 <executions>
                     <execution>
@@ -235,7 +244,7 @@
                     <autoReleaseAfterClose>false</autoReleaseAfterClose>
                 </configuration>
             </plugin>
-         </plugins>
+        </plugins>
     </build>
 
 
@@ -256,32 +265,32 @@
         <url>https://github.com/streamingalgorithms/randomcutforest/tree/main</url>
     </scm>
     <profiles>
-    <profile>
-      <id>gpg-sign</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-gpg-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
-              <execution>
-                <id>sign-artifacts</id>
-                <phase>verify</phase>
-                <goals>
-                  <goal>sign</goal>
-                </goals>
-                <configuration>
-                  <gpgArguments>
-                    <arg>--pinentry-mode</arg>
-                    <arg>loopback</arg>
-                  </gpgArguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
+        <profile>
+            <id>gpg-sign</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
