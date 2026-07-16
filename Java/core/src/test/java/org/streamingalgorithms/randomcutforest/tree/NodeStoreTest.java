@@ -27,10 +27,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
-import org.streamingalgorithms.randomcutforest.state.store.NodeStoreState;
 import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeContext;
-import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeState;
-import org.streamingalgorithms.randomcutforest.state.tree.NodeStoreMapper;
 import org.streamingalgorithms.randomcutforest.state.tree.RandomCutTreeMapper;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 
@@ -43,10 +40,15 @@ class NodeStoreTest {
     static Stream<Arguments> shapes() {
         return Stream.of(
                 // S, T, dim, rotation
-                Arguments.of(8, 1, 1, false), Arguments.of(8, 50, 1, false), Arguments.of(255, 1, 3, false),
-                Arguments.of(256, 1, 3, false), // the byte/char boundary, T=1 (P=2S)
+                Arguments.of(8, 1, 1, false), Arguments.of(2, 1, 1000, false), Arguments.of(2, 1, 100000, false),
+                Arguments.of(8, 50, 1, false), Arguments.of(255, 1, 3, false), Arguments.of(256, 1, 3, false), // the
+                                                                                                               // byte/char
+                                                                                                               // boundary,
+                                                                                                               // T=1
+                                                                                                               // (P=2S)
                 Arguments.of(256, 2, 3, false), // P = S*T+1 kicks in
-                Arguments.of(257, 50, 4, false), Arguments.of(64, 10, 8, true) // rotation path
+                Arguments.of(257, 50, 4, false), Arguments.of(50000, 2, 2, false), Arguments.of(100000, 2, 2, false), // large
+                Arguments.of(64, 10, 8, true) // rotation path
         );
     }
 
@@ -71,6 +73,11 @@ class NodeStoreTest {
         assumeHasInternalRoot(newTree);
         assertEquals(tree.getMass(), newTree.getMass());
         NodeStore after = newTree.getNodeStore();
+        RandomCutTreeMapper treeMapper = new RandomCutTreeMapper();
+        CompactRandomCutTreeContext context = contextFor(newForest);
+        RandomCutTree secondTree = treeMapper.toModel(treeMapper.toState(newTree), context);
+        NodeStore afterParent = secondTree.getNodeStore();
+        assertTrue(afterParent.parent != null); // forcing test of parent construction
         NodeStore afterAfter = firstTree(mapper.toModel(mapper.toState(newForest))).getNodeStore();
         assertTopologyEquals(after, afterAfter, 0);
     }
@@ -220,7 +227,9 @@ class NodeStoreTest {
         boolean rotating = forest.isRotationEnabled();
         int inputLen = rotating ? forest.getDimensions() / forest.getShingleSize() : dim;
         for (int i = 0; i < count; i++) {
-            forest.update(randomPoint(inputLen, rng)); // internal shingling expands to full dim
+            var point = randomPoint(inputLen, rng);
+            forest.getAnomalyScore(point); // excercising the forest
+            forest.update(point); // internal shingling expands to full dim
         }
     }
 
@@ -276,21 +285,10 @@ class NodeStoreTest {
 
     private CompactRandomCutTreeContext contextFor(RandomCutForest forest) {
         CompactRandomCutTreeContext ctx = new CompactRandomCutTreeContext();
-        ctx.setPointStore(pointStore(forest)); // <-- CONFIRM setter name
-        ctx.setDimension(forest.getDimensions()); // doc 5 sets this in toModel; set it here too
+        ctx.setPointStore(pointStore(forest));
+        ctx.setStoreParents(true);
+        ctx.setDimension(forest.getDimensions());
         return ctx;
-    }
-
-    // ==================================================================
-    // Tree-level round-trip — PREFERRED over node-level (exercises the real
-    // RandomCutTreeMapper path from doc 5, including root canonicalization).
-    // Returns the reflated tree; compare its node store against the original.
-    // ==================================================================
-
-    private RandomCutTree roundTrip(RandomCutForest forest, RandomCutTree tree) {
-        RandomCutTreeMapper mapper = new RandomCutTreeMapper();
-        CompactRandomCutTreeState state = mapper.toState(tree);
-        return mapper.toModel(state, contextFor(forest), 0L);
     }
 
     // ==================================================================
@@ -314,17 +312,6 @@ class NodeStoreTest {
             if (ns.isInternal(r))
                 stack.push(r);
         }
-    }
-
-    private NodeStoreState nodeStoreToStateWithRoot(NodeStore nodeStore, int root) {
-        NodeStoreMapper mapper = new NodeStoreMapper();
-        mapper.setRoot(root);
-        return mapper.toState(nodeStore);
-    }
-
-    private NodeStore nodeStoreToModelWithBound(NodeStoreState state, CompactRandomCutTreeContext context, int root) {
-        NodeStoreMapper mapper = new NodeStoreMapper();
-        return mapper.toModel(state, context);
     }
 
     // decoded point index behind a leaf ref (doc 4: getPointIndex = index -

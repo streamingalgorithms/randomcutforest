@@ -24,6 +24,7 @@ import lombok.Data;
 public class CompactRandomCutTreeContext {
     private int maxSize;
     private int dimension;
+    private boolean storeParents;
     private IPointStore<?, ?> pointStore;
     private Precision precision;
 }

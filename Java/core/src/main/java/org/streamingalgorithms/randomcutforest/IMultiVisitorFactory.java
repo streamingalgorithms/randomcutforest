@@ -34,16 +34,8 @@ package org.streamingalgorithms.randomcutforest;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 @FunctionalInterface
-public interface IMultiVisitorFactory<R> {
+public interface IMultiVisitorFactory<R> extends IVisitorFactory<R> {
     MultiVisitor<R> newVisitor(ITree<?, ?> tree, float[] point);
-
-    default R liftResult(ITree<?, ?> tree, R result) {
-        return result;
-    }
-
-    default boolean isReusable() {
-        return false;
-    }
 
     default IRFMultiVisitor<R> newReusableMultiVisitor(float[] point) {
         throw new UnsupportedOperationException("not a reusable multi factory");

@@ -75,32 +75,6 @@ public class NodeStore {
         this.freeNodeManager = new IndexIntervalManager(capacity);
     }
 
-    /**
-     * Deserialize. Packed arrays are node-id-indexed [0,size) in canonical BFS
-     * order.
-     */
-    protected NodeStore(int capacity, int root, int dimension, long leafRefBound, boolean storeParents,
-            float[] cutValues, int[] packedLeft, int[] packedRight, int[] packedCutDim, int size) {
-        this.capacity = capacity;
-        this.numberOfLeaves = capacity + 1;
-        this.cutValue = cutValues; // decoded by the mapper (codec unchanged)
-        this.left = Column.of(capacity, leafRefBound, false);
-        this.right = Column.of(capacity, leafRefBound, false);
-        this.cutDim = Column.of(capacity, dimension - 1, false);
-        this.mass = Column.of(capacity, capacity, false);
-        this.parent = storeParents ? Column.of(capacity, capacity - 1, true) : null;
-        for (int i = 0; i < size; i++) {
-            left.set(i, packedLeft[i]);
-            right.set(i, packedRight[i]);
-            cutDim.set(i, packedCutDim[i]);
-        }
-        buildFreeList(root);
-        if (storeParents)
-            buildParents(root);
-        // mass is NOT serialized: the tree rebuilds it post-order via
-        // validateAndReconstruct(root, ..., rebuildMass=true, ...).
-    }
-
     public static NodeStore nodeStore(int capacity, int dimension, long leafRefBound, boolean storeParents) {
         return new NodeStore(capacity, dimension, leafRefBound, storeParents);
     }
@@ -136,6 +110,7 @@ public class NodeStore {
         // ---- left / right: unpack + reflate in native primitive, then adopt ----
         // tier keyed on leafRefBound (== P + S - 1), the SAME bound construction uses.
         Column l, r;
+
         switch (Column.tierFor(leafRefBound, false)) {
         case CHAR: {
             char[] la = new char[capacity], ra = new char[capacity];
@@ -300,12 +275,6 @@ public class NodeStore {
 
     protected void decreaseMassOfInternalNode(int node) {
         setMassOfInternalNode(node, getMass(node) - 1);
-    }
-
-    // @Override // not really — placeholder to mark: setMass replaces the
-    // caller-side % in addNode (kept there, idempotent)
-    protected int size() {
-        return capacity - freeNodeManager.size();
     }
 
     // ---- record mutation ----

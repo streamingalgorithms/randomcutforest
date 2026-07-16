@@ -15,13 +15,5 @@
 
 package org.streamingalgorithms.randomcutforest;
 
-import org.streamingalgorithms.randomcutforest.tree.ITree;
-
-public interface IRFMultiVisitor<R> extends MultiVisitor<R> {
-    // re-arm ONE root visitor for the next tree.
-    // Mirror of IRFVisitor.prepare;
-    // no fold/converging members — multi is collector-only.
-    default void prepare(ITree<?, ?> tree, float[] rawPoint) {
-        throw new UnsupportedOperationException("not a reusable multi-visitor");
-    }
+public interface IRFMultiVisitor<R> extends MultiVisitor<R>, IRFVisitor<R> {
 }

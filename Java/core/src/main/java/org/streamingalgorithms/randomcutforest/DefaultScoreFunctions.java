@@ -33,10 +33,6 @@ public class DefaultScoreFunctions {
     public interface Normalizer {
         double scale(int treeMass);
 
-        default boolean isAffine() {
-            return true;
-        }
-
         Normalizer IDENTITY = m -> 1.0;
     }
 

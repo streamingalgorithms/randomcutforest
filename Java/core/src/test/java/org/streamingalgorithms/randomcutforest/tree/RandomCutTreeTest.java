@@ -35,6 +35,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.validateIntern
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -42,8 +43,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
 import org.streamingalgorithms.randomcutforest.MultiVisitor;
 import org.streamingalgorithms.randomcutforest.MultiVisitorFactory;
+import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.sampler.Weighted;
 import org.streamingalgorithms.randomcutforest.state.tree.CompactRandomCutTreeContext;
@@ -66,7 +69,7 @@ public class RandomCutTreeTest {
         pointStoreFloat = new PointStore.Builder().indexCapacity(100).capacity(100).initialSize(100).dimensions(2)
                 .build();
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStoreFloat)
-                .storeSequenceIndexesEnabled(true).storeParent(true).dimension(2).build();
+                .boundingBoxCacheFraction(1.0).storeSequenceIndexesEnabled(true).storeParent(true).dimension(2).build();
 
         // Create the following tree structure (in the second diagram., backticks denote
         // cuts)
@@ -123,6 +126,11 @@ public class RandomCutTreeTest {
         // add mass to 0,1
         tree.addPoint(4, 5);
         assertArrayEquals(tree.liftFromTree(new float[] { 17, 18 }), new float[] { 17, 18 });
+        var box = tree.validateAndReconstruct(tree.getRoot(), true, false, false);
+        assertEquals(box.getMaxValue(0), 1);
+        assertEquals(box.getMaxValue(1), 1);
+        assertEquals(box.getMinValue(0), -1);
+        assertEquals(box.getMinValue(1), -1);
     }
 
     @Test
@@ -696,6 +704,24 @@ public class RandomCutTreeTest {
         Cut anotherTestCut2 = tree.randomCut(1.5, testPoint2, box1);
         assertTrue(testCut2.getDimension() == 1);
         assertTrue(testCut2.getValue() == Math.nextAfter(newPoint[1], point[1]));
+    }
+
+    @Test
+    void cutTestCorners() {
+        float[] point = new float[tree.dimension];
+        ArrayBox box = new ArrayBox(point);
+        Cut newCut = new Cut(0, 0);
+        assertThrows(IllegalArgumentException.class, () -> tree.randomCut(1.2, box, newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.cleanup(1.2, box, null, newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.cleanup(1.5, box, null, newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.cleanup(1.5, box, new float[tree.dimension], newCut));
+        assertThrows(IllegalArgumentException.class, () -> tree.randomCut(0.1, null, newCut));
+        assertThrows(IllegalArgumentException.class,
+                () -> tree.randomCut(0.1, new float[tree.dimension], box, new double[0], true, newCut));
+        double[] oracle = new double[tree.dimension];
+        Arrays.fill(oracle, -1);
+        assertThrows(IllegalArgumentException.class,
+                () -> tree.randomCut(0.1, new float[tree.dimension], box, oracle, true, newCut));
 
     }
 
@@ -704,11 +730,24 @@ public class RandomCutTreeTest {
     public void traverseTest() {
         PointStore pointStoreFloat = new PointStore.Builder().indexCapacity(100).capacity(100).initialSize(100)
                 .dimensions(2).build();
+        float[] p = new float[] { 1, 1 };
+        int index = pointStoreFloat.add(p, 0);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStoreFloat)
                 .capacity(188).storeSequenceIndexesEnabled(true).storeParent(true).dimension(2).build();
         assertDoesNotThrow(() -> tree.validateAndReconstruct());
         assertThrows(IllegalArgumentException.class, () -> tree.traverse(null, null));
         assertThrows(IllegalArgumentException.class, () -> tree.traverseMulti(null, null));
+        tree.addPoint(index, 0);
+        double unseen = tree.traverse(new float[2], ScoreVisitor.reusableFactory(0, (x, y) -> 1, (x, y) -> 2,
+                (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY));
+        assertEquals(unseen, 2.0);
+        double seen = tree.traverse(p, ScoreVisitor.reusableFactory(0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3,
+                DefaultScoreFunctions.Normalizer.IDENTITY));
+        assertEquals(seen, 3.75); // damp*seen
+        double again = tree.reusableTraverse(p, ScoreVisitor
+                .reusableFactory(0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY)
+                .newReusableVisitor(p));
+        assertEquals(again, 3.75);
     }
 
     @Test

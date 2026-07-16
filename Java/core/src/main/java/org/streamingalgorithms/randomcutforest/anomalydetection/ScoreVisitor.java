@@ -55,7 +55,7 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
         super(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
     }
 
-    protected ScoreVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
+    public ScoreVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         super(pointToScore, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);

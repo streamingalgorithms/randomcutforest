@@ -45,6 +45,8 @@ public class DensityOutputTest {
         assertArrayEquals(zero, output.measure.low);
         assertArrayEquals(zero, output.distances.low);
         assertArrayEquals(zero, output.probMass.low);
+
+        assertEquals(new DensityOutput(3, 0).getDensity(0.1, 3), 0);
     }
 
     @Test

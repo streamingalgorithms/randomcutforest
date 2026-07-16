@@ -128,7 +128,9 @@ public class PredictiveRandomCutForestTest {
                 extTotal += ext;
             }
         }
-
+        SampleSummary first = forest.predict(new float[baseDimensions], 0, null, 1, 0, 1);
+        SampleSummary neighbor = forest.neighborSummary(new float[baseDimensions], 0);
+        assertArrayEquals(first.mean, neighbor.mean, 1e-6f);
         assertTrue(5 * error > total / (dataSize - forest.getForest().getOutputAfter()));
         assertTrue(5 * error > extTotal / (dataSize - forest.getForest().getOutputAfter()));
 

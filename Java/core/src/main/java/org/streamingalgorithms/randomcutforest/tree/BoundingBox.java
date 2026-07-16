@@ -64,13 +64,6 @@ public class BoundingBox implements IBoundingBoxView {
         this(new float[dimension], new float[dimension], 0);
     }
 
-    public void setAs(float[] point) {
-        checkArgument(point.length == minValues.length, " incorrect length");
-        System.arraycopy(point, 0, minValues, 0, minValues.length);
-        System.arraycopy(point, 0, maxValues, 0, maxValues.length);
-        rangeSum = 0.0;
-    }
-
     public BoundingBox(final float[] first, final float[] second) {
         checkArgument(first.length == second.length, " incorrect lengths in box");
         minValues = new float[first.length];
@@ -122,14 +115,6 @@ public class BoundingBox implements IBoundingBoxView {
     public BoundingBox getMergedBox(float[] point) {
         checkArgument(point.length == minValues.length, "incorrect length");
         return copy().addPoint(point);
-    }
-
-    public float[] getMaxValues() {
-        return maxValues;
-    }
-
-    public float[] getMinValues() {
-        return minValues;
     }
 
     public BoundingBox addPoint(float[] point) {

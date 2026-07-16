@@ -258,9 +258,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * @param box    the pathological box in question
      * @param point  can be null, non-null points are unioned
      * @param output the output cut
-     * @return
      */
-    private void cleanup(double factor, ArrayBox box, float[] point, Cut output) {
+    protected void cleanup(double factor, ArrayBox box, float[] point, Cut output) {
 
         // if we are here then factor is likely almost 1 and we have floating point
         // issues. we will randomize between the first and the last non-zero ranges
@@ -293,7 +292,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             }
         }
 
-        throw new IllegalStateException("The break point did not lie inside the expected range; factor " + factor
+        // flag
+        checkArgument(false, () -> "The break point did not lie inside the expected range; factor " + factor
                 + ", point " + Arrays.toString(point) + " box " + box.toString());
     }
 
@@ -328,7 +328,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
             float[] point = projectToTree(pointScratch);
             // point,pointScratch are exact locations now
-            checkArgument(point.length == dimension, () -> " mismatch in dimensions for " + pointIndex);
+            // checkArgument(point.length == dimension, () -> " mismatch in dimensions for "
+            // + pointIndex);
             Stack<int[]> pathToRoot = nodeStore.getPath(root, point, false);
             int[] first = pathToRoot.pop();
             int leafNode = first[0];
@@ -336,12 +337,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             int leafSavedSibling = first[1];
             int sibling = leafSavedSibling;
             int leafPointIndex = getPointIndex(leafNode);
-            float[] oldPoint = projectToTree(pointStoreView.getNumericVector(leafPointIndex));
-            checkArgument(oldPoint.length == dimension, () -> " mismatch in dimensions for " + pointIndex);
+            // float[] oldPoint =
+            // projectToTree(pointStoreView.getNumericVector(leafPointIndex));
+            // checkArgument(oldPoint.length == dimension, () -> " mismatch in dimensions
+            // for " + pointIndex);
 
             Stack<int[]> parentPath = new Stack<>();
 
-            if (Arrays.equals(point, oldPoint)) {
+            if (pointStoreView.isEqual(leafPointIndex, pointScratch)) {
                 increaseLeafMass(leafNode);
                 manageAncestorsAdd(pathToRoot, point);
                 addLeaf(leafPointIndex, sequenceIndex);
@@ -351,7 +354,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 int savedNode = node;
                 int parent = savedParent;
                 float savedCutValue = (float) 0.0;
-                boxScratch.fromPoint(oldPoint);
+                pointStoreView.setAsSlice(leafPointIndex, boxScratch.values, boxScratch.offset);
                 ArrayBox savedBox = boxScratch.copy();
                 int savedDim = Integer.MAX_VALUE;
                 Random rng;
@@ -556,7 +559,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         // Single-threaded scratchpad reuse (Excellent for performance!)
         pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
         float[] point = projectToTree(pointScratch);
-        checkArgument(point.length == dimension, () -> " incorrect projection at index " + pointIndex);
+        // checkArgument(point.length == dimension, () -> " incorrect projection at
+        // index " + pointIndex);
 
         // --- ALLOCATION-FREE WALK ---
         int parentNode = Null;

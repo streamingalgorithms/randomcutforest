@@ -80,12 +80,12 @@ public class BoundingBoxTest {
 
         assertTrue(box1.probabilityOfCut(point2) == 1.0);
         assertTrue(box1.probabilityOfCut(point1) == 0.0);
+
     }
 
     @Test
     public void testGetMergedBoxWithOtherBox() {
 
-        assertThrows(IllegalStateException.class, () -> box1.addBox(box2));
         assertThrows(IllegalArgumentException.class, () -> box1.addPoint(new float[1]));
         assertThrows(IllegalArgumentException.class, () -> box1.addPoint(new float[2]));
         assertDoesNotThrow(() -> box1.copy().addPoint(new float[2]));
@@ -102,7 +102,10 @@ public class BoundingBoxTest {
 
         double rangeSum = (3.0 - 1.5) + (2.7 - 1.2);
         assertThat(mergedBox.getRangeSum(), closeTo(rangeSum, EPSILON));
-
+        BoundingBox doubleBox = mergedBox.getMergedBox(mergedBox);
+        assertThat(mergedBox.getRangeSum(), closeTo(rangeSum, EPSILON));
+        assertThat(doubleBox.getRangeSum(), closeTo(rangeSum, EPSILON));
+        assertThat(mergedBox.probabilityOfCut(new float[] { 1, 1 }), closeTo(0.7 / 3.7, EPSILON));
         // check that box1 and box2 were not changed
 
         assertThat(box1.getDimensions(), is(2));

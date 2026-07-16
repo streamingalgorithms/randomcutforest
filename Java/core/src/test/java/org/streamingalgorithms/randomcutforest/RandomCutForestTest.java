@@ -39,7 +39,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.*;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
@@ -50,6 +50,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,7 @@ import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
 
@@ -143,6 +145,7 @@ public class RandomCutForestTest {
         assertEquals(
                 forest.getApproximateDynamicAttribution(new float[2], 0.1, true, 1, null, null, null).getHighLowSum(),
                 0);
+        assertTrue(forest.getConditionalField(new float[2], null, 0).isEmpty());
     }
 
     @Test
@@ -161,7 +164,11 @@ public class RandomCutForestTest {
         assertThrows(IllegalArgumentException.class, () -> forest.setBoundingBoxCacheFraction(2));
         assertThrows(IllegalArgumentException.class, () -> forest.getDynamicScore(new float[2], -1, null, null, null));
         assertThrows(IllegalArgumentException.class,
+                () -> forest.getDynamicAttribution(new float[2], -1, null, null, null));
+        assertThrows(IllegalArgumentException.class,
                 () -> forest.getApproximateDynamicScore(new float[2], 0.1, true, -1, null, null, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> forest.getApproximateDynamicAttribution(new float[2], 0.1, true, -1, null, null, null));
     }
 
     @Test
@@ -386,8 +393,18 @@ public class RandomCutForestTest {
 
         DiVector exact = forest.getAnomalyAttribution(q);
 
+        double approxScore = parallel.getApproximateAnomalyScore(q);
+        double approxDynamicScore = parallel.getApproximateDynamicScore(toFloatArray(q), 0, true, 0,
+                CommonUtils::defaultScoreSeenFunction, CommonUtils::defaultScoreUnseenFunction,
+                CommonUtils::defaultDampFunction);
         DiVector approxParallel = parallel.getApproximateAnomalyAttribution(q);
-
+        DiVector approxDynamic = parallel.getApproximateDynamicAttribution(toFloatArray(q), 0, true, 0,
+                CommonUtils::defaultScoreSeenFunction, CommonUtils::defaultScoreUnseenFunction,
+                CommonUtils::defaultDampFunction);
+        assertEquals(approxDynamicScore * defaultAffineNormalizer(sampleSize), approxScore, 1e-6);
+        assertEquals(approxScore, approxParallel.getHighLowSum(), 1e-6);
+        assertEquals(approxDynamic.getHighLowSum() * defaultAffineNormalizer(sampleSize),
+                approxParallel.getHighLowSum(), 1e-6);
         assertArrayEquals(exact.high, approxParallel.high, EPSILON); // parallel == exact, by construction
         assertArrayEquals(exact.low, approxParallel.low, EPSILON);
 
@@ -1096,5 +1113,41 @@ public class RandomCutForestTest {
         }
 
         return data;
+    }
+
+    @Test
+    void testResuseWithoutFold() {
+        IVisitorFactory<Double> test = new IVisitorFactory<Double>() {
+            @Override
+            public boolean isReusable() {
+                return true;
+            }
+
+            @Override
+            public boolean isFoldable() {
+                return false;
+            }
+
+            // sizes from the (projected) point; mass + copy come from prepare(tree, point)
+            @Override
+            public IRFVisitor<Double> newReusableVisitor(float[] point) {
+                return new ScoreVisitor(point, 0, 0, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP,
+                        DEFAULT_NORMALIZER); // sized, unarmed; no copy
+            }
+
+            @Override
+            public Visitor<Double> newVisitor(ITree<?, ?> tree, float[] point) {
+                return new ScoreVisitor(tree.projectToTree(point), tree.getMass(), 0, DEFAULT_SCORE_SEEN,
+                        DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+            }
+        };
+
+        float[] p = new float[forest.dimensions];
+        double score = trainedForest.getAnomalyScore(p);
+        double v = trainedForest.traverseForest(p, test, Double::sum, x -> x / trainedForest.getNumberOfTrees());
+        assertEquals(v, score, 1e-6);
+
+        double u = trainedForest.traverseForest(p, test, Collectors.reducing(0.0, Double::sum));
+        assertEquals(u, score * trainedForest.numberOfTrees, 1e-6);
     }
 }

@@ -15,14 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.imputation;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreSeenFunction;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScoreUnseenFunction;
 
@@ -163,6 +156,7 @@ public class ImputeVisitorTest {
                 () -> new ImputeVisitor(queryPoint, queryPoint, null, new int[] { -1 }, 1.0, 42));
         assertThrows(IllegalArgumentException.class,
                 () -> new ImputeVisitor(queryPoint, queryPoint, null, new int[] { 3 }, 1.0, 42));
+        assertDoesNotThrow(()->new ImputeVisitor(queryPoint,queryPoint,null,null,1.0,42));
     }
 
     // ---- getResult contract: index + distance only; leafPoint/box null; fresh

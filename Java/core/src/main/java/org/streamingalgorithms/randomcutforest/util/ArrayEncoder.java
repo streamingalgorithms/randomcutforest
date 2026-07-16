@@ -76,6 +76,7 @@ public final class ArrayEncoder {
         return Math.max(pack, 1);
     }
 
+    // needed for legacy versions
     public static int unpackedLength(int[] packed, boolean decompress) {
         if (!decompress || packed.length < 3) {
             return packed.length; // uncompressed / too-short: full array

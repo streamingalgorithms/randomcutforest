@@ -15,9 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.*;
 
 import java.util.Random;
 
@@ -355,5 +355,43 @@ public class VectorSupportParityTest {
         for (int i = 0; i < a.length; i++) {
             close(what + "[" + i + "]", dim, a[i], b[i]);
         }
+    }
+
+    private float[] randomPoint(int len, Random rng) {
+        float[] p = new float[len];
+        for (int i = 0; i < len; i++) {
+            p[i] = (float) (rng.nextGaussian() * 10.0);
+        }
+        return p;
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 1, 5, 50 })
+    void testLP(int dim) {
+        float[] point1 = randomPoint(dim, new Random());
+        float[] point2 = randomPoint(dim, new Random());
+        double dist = L1distance(point1, point2);
+        assertEquals(dist, VectorSupport.L1distance(point1, point2), dist * 1e-6f);
+        assertEquals(L2distance(point1, point2), VectorSupport.L2distance(point1, point2), dist * 1e-6f);
+        assertEquals(LInfinitydistance(point1, point2), VectorSupport.LInfinitydistance(point1, point2), 1e-6f);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 2, 10, 50 })
+    void gapBox(int dim) {
+        // has to be even
+        float[] box1 = randomPoint(dim, new Random());
+        float[] box2 = randomPoint(dim, new Random());
+        float[] dst1 = new float[dim];
+        float[] dst2 = new float[dim];
+        double t1 = VectorSupportSIMD.gapInto(box1, 0, box2, 0, dst1, 0, dim / 2);
+        double t2 = VectorSupportLegacy.gapInto(box1, 0, box2, 0, dst2, 0, dim / 2);
+        double t3 = VectorSupport.gapInto(box1, 0, box2, 0, dst2, 0, dim / 2);
+        assertEquals(t1, t2, t1 * 1e-6);
+        assertTrue(t1 == t3 || t2 == t3);
+        assertArrayEquals(dst1, dst2, 1e-6f);
+        assertTrue(VectorSupportSIMD.contains(box1, 0, dim / 2, box1, 0));
+        assertTrue(VectorSupportLegacy.contains(box1, 0, dim / 2, box1, 0));
+        assertTrue(VectorSupport.contains(box1, 0, dim / 2, box1, 0));
     }
 }

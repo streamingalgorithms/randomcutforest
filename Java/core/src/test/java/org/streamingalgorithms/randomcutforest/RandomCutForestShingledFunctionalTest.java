@@ -17,11 +17,9 @@ package org.streamingalgorithms.randomcutforest;
 
 import static java.lang.Math.PI;
 import static java.lang.Math.cos;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWithKeys.generateShingledData;
 
 import java.util.List;
@@ -150,9 +148,17 @@ public class RandomCutForestShingledFunctionalTest {
 
             assertEquals(shingledData.length, dataWithKeys.data.length - shingleSize + 1);
 
+            assertThrows(IllegalArgumentException.class, () -> second.update(toFloatArray(shingledData[0]), true));
+            assertThrows(IllegalArgumentException.class, () -> first.update(toFloatArray(shingledData[0]), true));
+            assertDoesNotThrow(() -> first.update(toFloatArray(dataWithKeys.data[0]), true));
+            // at shinglesize -2
+            assertEquals(first.transformToShingledPoint(new float[2])[0], toFloatArray(dataWithKeys.data[0])[0], 1e-6);
+            assertEquals(first.transformToShingledPoint(new float[2])[1], toFloatArray(dataWithKeys.data[0])[1], 1e-6);
+
             int count = shingleSize - 1;
-            // insert initial points
-            for (int j = 0; j < shingleSize - 1; j++) {
+            // insert initial points -- note first point is already added
+            for (int j = 1; j < shingleSize - 1; j++) {
+                first.getAnomalyScore(dataWithKeys.data[j]); // keeping the habit of score first
                 first.update(dataWithKeys.data[j]);
             }
 

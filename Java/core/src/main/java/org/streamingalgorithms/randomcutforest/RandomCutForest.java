@@ -33,7 +33,6 @@ import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 import java.util.stream.Collector;
 
 import org.streamingalgorithms.randomcutforest.anomalydetection.*;
@@ -808,10 +807,6 @@ public class RandomCutForest {
         return fn.apply(toFloatArray(p));
     }
 
-    private double[] asFloatArray(double[] p, UnaryOperator<float[]> fn) {
-        return toDoubleArray(fn.apply(toFloatArray(p)));
-    }
-
     public double getAnomalyScore(double[] p) {
         return asFloat(p, this::getAnomalyScore);
     }
@@ -867,8 +862,6 @@ public class RandomCutForest {
      * @return anomaly score with early stopping with z=0.1
      */
     public double getApproximateAnomalyScore(float[] point) {
-        if (!isOutputReady())
-            return 0.0;
         if (parallelExecutionEnabled) {
             return getAnomalyScore(point); // parallel: exact fold path, no convergence
         }
@@ -1600,13 +1593,13 @@ public class RandomCutForest {
     public DiVector getDynamicAttribution(float[] point, int ignoreLeafMassThreshold,
             BiFunction<Double, Double, Double> seen, BiFunction<Double, Double, Double> unseen,
             BiFunction<Double, Double, Double> newDamp) {
-        checkArgument(ignoreLeafMassThreshold >= 0, "...");
+        checkArgument(ignoreLeafMassThreshold >= 0, "incorrect threshold");
         return attributionWith(point, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
                 DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), NO_NORMALIZER);
     }
 
     /**
-     * Atrribution for dynamic sequential scoring; getL1Norm() should agree with
+     * Attribution for dynamic sequential scoring; getL1Norm() should agree with
      * getDynamicScoringSequential
      *
      * @param point                   input

@@ -57,6 +57,7 @@ public class RandomCutTreeMapper
         int dimension = (state.getDimensions() != 0) ? state.getDimensions() : context.getPointStore().getDimensions();
         context.setDimension(dimension);
         nodeStoreMapper.setRoot(state.getRoot());
+        nodeStoreMapper.setStoreParent(context.isStoreParents());
         long leafRefBound = context.getPointStore().getCapacity() + state.getMaxSize() - 1L;
         NodeStore nodeStore = nodeStoreMapper.toModel(state.getNodeStoreState(), context);
 

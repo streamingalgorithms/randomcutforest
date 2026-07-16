@@ -22,6 +22,8 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Stack;
 
+import lombok.Getter;
+
 /**
  * This class defines common functionality for Store classes, including
  * maintaining the stack of free pointers.
@@ -29,6 +31,7 @@ import java.util.Stack;
 
 public class IndexIntervalManager {
 
+    @Getter
     protected int capacity;
     protected int[] freeIndexesStart;
     protected int[] freeIndexesEnd;
@@ -115,24 +118,6 @@ public class IndexIntervalManager {
 
     public boolean isEmpty() {
         return (lastInUse == 0);
-    }
-
-    /**
-     * @return the maximum number of nodes whose data can be stored.
-     */
-    public int getCapacity() {
-        return capacity;
-    }
-
-    /**
-     * @return the number of indices which are being maintained
-     */
-    public int size() {
-        int sum = 0;
-        for (int i = 0; i < lastInUse; i++) {
-            sum += freeIndexesEnd[i] - freeIndexesStart[i] + 1;
-        }
-        return sum;
     }
 
     /**

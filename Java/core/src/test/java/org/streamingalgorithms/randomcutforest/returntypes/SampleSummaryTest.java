@@ -75,7 +75,7 @@ public class SampleSummaryTest {
         assertDoesNotThrow(() -> new SampleSummary(weighted));
         weighted.get(1).index = new float[newDimensions + 1];
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
-        assertThrows(IllegalArgumentException.class,()-> new SampleSummary(new float[5][],new float[0],0) );
+        assertThrows(IllegalArgumentException.class, () -> new SampleSummary(new float[5][], new float[0], 0));
         weighted.get(1).index = new float[newDimensions];
         weighted.get(1).index[0] = Float.NaN;
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
@@ -83,9 +83,9 @@ public class SampleSummaryTest {
         assertThrows(IllegalArgumentException.class, () -> new SampleSummary(weighted));
         weighted.get(1).index[0] = -1.0f;
         SampleSummary summary = new SampleSummary(weighted);
-        for(int i=0;i<newDimensions;i++){
-            assertTrue(summary.upper[i]>=summary.median[i]);
-            assertTrue(summary.median[i]>=summary.lower[i]);
+        for (int i = 0; i < newDimensions; i++) {
+            assertTrue(summary.upper[i] >= summary.median[i]);
+            assertTrue(summary.median[i] >= summary.lower[i]);
         }
     }
 
