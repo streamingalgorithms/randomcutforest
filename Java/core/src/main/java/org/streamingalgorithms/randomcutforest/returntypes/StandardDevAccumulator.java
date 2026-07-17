@@ -146,11 +146,6 @@ public abstract class StandardDevAccumulator<R> implements ConvergingAccumulator
         witnesses += active & witness;
     }
 
-    @Override
-    public boolean isPrimitive() {
-        return true;
-    }
-
     /**
      * @return the number of values accepted until now.
      */

@@ -198,14 +198,4 @@ public class DiVector {
         this.low = Arrays.copyOfRange(directionalAttribution, dimensions, 2 * dimensions);
     }
 
-    public DiVector lift(Function<double[], double[]> projection) {
-        return this;
-        // return new DiVector(projection.apply(high), projection.apply(low));
-    }
-
-    // InterpolationMeasure
-    public void clear() {
-        Arrays.fill(high, 0);
-        Arrays.fill(low, 0);
-    }
 }

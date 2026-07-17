@@ -239,8 +239,8 @@ public class RandomCutTreeTest {
         assertTrue(tree.getRoot() == 0);
         assertTrue(tree.getCutValue(0) == (double) Math.nextAfter(1.0f, 0.0));
         assertTrue(tree.getCutValue(1) == (double) Math.nextAfter(2.0f, 1.0));
-        assertTrue(tree.getBox(1).contains(new float[] { 2 }));
-        assertTrue(tree.getBox(1).contains(new float[] { 1.001f }));
+        assertTrue(tree.getArrayBox(1).contains(new float[] { 2 }));
+        assertTrue(tree.getArrayBox(1).contains(new float[] { 1.001f }));
     }
 
     /**
@@ -250,8 +250,8 @@ public class RandomCutTreeTest {
     public void testInitialTreeState() {
         int node = tree.getRoot();
         // the second double[] is intentional
-        IBoundingBoxView expectedBox = new BoundingBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        ArrayBox expectedBox = new ArrayBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
         assertThat(tree.getCutDimension(node), is(1));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
         assertThat(tree.getMass(), is(5));
@@ -272,8 +272,9 @@ public class RandomCutTreeTest {
         NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
-        expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new BoundingBox(new float[] { 1, 1 }));
-        assertThat(tree.getBox(node), is(expectedBox));
+        expectedBox = new ArrayBox(new float[] { -1, 0 }).getMergedBox(new BoundingBox(new float[] { 1, 1 }));
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
+
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(0.5, EPSILON));
         assertThat(tree.getMass(node), is(4));
@@ -287,8 +288,8 @@ public class RandomCutTreeTest {
 
         assert (nodeStoreSmall.getParentIndex(tree.getLeftChild(node)) == node);
         node = tree.getLeftChild(node);
-        expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        expectedBox = new ArrayBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
 
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
@@ -370,8 +371,9 @@ public class RandomCutTreeTest {
         // updated
 
         int node = tree.getRoot();
-        IBoundingBoxView expectedBox = new BoundingBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        ArrayBox expectedBox = new ArrayBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
+
         assertThat(tree.getCutDimension(node), is(1));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
         assertThat(tree.getMass(), is(4));
@@ -388,8 +390,8 @@ public class RandomCutTreeTest {
         NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
-        expectedBox = new BoundingBox(new float[] { 0, 1 }).getMergedBox(new float[] { 1, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        expectedBox = new ArrayBox(new float[] { 0, 1 }).getMergedBox(new float[] { 1, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(0.5, EPSILON));
         assertThat(tree.getMass(node), is(3));
@@ -416,8 +418,8 @@ public class RandomCutTreeTest {
         // root node bounding box recomputed
 
         int node = tree.getRoot();
-        IBoundingBoxView expectedBox = new BoundingBox(new float[] { -1, -1 }).getMergedBox(new float[] { 0, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        ArrayBox expectedBox = new ArrayBox(new float[] { -1, -1 }).getMergedBox(new float[] { 0, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
         assertThat(tree.getCutDimension(node), is(1));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
         assertThat(tree.getMass(), is(4));
@@ -432,8 +434,8 @@ public class RandomCutTreeTest {
         NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);
         node = tree.getRightChild(node);
-        expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        expectedBox = new ArrayBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
 
@@ -477,8 +479,8 @@ public class RandomCutTreeTest {
         // same as initial state except mass at 0,1 is 1
 
         int node = tree.getRoot();
-        IBoundingBoxView expectedBox = new BoundingBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        ArrayBox expectedBox = new ArrayBox(new float[] { -1, -1 }).getMergedBox(new float[] { 1, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
         assertThat(tree.getCutDimension(node), is(1));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
         assertThat(tree.getMass(), is(4));
@@ -497,8 +499,9 @@ public class RandomCutTreeTest {
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getLeftChild(node))).get(1L), 1);
 
         node = tree.getRightChild(node);
-        expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 1, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
+        expectedBox = new ArrayBox(new float[] { -1, 0 }).getMergedBox(new float[] { 1, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
+
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(0.5, EPSILON));
         assertThat(tree.getMass(node), is(3));
@@ -517,9 +520,9 @@ public class RandomCutTreeTest {
         NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getLeftChild(node)) == node);
         node = tree.getLeftChild(node);
-        expectedBox = new BoundingBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
-        assertThat(tree.getBox(node), is(expectedBox));
-        assertEquals(expectedBox.toString(), tree.getBox(node).toString());
+        expectedBox = new ArrayBox(new float[] { -1, 0 }).getMergedBox(new float[] { 0, 1 });
+        assertArrayEquals(tree.getArrayBox(node).values, expectedBox.values);
+        assertEquals(expectedBox.toString(), tree.getArrayBox(node).toString());
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(-0.5, EPSILON));
         assertThat(tree.getMass(), is(4));
@@ -764,7 +767,7 @@ public class RandomCutTreeTest {
         assertThrows(IllegalStateException.class, () -> tree.traverseTreeMulti(null, null, null, tree.root, 0));
 
         assertThrows(IllegalArgumentException.class, () -> tree.growArrayBox(null, pointStoreFloat, 187));
-        assertThrows(IllegalStateException.class, () -> tree.getBox(187));
+        assertThrows(IllegalArgumentException.class, () -> tree.getArrayBox(187));
     }
 
 }

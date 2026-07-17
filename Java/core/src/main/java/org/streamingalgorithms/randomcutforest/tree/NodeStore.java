@@ -293,6 +293,12 @@ public class NodeStore {
             right.set(parent, newNode);
     }
 
+    /** The sibling is being promoted to root: it has no parent. */
+    public void detachAsRoot(int node) {
+        if (parent != null && isInternal(node))
+            setParentIndex(node, Null);
+    }
+
     public void replaceParentBySibling(int grandParent, int parentNode, int node) {
         int sibling = getSibling(node, parentNode);
         if (left.get(grandParent) == parentNode)
@@ -346,6 +352,20 @@ public class NodeStore {
         return sibling;
     }
 
+    /**
+     * Fills path[0..depth) root→leaf, returns depth. path must hold numberOfLeaves
+     * entries.
+     */
+    public int getPathInto(int root, float[] point, int[] path) {
+        int node = root, depth = 0;
+        path[depth++] = node;
+        while (isInternal(node)) {
+            node = leftOf(node, point) ? getLeftIndex(node) : getRightIndex(node);
+            path[depth++] = node;
+        }
+        return depth;
+    }
+
     public Stack<int[]> getPath(int root, float[] point, boolean verbose) {
         int node = root;
         Stack<int[]> answer = new Stack<>();
@@ -362,7 +382,7 @@ public class NodeStore {
         return answer;
     }
 
-    public int addNode(Stack<int[]> pathToRoot, float[] point, long sequenceIndex, int pointIndex, int childIndex,
+    public int addNode(int parentIndex, float[] point, long sequenceIndex, int pointIndex, int childIndex,
             int childMassIfLeaf, int cutDimension, float cut) {
         int index = freeNodeManager.takeIndex();
         if (leftOf(cut, cutDimension, point)) {
@@ -371,7 +391,6 @@ public class NodeStore {
             addRecord(index, childIndex, pointIndex + capacity + 1, cut, cutDimension);
         }
         setMassOfInternalNode(index, ((childMassIfLeaf > 0) ? childMassIfLeaf : getMass(childIndex)) + 1);
-        int parentIndex = pathToRoot.isEmpty() ? Null : pathToRoot.lastElement()[0];
         setParentIndex(index, parentIndex);
         if (!isLeaf(childIndex))
             setParentIndex(childIndex, index);
