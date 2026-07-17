@@ -241,6 +241,7 @@ public class RandomCutForestMapper
         CompactSamplerMapper samplerMapper = new CompactSamplerMapper();
         checkArgument(state.isSaveSamplerStateEnabled(), "samplers are not saved; no forest to reconstruct");
         List<CompactSamplerState> samplerStates = state.getCompactSamplerStates();
+        double[] attributionScratch = (treeStates == null) ? new double[pointStore.getDimensions()] : null;
         for (int i = 0; i < state.getNumberOfTrees(); i++) {
             CompactSampler sampler = samplerMapper.toModel(samplerStates.get(i), random.nextLong());
 
@@ -258,7 +259,7 @@ public class RandomCutForestMapper
                         .centerOfMassEnabled(state.isCenterOfMassEnabled())
                         .storeSequenceIndexesEnabled(state.isStoreSequenceIndexesEnabled()).build();
                 treeMapper.setSamplerSize(tree.getNumberOfLeaves());
-                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList());
+                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList(), attributionScratch);
             }
             components.add(new SamplerPlusTree<>(sampler, tree));
         }

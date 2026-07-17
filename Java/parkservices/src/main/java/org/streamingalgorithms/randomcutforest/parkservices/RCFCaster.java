@@ -216,13 +216,13 @@ public class RCFCaster extends ThresholdedRandomCutForest {
         try {
             if (cacheDisabled) {
                 // turn caching on temporarily
-                forest.setBoundingBoxCacheFraction(1.0);
+                // forest.setBoundingBoxCacheFraction(1.0);
             }
             augment(answer);
         } finally {
             if (cacheDisabled) {
                 // turn caching off
-                forest.setBoundingBoxCacheFraction(0);
+                // forest.setBoundingBoxCacheFraction(0);
             }
         }
 

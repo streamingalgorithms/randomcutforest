@@ -456,25 +456,7 @@ public class RandomCutTreeTest {
     @Test
     public void testDeletePointWithMassGreaterThan1() {
 
-        assertTrue(tree.boundingBoxCacheFraction == 1.0);
-        tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, 0.5);
-        assertTrue(tree.boundingBoxData != null);
-        assertTrue(tree.boundingBoxData.length == ((tree.numberOfLeaves - 1) / 2) * 4);
-        assertTrue(tree.rangeSumData != null);
-        assertTrue(tree.rangeSumData.length == (tree.numberOfLeaves - 1) / 2);
-
-        int root = tree.getRoot();
-
-        tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, 0.0);
-        assertTrue(tree.boundingBoxData == null);
-        assertTrue(tree.rangeSumData == null);
-
         tree.deletePoint(3, 4);
-        tree.setConfig(Config.BOUNDING_BOX_CACHE_FRACTION, 0.5);
-        assertTrue(tree.boundingBoxData != null);
-        assertTrue(tree.boundingBoxData.length == ((tree.numberOfLeaves - 1) / 2) * 4);
-        assertTrue(tree.rangeSumData != null);
-        assertTrue(tree.rangeSumData.length == (tree.numberOfLeaves - 1) / 2);
 
         // same as initial state except mass at 0,1 is 1
 
@@ -763,7 +745,7 @@ public class RandomCutTreeTest {
         tree.root = 187;
         assertThrows(IllegalStateException.class, () -> tree.validateAndReconstruct());
         assertThrows(IllegalStateException.class,
-                () -> tree.traversePathToLeafAndVisitNodes(null, null, null, tree.root, 0));
+                () -> tree.traversePathToLeafAndVisitNodes(null, null, null, tree.root, 0, 0));
         assertThrows(IllegalStateException.class, () -> tree.traverseTreeMulti(null, null, null, tree.root, 0));
 
         assertThrows(IllegalArgumentException.class, () -> tree.growArrayBox(null, pointStoreFloat, 187));

@@ -175,6 +175,7 @@ public class HyperTreeTest {
                 }
             }
             boolean[][] status = new boolean[numberOfTrees + 1][pointList.length];
+            double[] attributionScratch = new double[dimensions];
             for (int i = 0; i < numberOfTrees; i++) {
                 int y = 0;
                 while (y < sampleSize) {
@@ -205,7 +206,8 @@ public class HyperTreeTest {
                 }
                 checkArgument(count == sampleSize, "incorrect construction");
                 var tree = trees.get(j);
-                tree.makeTree(sampleSize, indexList, outputList, reference, null, tree.getOracle(), seed + j);
+                tree.makeTree(sampleSize, indexList, outputList, reference, null, tree.getOracle(), seed + j,
+                        attributionScratch);
                 for (int i = 0; i < indexList.length; i++) {
                     pointStore.incrementRefCount(outputList[i]);
                 }

@@ -252,7 +252,7 @@ public class ThresholdedRandomCutForest {
         boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
         try {
             if (cacheDisabled) { // turn caching on temporarily
-                forest.setBoundingBoxCacheFraction(1.0);
+                // forest.setBoundingBoxCacheFraction(1.0);
             }
             if (missingValues != null) {
                 checkArgument(missingValues.length <= inputPoint.length, " incorrect data");
@@ -266,7 +266,7 @@ public class ThresholdedRandomCutForest {
             augment(description);
         } finally {
             if (cacheDisabled) { // turn caching off
-                forest.setBoundingBoxCacheFraction(0);
+                // forest.setBoundingBoxCacheFraction(0);
             }
         }
         if (saveDescriptor(description)) {

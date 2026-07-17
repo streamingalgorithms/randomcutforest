@@ -57,7 +57,7 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
  * Retained footprint is the JOL breakdown in @TearDown (side channel).
  * ===========================================================================
  * run as ts=$(date +%Y%m%d-%H%M%S) java -jar benchmark/target/benchmarks.jar
- * ScoringBenchmark -prof gc \ -rf json -rff "process-$ts.json" | tee
+ * ProcessBenchmark -prof gc \ -rf json -rff "process-$ts.json" | tee
  * "process-$ts.txt"
  */
 @BenchmarkMode(Mode.Throughput)
