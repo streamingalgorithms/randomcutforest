@@ -67,6 +67,7 @@ public class ForestUpdateExecutorTest {
             }
 
             PointStore pointStore = mock(PointStore.class);
+            when(pointStore.getDimensions()).thenReturn(2);
             IStateCoordinator<Integer, float[]> sequentialUpdateCoordinator = spy(
                     new PointStoreCoordinator<>(pointStore));
             AbstractForestUpdateExecutor<Integer, float[]> sequentialExecutor = new SequentialForestUpdateExecutor<>(
@@ -91,24 +92,24 @@ public class ForestUpdateExecutorTest {
         for (int i = 0; i < addAndDelete; i++) {
             IComponentModel<Integer, ?> model = components.get(i);
             UpdateResult<Integer> result = new UpdateResult<>(i, 2 * i);
-            when(model.update(any(), anyLong())).thenReturn(result);
+            when(model.update(any(), anyLong(), any())).thenReturn(result);
         }
 
         for (int i = addAndDelete; i < addAndDelete + addOnly; i++) {
             IComponentModel<Integer, ?> model = components.get(i);
             UpdateResult<Integer> result = UpdateResult.<Integer>builder().addedPoint(i).build();
-            when(model.update(any(), anyLong())).thenReturn(result);
+            when(model.update(any(), anyLong(), any())).thenReturn(result);
         }
 
         for (int i = addAndDelete + addOnly; i < numberOfTrees; i++) {
             IComponentModel<Integer, ?> model = components.get(i);
-            when(model.update(any(), anyLong())).thenReturn(UpdateResult.noop());
+            when(model.update(any(), anyLong(), any())).thenReturn(UpdateResult.noop());
         }
 
         float[] point = new float[] { 1.0f };
         executor.update(point);
 
-        executor.components.forEach(model -> verify(model).update(any(), eq(0L)));
+        executor.components.forEach(model -> verify(model).update(any(), eq(0L), any()));
 
         IStateCoordinator<Integer, ?> coordinator = executor.updateCoordinator;
         verify(coordinator, times(1)).completeUpdate(updateResultCaptor.capture(), any());

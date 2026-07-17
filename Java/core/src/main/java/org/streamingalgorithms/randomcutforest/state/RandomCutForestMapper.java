@@ -43,6 +43,7 @@ import org.streamingalgorithms.randomcutforest.store.IPointStore;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -242,13 +243,14 @@ public class RandomCutForestMapper
         checkArgument(state.isSaveSamplerStateEnabled(), "samplers are not saved; no forest to reconstruct");
         List<CompactSamplerState> samplerStates = state.getCompactSamplerStates();
         double[] attributionScratch = (treeStates == null) ? new double[pointStore.getDimensions()] : null;
+        UpdateHelper helper = new UpdateHelper(context.getPointStore().getDimensions(), context.getMaxSize());
         for (int i = 0; i < state.getNumberOfTrees(); i++) {
             CompactSampler sampler = samplerMapper.toModel(samplerStates.get(i), random.nextLong());
 
             RandomCutTree tree;
             if (treeStates != null) {
                 tree = treeMapper.toModel(treeStates.get(i), context, random.nextLong());
-                sampler.replayInto(tree);
+                sampler.replayInto(tree, helper);
                 if (tree.getRoot() != Null) {
                     tree.validateAndReconstruct(tree.getRoot(), false, true, tree.isCenterOfMassEnabled());
                 }
@@ -259,7 +261,8 @@ public class RandomCutForestMapper
                         .centerOfMassEnabled(state.isCenterOfMassEnabled())
                         .storeSequenceIndexesEnabled(state.isStoreSequenceIndexesEnabled()).build();
                 treeMapper.setSamplerSize(tree.getNumberOfLeaves());
-                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList(), attributionScratch);
+                sampler.rebuildInto(tree, treeMapper.getIndexList(), treeMapper.getOutputList(), attributionScratch,
+                        helper);
             }
             components.add(new SamplerPlusTree<>(sampler, tree));
         }

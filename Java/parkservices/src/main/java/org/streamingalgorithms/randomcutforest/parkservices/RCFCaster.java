@@ -212,18 +212,10 @@ public class RCFCaster extends ThresholdedRandomCutForest {
         checkArgument(missingValues == null, "on the fly imputation and error estimation should not mix");
         ForecastDescriptor answer = new ForecastDescriptor(inputPoint, timestamp, forecastHorizon);
         answer.setScoringStrategy(scoringStrategy);
-        boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
         try {
-            if (cacheDisabled) {
-                // turn caching on temporarily
-                // forest.setBoundingBoxCacheFraction(1.0);
-            }
             augment(answer);
         } finally {
-            if (cacheDisabled) {
-                // turn caching off
-                // forest.setBoundingBoxCacheFraction(0);
-            }
+            // placeholder
         }
 
         return answer;

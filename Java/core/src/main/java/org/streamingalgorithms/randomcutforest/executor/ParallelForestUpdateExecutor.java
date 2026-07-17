@@ -44,7 +44,7 @@ public class ParallelForestUpdateExecutor<PointReference, Point>
 
     @Override
     protected List<UpdateResult<PointReference>> updateInternal(PointReference point, long seqNum) {
-        return submitAndJoin(() -> components.parallelStream().map(t -> t.update(point, seqNum))
+        return submitAndJoin(() -> components.parallelStream().map(t -> t.update(point, seqNum, null))
                 .filter(UpdateResult::isStateChange).collect(Collectors.toList()));
     }
 

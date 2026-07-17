@@ -60,7 +60,7 @@ public class RandomCutTreeTest {
 
     private Random rng;
     private RandomCutTree tree;
-
+    UpdateHelper<Integer> helper = new UpdateHelper<>(2, 1);
     private PointStore pointStoreFloat;
 
     @BeforeEach
@@ -106,25 +106,25 @@ public class RandomCutTreeTest {
         assertEquals(pointStoreFloat.add(new float[] { 0, 1 }, 5), 4);
         assertEquals(pointStoreFloat.add(new float[] { 0, 0 }, 6), 5);
 
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 1, helper));
 
-        tree.addPoint(0, 1);
+        tree.addPoint(0, 1, helper);
 
-        tree.deletePoint(0, 1);
+        tree.deletePoint(0, 1, helper);
         assertTrue(tree.root == Null);
 
-        tree.addPoint(0, 1);
+        tree.addPoint(0, 1, null);
         when(rng.nextDouble()).thenReturn(0.625);
-        tree.addPoint(1, 2);
+        tree.addPoint(1, 2, helper);
 
         when(rng.nextDouble()).thenReturn(0.5);
-        tree.addPoint(2, 3);
+        tree.addPoint(2, 3, null);
 
         when(rng.nextDouble()).thenReturn(0.25);
-        tree.addPoint(3, 4);
+        tree.addPoint(3, 4, helper);
 
         // add mass to 0,1
-        tree.addPoint(4, 5);
+        tree.addPoint(4, 5, helper);
         assertArrayEquals(tree.liftFromTree(new float[] { 17, 18 }), new float[] { 17, 18 });
         var box = tree.validateAndReconstruct(tree.getRoot(), true, false, false);
         assertEquals(box.getMaxValue(0), 1);
@@ -164,13 +164,13 @@ public class RandomCutTreeTest {
                 .storeSequenceIndexesEnabled(true).storeParent(true).dimension(3).build();
         when(pointStore.getNumericVector(any(Integer.class))).thenReturn(new float[] { 0 }).thenReturn(new float[3])
                 .thenReturn(new float[3]);
-        tree.addPoint(0, 1);
+        tree.addPoint(0, 1, helper);
 
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(2, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(2, 1, helper));
         // wrong sequence index
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 2));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 2, helper));
         // state is corrupted
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(0, 1, helper));
     }
 
     @Test
@@ -182,18 +182,18 @@ public class RandomCutTreeTest {
         pointStore.add(copies, 1);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore)
                 .centerOfMassEnabled(true).storeSequenceIndexesEnabled(true).storeParent(true).dimension(4).build();
-
+        helper = new UpdateHelper<>(4, 2);
         // cannot have partial addition to empty tree
-        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(0, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(0, 1, helper));
         // the following does not consume any points
-        tree.addPoint(0, 1);
+        tree.addPoint(0, 1, helper);
         assertArrayEquals(tree.getPointSum(tree.getRoot()), test);
-        tree.addPoint(1, 1);
+        tree.addPoint(1, 1, helper);
         assertFalse(tree.isLeaf(tree.getRoot()));
         // switch the vector
         assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 1.119f, 17, -3.11f, 100 });
         // adding test, consumes the copy
-        tree.addPoint(1, 1);
+        tree.addPoint(1, 1, helper);
         assertEquals(tree.getMass(), 3);
         assertArrayEquals(tree.getPointSum(tree.getRoot()), new float[] { 1.119f, 34, -3.11f, 100 }, 1e-3f);
     }
@@ -210,12 +210,12 @@ public class RandomCutTreeTest {
                 .thenReturn(copies).thenReturn(test).thenReturn(copies).thenReturn(copies).thenReturn(test);
 
         // the following does not consume any points
-        tree.addPoint(0, 1);
-        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1));
+        tree.addPoint(0, 1, helper);
+        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1, helper));
         // fails at check of dimension of retrieved point
-        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1, helper));
         // fails at equality check
-        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1));
+        assertThrows(IllegalArgumentException.class, () -> tree.addPointToPartialTree(1, 1, helper));
     }
 
     @Test
@@ -227,15 +227,15 @@ public class RandomCutTreeTest {
         Random random = mock(Random.class);
         tree = RandomCutTree.builder().random(rng).centerOfMassEnabled(true).pointStoreView(pointStore).random(random)
                 .storeSequenceIndexesEnabled(true).storeParent(true).dimension(1).build();
-
+        helper = new UpdateHelper<>(1, 20);
         when(random.nextDouble()).thenReturn(1.2).thenReturn(1.5).thenReturn(0.0);
         // following does not query pointstore
-        tree.addPoint(0, 1);
+        tree.addPoint(0, 1, helper);
         // following tries to add [0.0], and discovers point index 0 is [1.0]
-        tree.addPoint(1, 1);
+        tree.addPoint(1, 1, helper);
         assertTrue(tree.getCutValue(tree.getRoot()) == (double) Math.nextAfter(1.0f, 0.0));
 
-        tree.addPoint(2, 2); // passes -- because we have alist
+        tree.addPoint(2, 2, helper); // passes -- because we have alist
         assertTrue(tree.getRoot() == 0);
         assertTrue(tree.getCutValue(0) == (double) Math.nextAfter(1.0f, 0.0));
         assertTrue(tree.getCutValue(1) == (double) Math.nextAfter(2.0f, 1.0));
@@ -307,7 +307,7 @@ public class RandomCutTreeTest {
         assertThat(tree.getMass(tree.getRightChild(node)), is(2));
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getRightChild(node))).get(4L), 1);
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getRightChild(node))).get(5L), 1);
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(5, 6));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(5, 6, helper));
     }
 
     @Test
@@ -365,7 +365,7 @@ public class RandomCutTreeTest {
 
     @Test
     public void testDeletePointWithLeafSibling() {
-        tree.deletePoint(2, 3);
+        tree.deletePoint(2, 3, helper);
 
         // root node bounding box and cut remains unchanged, mass and centerOfMass are
         // updated
@@ -413,7 +413,7 @@ public class RandomCutTreeTest {
 
     @Test
     public void testDeletePointWithNonLeafSibling() {
-        tree.deletePoint(1, 2);
+        tree.deletePoint(1, 2, helper);
 
         // root node bounding box recomputed
 
@@ -456,7 +456,7 @@ public class RandomCutTreeTest {
     @Test
     public void testDeletePointWithMassGreaterThan1() {
 
-        tree.deletePoint(3, 4);
+        tree.deletePoint(3, 4, helper);
 
         // same as initial state except mass at 0,1 is 1
 
@@ -527,10 +527,10 @@ public class RandomCutTreeTest {
     @Test
     public void testDeletePointInvalid() {
         // specified sequence index does not exist
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(2, 99));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(2, 99, helper));
 
         // point does not exist in tree
-        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(7, 3));
+        assertThrows(IllegalArgumentException.class, () -> tree.deletePoint(7, 3, helper));
     }
 
     @Test
@@ -539,21 +539,21 @@ public class RandomCutTreeTest {
         PointStore pointStoreFloat = new PointStore.Builder().indexCapacity(10).capacity(10).currentStoreCapacity(10)
                 .dimensions(1).build();
         RandomCutTree tree = RandomCutTree.builder().random(rng).pointStoreView(pointStoreFloat).build();
-
+        helper = new UpdateHelper<>(1);
         List<Weighted<double[]>> points = new ArrayList<>();
         points.add(new Weighted<>(new double[] { 48.08 }, 0, 1L));
         points.add(new Weighted<>(new double[] { 48.08001 }, 0, 2L));
 
         pointStoreFloat.add(toFloatArray(points.get(0).getValue()), 0);
         pointStoreFloat.add(toFloatArray(points.get(1).getValue()), 1);
-        tree.addPoint(0, points.get(0).getSequenceIndex());
-        tree.addPoint(1, points.get(1).getSequenceIndex());
+        tree.addPoint(0, points.get(0).getSequenceIndex(), helper);
+        tree.addPoint(1, points.get(1).getSequenceIndex(), helper);
         assertNotEquals(pointStoreFloat.getNumericVector(0)[0], pointStoreFloat.getNumericVector(1)[0]);
 
         for (int i = 0; i < 10000; i++) {
             Weighted<double[]> point = points.get(i % points.size());
-            tree.deletePoint(i % points.size(), point.getSequenceIndex());
-            tree.addPoint(i % points.size(), point.getSequenceIndex());
+            tree.deletePoint(i % points.size(), point.getSequenceIndex(), helper);
+            tree.addPoint(i % points.size(), point.getSequenceIndex(), helper);
         }
     }
 
@@ -606,12 +606,12 @@ public class RandomCutTreeTest {
         }
         ArrayList<Weighted<Integer>> list = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            tree.addPoint(i, 0L);
+            tree.addPoint(i, 0L, helper);
             list.add(new Weighted<>(i, rng.nextFloat(), 0));
         }
         list.sort((o1, o2) -> Float.compare(o1.getWeight(), o2.getWeight()));
         for (int i = 0; i < 50; i++) {
-            tree.deletePoint(list.remove(0).getValue(), 0L);
+            tree.deletePoint(list.remove(0).getValue(), 0L, helper);
         }
 
         NodeStore nodeStore = tree.getNodeStore();
@@ -623,7 +623,7 @@ public class RandomCutTreeTest {
             if (!tree.isLeaf(tree.getRightChild(tree.getRoot()))) {
                 assert (nodeStore.getParentIndex(tree.getRightChild(tree.getRoot())) == tree.root);
             }
-            tree.deletePoint(list.remove(0).getValue(), 0L);
+            tree.deletePoint(list.remove(0).getValue(), 0L, helper);
         }
     }
 
@@ -727,7 +727,7 @@ public class RandomCutTreeTest {
         assertDoesNotThrow(() -> tree.validateAndReconstruct());
         assertThrows(IllegalArgumentException.class, () -> tree.traverse(null, null));
         assertThrows(IllegalArgumentException.class, () -> tree.traverseMulti(null, null));
-        tree.addPoint(index, 0);
+        tree.addPoint(index, 0, helper);
         double unseen = tree.traverse(new float[2], ScoreVisitor.reusableFactory(0, (x, y) -> 1, (x, y) -> 2,
                 (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY));
         assertEquals(unseen, 2.0);

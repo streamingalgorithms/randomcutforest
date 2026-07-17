@@ -36,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
 
 @ExtendWith(MockitoExtension.class)
 public class SamplerPlusTreeTest {
@@ -57,14 +58,14 @@ public class SamplerPlusTreeTest {
         int existingPointReference = 222;
         when(sampler.acceptPoint(sequenceIndex)).thenReturn(true);
         when(sampler.getEvictedPoint()).thenReturn(Optional.empty());
-        when(tree.addPoint(pointReference, sequenceIndex)).thenReturn(existingPointReference);
+        when(tree.addPoint(pointReference, sequenceIndex, null)).thenReturn(existingPointReference);
 
-        UpdateResult<Integer> result = samplerPlusTree.update(pointReference, sequenceIndex);
+        UpdateResult<Integer> result = samplerPlusTree.update(pointReference, sequenceIndex, null);
         assertTrue(result.getAddedPoint().isPresent());
         assertEquals(existingPointReference, result.getAddedPoint().get());
         assertFalse(result.getDeletedPoint().isPresent());
 
-        verify(tree, never()).deletePoint(any(), anyLong());
+        verify(tree, never()).deletePoint(any(), anyLong(), any());
         verify(sampler, times(1)).addPoint(existingPointReference);
     }
 
@@ -72,6 +73,7 @@ public class SamplerPlusTreeTest {
     public void testUpdateAddAndDeletePoint() {
         int pointReference = 2;
         long sequenceIndex = 100L;
+        UpdateHelper helper = new UpdateHelper<>(2);
         int existingPointReference = 222;
         int evictedPoint = 333;
         long evictedSequenceIndex = 50L;
@@ -82,26 +84,26 @@ public class SamplerPlusTreeTest {
 
         when(sampler.acceptPoint(sequenceIndex)).thenReturn(true);
         when(sampler.getEvictedPoint()).thenReturn(Optional.of(evictedPointSampled));
-        when(tree.addPoint(pointReference, sequenceIndex)).thenReturn(existingPointReference);
+        when(tree.addPoint(pointReference, sequenceIndex, helper)).thenReturn(existingPointReference);
 
-        UpdateResult<Integer> result = samplerPlusTree.update(pointReference, sequenceIndex);
+        UpdateResult<Integer> result = samplerPlusTree.update(pointReference, sequenceIndex, helper);
         assertTrue(result.getAddedPoint().isPresent());
         assertEquals(existingPointReference, result.getAddedPoint().get());
         assertTrue(result.getDeletedPoint().isPresent());
         assertEquals(evictedPoint, result.getDeletedPoint().get());
 
-        verify(tree, times(1)).deletePoint(evictedPoint, evictedSequenceIndex);
+        verify(tree, times(1)).deletePoint(evictedPoint, evictedSequenceIndex, helper);
         verify(sampler, times(1)).addPoint(existingPointReference);
     }
 
     @Test
     public void testRejectPoint() {
         when(sampler.acceptPoint(anyLong())).thenReturn(false);
-        UpdateResult<Integer> result = samplerPlusTree.update(2, 100L);
+        UpdateResult<Integer> result = samplerPlusTree.update(2, 100L, null);
         assertFalse(result.isStateChange());
 
-        verify(tree, never()).addPoint(any(), anyLong());
-        verify(tree, never()).deletePoint(any(), anyLong());
+        verify(tree, never()).addPoint(any(), anyLong(), any());
+        verify(tree, never()).deletePoint(any(), anyLong(), any());
         verify(sampler, never()).addPoint(any());
     }
 }

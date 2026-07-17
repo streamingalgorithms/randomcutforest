@@ -151,7 +151,7 @@ public class V2StateToV3ForestConverter {
 
             for (Weighted<Integer> sample : compactData.getWeightedSample()) {
                 Integer reference = sample.getValue();
-                Integer newReference = tree.addPoint(reference, sample.getSequenceIndex());
+                Integer newReference = tree.addPoint(reference, sample.getSequenceIndex(), null);
                 if (newReference.intValue() != reference.intValue()) {
                     pointStore.incrementRefCount(newReference);
                     pointStore.decrementRefCount(reference);

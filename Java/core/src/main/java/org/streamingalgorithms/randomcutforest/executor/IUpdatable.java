@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
+
 public interface IUpdatable<PointReference> {
     /**
      * result of an update on a sampler plus tree
@@ -24,5 +26,5 @@ public interface IUpdatable<PointReference> {
      * @return the (inserted,deleted) pair of handles in the tree for eventual
      *         bookkeeping
      */
-    UpdateResult<PointReference> update(PointReference point, long seqNum);
+    UpdateResult<PointReference> update(PointReference point, long seqNum, UpdateHelper<PointReference> helper);
 }

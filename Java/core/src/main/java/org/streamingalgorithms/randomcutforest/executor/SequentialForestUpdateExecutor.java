@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.streamingalgorithms.randomcutforest.ComponentList;
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
 
 /**
  * Traverse the trees in a forest sequentially.
@@ -29,14 +30,17 @@ import org.streamingalgorithms.randomcutforest.ComponentList;
 public class SequentialForestUpdateExecutor<PointReference, Point>
         extends AbstractForestUpdateExecutor<PointReference, Point> {
 
+    protected final UpdateHelper<PointReference> updateHelper;
+
     public SequentialForestUpdateExecutor(IStateCoordinator<PointReference, Point> updateCoordinator,
             ComponentList<PointReference, Point> components) {
         super(updateCoordinator, components);
+        updateHelper = new UpdateHelper<>(updateCoordinator.getStore().getDimensions());
     }
 
     @Override
     protected List<UpdateResult<PointReference>> updateInternal(PointReference point, long seqNum) {
-        return components.stream().map(t -> t.update(point, seqNum)).filter(UpdateResult::isStateChange)
+        return components.stream().map(t -> t.update(point, seqNum, updateHelper)).filter(UpdateResult::isStateChange)
                 .collect(Collectors.toList());
     }
 }

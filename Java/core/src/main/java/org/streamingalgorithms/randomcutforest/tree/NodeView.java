@@ -32,6 +32,7 @@ public class NodeView implements INodeView {
     ArrayBox currentBox;
     private final ArrayBox reusableBox;
     private final ArrayBox pathBox;
+    protected int[] nodeScratch;
 
     public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root) {
         this.currentNodeOffset = root;
@@ -40,13 +41,19 @@ public class NodeView implements INodeView {
         leafPoint = new float[dimensions];
         reusableBox = new ArrayBox(dimensions);
         pathBox = new ArrayBox(dimensions);
+        int numberOfLeaves = (tree != null) ? tree.numberOfLeaves : 256;
+        nodeScratch = new int[numberOfLeaves];
     }
 
     // NodeView
     protected void rearm(RandomCutTree tree, int root) {
         this.tree = tree;
         this.currentNodeOffset = root;
-        this.currentBox = null; // deactivate; pathBox array retained, re-primed by setCurrentNode
+        this.currentBox = null;
+        if (nodeScratch == null || nodeScratch.length < tree.numberOfLeaves) {
+            nodeScratch = new int[tree.numberOfLeaves];
+        }
+        // deactivate; pathBox array retained, re-primed by setCurrentNode
     }
 
     public int getMass() {

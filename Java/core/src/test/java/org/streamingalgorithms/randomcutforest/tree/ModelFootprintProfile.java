@@ -13,10 +13,12 @@
  * permissions and limitations under the License.
  */
 
-package org.streamingalgorithms.randomcutforest;
+package org.streamingalgorithms.randomcutforest.tree;
 
 import org.junit.jupiter.api.Test;
 import org.openjdk.jol.info.GraphLayout;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.executor.SamplerPlusTree;
 import org.streamingalgorithms.randomcutforest.testutils.StreamingMultiDimData;
 
 /**
@@ -183,6 +185,10 @@ public class ModelFootprintProfile {
         // retained size AFTER saturation, BEFORE timing
         long bytes = GraphLayout.parseInstance(forest).totalSize();
 
+        long storeSize = GraphLayout.parseInstance(forest.getUpdateCoordinator().getStore()).totalSize();
+        long treeSize = GraphLayout.parseInstance(firstTree(forest)).totalSize() - storeSize;
+        long cache = GraphLayout.parseInstance(firstTree(forest).boundingBoxData).totalSize();
+
         long t0 = System.nanoTime();
         double sink = 0;
         for (int j = 0; j < MEASURED; j++) {
@@ -196,5 +202,11 @@ public class ModelFootprintProfile {
         }
 
         return new Result(bytes, MEASURED * 1e9 / (t1 - t0));
+    }
+
+    private RandomCutTree firstTree(RandomCutForest forest) {
+        Object component = forest.getComponents().iterator().next(); // ComponentList is Iterable
+        SamplerPlusTree<?, float[]> spt = (SamplerPlusTree<?, float[]>) component;
+        return (RandomCutTree) spt.getTree();
     }
 }

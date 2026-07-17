@@ -26,6 +26,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
 
 /**
  * <p>
@@ -342,18 +343,19 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
 
     // saved-tree path: topology exists, replay restores it via partial-tree add (no
     // boxing)
-    public void replayInto(RandomCutTree tree) {
+    public void replayInto(RandomCutTree tree, UpdateHelper helper) {
         reset_weights(); // keep whatever getSample's contract needs
         for (int i = 0; i < size; i++) {
             long seq = (sequenceIndex != null) ? sequenceIndex[i] : SEQUENCE_INDEX_NA;
-            tree.addPointToPartialTree(pointIndex[i], seq);
+            tree.addPointToPartialTree(pointIndex[i], seq, helper);
         }
     }
 
     // not-saved path: fresh empty tree, build node-by-node via full add (handles
     // null root, makes its own random cuts).
     // The weight isn't read; addPoint takes (index, seq).
-    public void rebuildInto(RandomCutTree tree, int[] indexList, int[] outputList, double[] attributionScratch) {
+    public void rebuildInto(RandomCutTree tree, int[] indexList, int[] outputList, double[] attributionScratch,
+            UpdateHelper helper) {
         reset_weights();
         if (indexList.length < size && size > 0) {
             indexList = new int[size];
@@ -363,7 +365,7 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
             indexList[i] = i;
         }
         tree.makeTree(size, indexList, outputList, pointIndex, sequenceIndex, null, tree.getRandomSeed(),
-                attributionScratch);
+                attributionScratch, helper);
     }
 
     public static class Builder<T extends Builder<T>> extends AbstractStreamSampler.Builder<T> {

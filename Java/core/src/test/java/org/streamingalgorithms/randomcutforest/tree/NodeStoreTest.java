@@ -255,33 +255,15 @@ class NodeStoreTest {
         return Math.max(s * t + 1, 2 * s);
     }
 
-    // ==================================================================
-    // Reaching a concrete tree + its point store.
-    // THESE TWO ARE THE SEAMS TO CONFIRM — they touch forest internals
-    // (getComponents() returns ComponentList<?,?>; the element is a
-    // SamplerPlusTree whose tree is a RandomCutTree). Exact unwrap depends
-    // on your accessors; the shape below matches docs 2 & 4.
-    // ==================================================================
-
     private RandomCutTree firstTree(RandomCutForest forest) {
-        // doc 2: components is ComponentList<?, float[]>, each a SamplerPlusTree<>.
-        // SamplerPlusTree exposes the tree — confirm the getter name in your copy.
         Object component = forest.getComponents().iterator().next(); // ComponentList is Iterable
         SamplerPlusTree<?, float[]> spt = (SamplerPlusTree<?, float[]>) component;
-        return (RandomCutTree) spt.getTree(); // <-- CONFIRM: getTree()/getComponent() name
+        return (RandomCutTree) spt.getTree();
     }
 
     private PointStore pointStore(RandomCutForest forest) {
-        // doc 2: stateCoordinator is a PointStoreCoordinator; getStore() returns the
-        // PointStore.
-        return (PointStore) forest.getUpdateCoordinator().getStore(); // <-- CONFIRM cast target
+        return (PointStore) forest.getUpdateCoordinator().getStore();
     }
-
-    // ==================================================================
-    // Context for the mapper round-trip. CompactRandomCutTreeContext needs
-    // at least the point store + dimension (doc 5 mapper reads getPointStore()
-    // and getDimension()). Confirm the setters on your context class.
-    // ==================================================================
 
     private CompactRandomCutTreeContext contextFor(RandomCutForest forest) {
         CompactRandomCutTreeContext ctx = new CompactRandomCutTreeContext();

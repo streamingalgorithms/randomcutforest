@@ -117,7 +117,7 @@ public class V1JsonToV3StateConverter {
                     V1SerializedRandomCutForest.WeightedSamples sample = samples[i];
                     float[] point = toFloatArray(sample.getPoint());
                     Integer index = pointStore.add(point, sample.getSequenceIndex());
-                    pointIndex[i] = globalTree.addPoint(index, 0L);
+                    pointIndex[i] = globalTree.addPoint(index, 0L, null);
                     if (pointIndex[i] != index) {
                         pointStore.incrementRefCount(pointIndex[i]);
                         pointStore.decrementRefCount(index);

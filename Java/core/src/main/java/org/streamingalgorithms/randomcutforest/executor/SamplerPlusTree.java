@@ -25,6 +25,7 @@ import org.streamingalgorithms.randomcutforest.sampler.ISampled;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.NodeView;
+import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
 
 import lombok.Getter;
 
@@ -76,19 +77,19 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
      */
 
     @Override
-    public UpdateResult<P> update(P point, long sequenceIndex) {
+    public UpdateResult<P> update(P point, long sequenceIndex, UpdateHelper<P> helper) {
         P deleteRef = null;
         if (sampler.acceptPoint(sequenceIndex)) {
             Optional<ISampled<P>> deletedPoint = sampler.getEvictedPoint();
             if (deletedPoint.isPresent()) {
                 ISampled<P> p = deletedPoint.get();
                 deleteRef = p.getValue();
-                tree.deletePoint(deleteRef, p.getSequenceIndex());
+                tree.deletePoint(deleteRef, p.getSequenceIndex(), helper);
             }
 
             // the tree may choose to return a reference to an existing point
             // whose value is equal to `point`
-            P addedPoint = tree.addPoint(point, sequenceIndex);
+            P addedPoint = tree.addPoint(point, sequenceIndex, helper);
             sampler.addPoint(addedPoint);
             return UpdateResult.<P>builder().addedPoint(addedPoint).deletedPoint(deleteRef).build();
         }

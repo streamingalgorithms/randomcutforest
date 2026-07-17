@@ -36,11 +36,11 @@ public interface ITree<PointReference, Point> extends ITraversable, IDynamicConf
 
     int[] projectMissingIndices(int[] list);
 
-    PointReference addPoint(PointReference point, long sequenceIndex);
+    PointReference addPoint(PointReference point, long sequenceIndex, UpdateHelper<PointReference> helper);
 
     void validateAndReconstruct();
 
-    PointReference deletePoint(PointReference point, long sequenceIndex);
+    PointReference deletePoint(PointReference point, long sequenceIndex, UpdateHelper<PointReference> helper);
 
     long getRandomSeed();
 }

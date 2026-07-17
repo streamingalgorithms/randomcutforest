@@ -52,7 +52,6 @@ import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import lombok.Getter;
 
@@ -82,6 +81,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected IPointStoreView<float[]> pointStoreView;
     @Getter
     protected int numberOfLeaves;
+    @Getter
     protected NodeStore nodeStore;
     @Getter
     protected double boundingBoxCacheFraction;
@@ -94,16 +94,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected float[] boundingBoxData;
     protected float[] pointSum;
     protected HashMap<Integer, List<Long>> sequenceMap;
-    protected final float[] pointScratch;
-    protected final int[] nodeScratch;
-    // protected final double[] attributionScratch;
-    protected final Cut cutScratch;
-    protected final ArrayBox boxScratch;
     protected int basicCache;
     protected int limit;
     protected Int2IntOpenHashMap smallMap;
     protected Int2IntOpenHashMap spareMap; // double buffer; dRV set once at construction
-    protected IntOpenHashSet hashSet;
 
     public static int MAX_BASIC_CACHE = Long.SIZE;
 
@@ -131,9 +125,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         this.root = builder.root;
         leafMass = new Int2IntOpenHashMap();
         leafMass.defaultReturnValue(0);
-        pointScratch = new float[dimension];
-        nodeScratch = new int[numberOfLeaves]; // cannot be -1
-        cutScratch = new Cut(0, 0);
         if (this.centerOfMassEnabled) {
             pointSum = new float[(numberOfLeaves - 1) * dimension];
         }
@@ -141,7 +132,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             sequenceMap = new HashMap<>();
         }
         resizeCache(boundingBoxCacheFraction);
-        boxScratch = new ArrayBox(dimension);
     }
 
     @Override
@@ -300,7 +290,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                 + ", point " + Arrays.toString(point) + " box " + box.toString());
     }
 
-    // the following is just for testing and not to disturb the 100s of tests
+    // the following are just for testing and not to disturb the 100s of tests
     protected Cut randomCut(double factor, float[] point, BoundingBox box) {
         Cut output = new Cut(0, 0);
         randomCut(factor, point, new ArrayBox(box.minValues, box.maxValues), null, true, output);
@@ -320,8 +310,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      *         pointIndex if there are no duplicates; otherwise it is the value of
      *         the point being duplicated.
      */
-    public Integer addPoint(Integer pointIndex, long sequenceIndex) {
-
+    public Integer addPoint(Integer pointIndex, long sequenceIndex, UpdateHelper<Integer> helper) {
+        if (helper == null) {
+            helper = new UpdateHelper<Integer>(dimension, numberOfLeaves);
+        } else {
+            helper.resize(numberOfLeaves); // should be a no-op
+        }
         if (root == Null) {
             root = convertToLeaf(pointIndex);
             addLeaf(pointIndex, sequenceIndex);
@@ -329,22 +323,25 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
 
         // updates are single threaded
-        pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
-        float[] point = projectToTree(pointScratch);
-        int depth = nodeStore.getPathInto(root, point, nodeScratch);
+        pointStoreView.getNumericVectorInto(pointIndex, helper.pointScratch);
+        // the following is redundant, but left as a placeholder as
+        // a starting place for any subsequent development
+        float[] point = projectToTree(helper.pointScratch);
+        int depth = nodeStore.getPathInto(root, point, helper.nodeScratch);
         int leafIdx = depth - 1;
-        int leafNode = nodeScratch[leafIdx];
+        int leafNode = helper.nodeScratch[leafIdx];
         int leafPointIndex = getPointIndex(leafNode);
 
-        if (pointStoreView.isEqual(leafPointIndex, pointScratch)) {
+        if (pointStoreView.isEqual(leafPointIndex, helper.pointScratch)) {
             increaseLeafMass(leafNode);
-            manageAncestorsAdd(leafIdx, point, true);
+            manageAncestorsAdd(leafIdx, helper.nodeScratch, point, true);
             addLeaf(leafPointIndex, sequenceIndex);
             return leafPointIndex;
         }
-        pointStoreView.setAsSlice(leafPointIndex, boxScratch.values, boxScratch.offset);
-        boxScratch.rangeSum = 0;
-        ArrayBox savedBox = boxScratch.copy();
+        pointStoreView.setAsSlice(leafPointIndex, helper.boxScratch.values, helper.boxScratch.offset);
+        helper.boxScratch.rangeSum = 0;
+        helper.updateBox.copyFrom(helper.boxScratch); // make a copy
+
         int savedIdx = leafIdx, savedDim = Integer.MAX_VALUE;
         float savedCutValue = 0f;
         Random rng;
@@ -357,34 +354,36 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         int i = leafIdx;
         while (true) {
             double factor = rng.nextDouble();
-            randomCut(factor, point, boxScratch, null, true, cutScratch);
-            int dim = cutScratch.getDimension();
-            float value = (float) cutScratch.getValue();
-            if ((point[dim] <= value && value < boxScratch.getMinValue(dim))
-                    || (point[dim] > value && value >= boxScratch.getMaxValue(dim))) {
+            randomCut(factor, point, helper.boxScratch, null, true, helper.cutScratch);
+            int dim = helper.cutScratch.getDimension();
+            float value = (float) helper.cutScratch.getValue();
+            if ((point[dim] <= value && value < helper.boxScratch.getMinValue(dim))
+                    || (point[dim] > value && value >= helper.boxScratch.getMaxValue(dim))) {
                 savedCutValue = value;
                 savedDim = dim;
                 savedIdx = i;
-                savedBox.copyFrom(boxScratch);
+                helper.updateBox.copyFrom(helper.boxScratch);
+                // discard prior (lower in the tree) update
             }
-            if (boxScratch.contains(point) || i == 0)
+            if (helper.boxScratch.contains(point) || i == 0)
                 break;
-            growArrayBox(boxScratch, pointStoreView, nodeStore.getSibling(nodeScratch[i], nodeScratch[i - 1]));
+            growArrayBox(helper.boxScratch, pointStoreView,
+                    nodeStore.getSibling(helper.nodeScratch[i], helper.nodeScratch[i - 1]));
             --i;
         }
 
-        int savedNode = nodeScratch[savedIdx];
-        int savedParent = (savedIdx == 0) ? Null : nodeScratch[savedIdx - 1];
+        int savedNode = helper.nodeScratch[savedIdx];
+        int savedParent = (savedIdx == 0) ? Null : helper.nodeScratch[savedIdx - 1];
         int childMassIfLeaf = isLeaf(savedNode) ? getLeafMass(savedNode) : 0;
         int mergedNode = nodeStore.addNode(savedParent, point, sequenceIndex, pointIndex, savedNode, childMassIfLeaf,
                 savedDim, savedCutValue);
         addLeaf(pointIndex, sequenceIndex);
         int idx = translate(mergedNode);
         if (idx != Integer.MAX_VALUE) {
-            copyArrayBoxToData(idx, savedBox);
+            copyArrayBoxToData(idx, helper.updateBox);
             rangeSumData[idx] = ArrayBox.addPointInPlace(boundingBoxData, 2 * idx * dimension, dimension, point, 0);
         }
-        manageAncestorsAdd(savedIdx, point, false); // nodeScratch[0..savedIdx)
+        manageAncestorsAdd(savedIdx, helper.nodeScratch, point, false); // nodeScratch[0..savedIdx)
         if (pointSum != null)
             recomputePointSum(mergedNode);
         if (savedParent == Null)
@@ -394,7 +393,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     public void makeTree(int size, int[] indexList, int[] outputList, int[] pointList, long[] sequenceIndex,
-            SeparationOracle oracle, long seed, double[] attributionScratch) {
+            SeparationOracle oracle, long seed, double[] attributionScratch, UpdateHelper helper) {
         // this function allows a public call, which may be useful someday
         // that day is today ....
         if (size > 0 && size <= numberOfLeaves) {
@@ -403,14 +402,13 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             checkArgument(sequenceIndex == null || (pointList.length == sequenceIndex.length), "mismatched input");
 
             Random ring = new Random(seed);
-            Cut scratchCut = new Cut(0, 0);
-            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, nodeScratch, scratchCut, ring,
-                    attributionScratch);
+
+            root = makeTreeInt(indexList, outputList, 0, size, pointList, 0, oracle, ring, attributionScratch, helper);
             // the cuts are specififed; now build tree
             // note the contents of the indexList will be permuted.
             for (int i = 0; i < size; i++) {
                 long seq = (sequenceIndex != null) ? sequenceIndex[indexList[i]] : SEQUENCE_INDEX_NA;
-                checkArgument(outputList[i] == addPointToPartialTree(pointList[indexList[i]], seq),
+                checkArgument(outputList[i] == addPointToPartialTree(pointList[indexList[i]], seq, helper),
                         "error in construction");
             }
             if (root != Null) {
@@ -431,19 +429,19 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     // the outputList is populated such that chosen[i] correponds to the inserted
     // point (which is revealed only after insertion)
     int makeTreeInt(int[] chosen, int[] output, int start, int end, int[] pointList, int firstFree,
-            SeparationOracle vecBuild, int[] scratch, Cut cutScratch, Random ring, double[] attributionScratch) {
+            SeparationOracle vecBuild, Random ring, double[] attributionScratch, UpdateHelper helper) {
 
         if (end - start == 0)
             return Null;
-        pointStoreView.getNumericVectorInto(pointList[chosen[start]], pointScratch);
-        boxScratch.fromPoint(pointScratch);
+        pointStoreView.getNumericVectorInto(pointList[chosen[start]], helper.pointScratch);
+        helper.boxScratch.fromPoint(helper.pointScratch);
 
         for (int i = start + 1; i < end; i++) {
-            pointStoreView.getNumericVectorInto(pointList[chosen[i]], pointScratch);
-            boxScratch.addPoint(pointScratch);
+            pointStoreView.getNumericVectorInto(pointList[chosen[i]], helper.pointScratch);
+            helper.boxScratch.addPoint(helper.pointScratch);
         }
 
-        if (boxScratch.getRangeSum() <= 0) {
+        if (helper.boxScratch.getRangeSum() <= 0) {
             int rep = pointList[chosen[start]];
             // all of these points are now the same as rep
             // note chosen is not changed,
@@ -455,14 +453,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         double factor = ring.nextDouble();
         if (vecBuild != null) {
-            vecBuild.computeGap(boxScratch, attributionScratch);
-            randomCut(factor, null, boxScratch, attributionScratch, false, cutScratch);
+            vecBuild.computeGap(helper.boxScratch, attributionScratch);
+            randomCut(factor, null, helper.boxScratch, attributionScratch, false, helper.cutScratch);
         } else {
-            randomCut(factor, null, boxScratch, null, false, cutScratch); // box-range path
+            randomCut(factor, null, helper.boxScratch, null, false, helper.cutScratch); // box-range path
         }
 
-        float cutValue = (float) cutScratch.getValue();
-        int cutDimension = cutScratch.getDimension();
+        float cutValue = (float) helper.cutScratch.getValue();
+        int cutDimension = helper.cutScratch.getDimension();
+
         // stable in-place partition of [start, end):
         // lefts compacted into [start, mid); rights buffered in order, then written
         // into [mid, end)
@@ -473,28 +472,30 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             if (pointStoreView.leftOf(pointList[v], cutValue, cutDimension)) {
                 chosen[write++] = v;
             } else {
-                scratch[r++] = v;
+                helper.nodeScratch[r++] = v;
             }
         }
         int mid = write;
         for (int k = 0; k < r; k++) {
-            chosen[mid + k] = scratch[k];
+            chosen[mid + k] = helper.nodeScratch[k];
         }
+        // scratch is no longer useful
         int idx = translate(firstFree);
         if (idx != Integer.MAX_VALUE) {
-            copyArrayBoxToData(idx, boxScratch);
+            copyArrayBoxToData(idx, helper.boxScratch);
         }
+        // box and cut can be resued subsequently
         int leftCount = mid - start;
-        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, scratch, cutScratch,
-                ring, attributionScratch);
-        int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, scratch,
-                cutScratch, ring, attributionScratch);
+        int leftIndex = makeTreeInt(chosen, output, start, mid, pointList, firstFree + 1, vecBuild, ring,
+                attributionScratch, helper);
+        int rightIndex = makeTreeInt(chosen, output, mid, end, pointList, firstFree + leftCount, vecBuild, ring,
+                attributionScratch, helper);
         nodeStore.addRecord(firstFree, min(leftIndex, numberOfLeaves - 1), min(rightIndex, numberOfLeaves - 1),
                 cutValue, cutDimension);
         return firstFree;
     }
 
-    private void manageAncestorsAdd(int count, float[] point, boolean boxesUnchanged) {
+    private void manageAncestorsAdd(int count, int[] nodeScratch, float[] point, boolean boxesUnchanged) {
         boolean resolved = boxesUnchanged;
         for (int i = count - 1; i >= 0; i--) {
             int node = nodeScratch[i];
@@ -552,12 +553,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * @param pointIndex    index of point (in point store)
      * @param sequenceIndex sequence index (stored in sampler)
      */
-    public int addPointToPartialTree(int pointIndex, long sequenceIndex) {
+    public int addPointToPartialTree(int pointIndex, long sequenceIndex, UpdateHelper<?> helper) {
         checkArgument(root != Null, " a null root is not a partial tree");
 
         // Single-threaded scratchpad reuse (Excellent for performance!)
-        pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
-        float[] point = projectToTree(pointScratch);
+        pointStoreView.getNumericVectorInto(pointIndex, helper.pointScratch);
+        float[] point = projectToTree(helper.pointScratch);
         // checkArgument(point.length == dimension, () -> " incorrect projection at
         // index " + pointIndex);
 
@@ -587,7 +588,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         // Standard leaf insertion path
         int leafPointIndex = getPointIndex(leafNode);
-        checkArgument(pointStoreView.isEqual(leafPointIndex, pointScratch),
+        checkArgument(pointStoreView.isEqual(leafPointIndex, helper.pointScratch),
                 () -> "incorrect state on adding " + pointIndex);
 
         increaseLeafMass(leafNode);
@@ -595,17 +596,20 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return leafPointIndex;
     }
 
-    public Integer deletePoint(Integer pointIndex, long sequenceIndex) {
+    public Integer deletePoint(Integer pointIndex, long sequenceIndex, UpdateHelper helper) {
         checkArgument(root != Null, " deleting from an empty tree");
-        pointStoreView.getNumericVectorInto(pointIndex, pointScratch);
-        float[] point = projectToTree(pointScratch);
-        checkArgument(point.length == dimension, () -> " incorrect projection at index " + pointIndex);
-
+        if (helper == null) {
+            helper = new UpdateHelper(dimension, numberOfLeaves);
+        } else {
+            helper.resize(numberOfLeaves); // should be a no-op
+        }
+        pointStoreView.getNumericVectorInto(pointIndex, helper.pointScratch);
+        float[] point = projectToTree(helper.pointScratch);
         // --- PASS 1: descend, record ancestors, NO mutation ---
         int depth = 0;
         int current = root;
         while (!isLeaf(current)) {
-            nodeScratch[depth++] = current;
+            helper.nodeScratch[depth++] = current;
             current = nodeStore.leftOf(current, point) ? nodeStore.getLeftIndex(current)
                     : nodeStore.getRightIndex(current);
         }
@@ -618,7 +622,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         removeLeaf(leafPointIndex, sequenceIndex);
 
         if (decreaseLeafMass(leafNode) != 0) {
-            manageAncestors(depth, point, true); // duplicates remain: update all ancestors
+            manageAncestors(depth, helper.nodeScratch, point, true); // duplicates remain: update all ancestors
             return leafPointIndex;
         }
         if (depth == 0) { // leaf was the root
@@ -626,14 +630,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             return leafPointIndex;
         }
 
-        int parent = nodeScratch[depth - 1];
+        int parent = helper.nodeScratch[depth - 1];
         int sibling = (nodeStore.getLeftIndex(parent) == leafNode) ? nodeStore.getRightIndex(parent)
                 : nodeStore.getLeftIndex(parent);
         if (depth == 1) { // parent was the root
             root = sibling;
             nodeStore.detachAsRoot(sibling);
         } else {
-            nodeStore.replaceParentBySibling(nodeScratch[depth - 2], parent, leafNode);
+            nodeStore.replaceParentBySibling(helper.nodeScratch[depth - 2], parent, leafNode);
         }
 
         nodeStore.deleteInternalNode(parent);
@@ -645,12 +649,12 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             rangeSumData[idx] = 0.0;
         }
 
-        manageAncestors(depth - 1, point, false); // skip the deleted parent
+        manageAncestors(depth - 1, helper.nodeScratch, point, false); // skip the deleted parent
         return leafPointIndex;
     }
 
     // processes pathScratch[count-1] down to pathNodes[0] (bottom-up)
-    private void manageAncestors(int count, float[] point, boolean duplicate) {
+    private void manageAncestors(int count, int[] nodeScratch, float[] point, boolean duplicate) {
         boolean resolved = duplicate;
         for (int i = count - 1; i >= 0; i--) {
             int node = nodeScratch[i];
@@ -792,7 +796,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         long hash = 0L; // this is why MAX_BASIC_CACHE is Long.SIZE
 
         for (int i = 0; i < count + depth; i++) {
-            int node = (i < count) ? nodeScratch[i] : nodeScratch[nodeScratch.length - 1 - i + count];
+            int node = (i < count) ? nodeScratch[i] : nodeScratch[numberOfLeaves - 1 - i + count];
             if (node + basicCache < limit)
                 continue;
             int slot = smallMap.get(node);
@@ -811,7 +815,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         ObjectIterator<Int2IntMap.Entry> it = smallMap.int2IntEntrySet().fastIterator();
 
         for (int i = 0; i < count + depth; i++) {
-            int node = (i < count) ? nodeScratch[i] : nodeScratch[nodeScratch.length - 1 - i + count];
+            int node = (i < count) ? nodeScratch[i] : nodeScratch[numberOfLeaves - 1 - i + count];
             if (temp.containsKey(node) || node + basicCache < limit) {
                 continue; // already carried or fresh in phase 1
             }
@@ -1126,22 +1130,22 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             currentNodeView.setCurrentNode(node, getPointIndex(node), true);
             visitor.acceptLeaf(currentNodeView, depthOfNode);
             // have all the nodes in the path in nodeScratch[0,depthOfnode)
-            installCache(nodeScratch, count, depthOfNode);
+            installCache(currentNodeView.nodeScratch, count, depthOfNode);
         } else {
             checkState(isInternal(node), " incomplete state ");
-            nodeScratch[nodeScratch.length - 1 - depthOfNode] = node;
+            currentNodeView.nodeScratch[numberOfLeaves - 1 - depthOfNode] = node;
             int right = nodeStore.getRightIndex(node);
             int left = nodeStore.getLeftIndex(node);
             if (nodeStore.toLeft(point, node)) {
                 if (isInternal(right)) {
-                    nodeScratch[count++] = right;
+                    currentNodeView.nodeScratch[count++] = right;
                 }
                 traversePathToLeafAndVisitNodes(point, visitor, currentNodeView, left, depthOfNode + 1, count);
                 currentNodeView.updateToParent(node, right, !visitor.isConverged());
             } else {
                 if (isInternal(left)) {
                     // overwrite
-                    nodeScratch[count++] = left;
+                    currentNodeView.nodeScratch[count++] = left;
                 }
                 traversePathToLeafAndVisitNodes(point, visitor, currentNodeView, right, depthOfNode + 1, count);
                 currentNodeView.updateToParent(node, left, !visitor.isConverged());
@@ -1251,14 +1255,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     public int[] projectMissingIndices(int[] list) {
         return Arrays.copyOf(list, list.length);
-    }
-
-    public long getRandomSeed() {
-        return randomSeed;
-    }
-
-    public NodeStore getNodeStore() {
-        return nodeStore;
     }
 
     public static class Builder<T extends Builder<T>> {
