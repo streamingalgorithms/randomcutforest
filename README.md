@@ -33,7 +33,7 @@ is tessalated and the algorithm stops predicting if the occluded gap exceeds the
 </p>
 <p align="center">
   <em> Figure 2. <code>GappedRCFCaster</code> The stream imputes the missing data segments (vertical stripes) on the fly.  <br>
-  Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/GappedRCFCastExample.java">GappedRCFCastExample</a>
+  Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/GappedRCFCastExample.java">GappedRCFCastExample</a></em>
 </p>
 
 Note that RCFs are naturally multidimensional, and while the examples above plot 1 dimension even though the predictions were 
