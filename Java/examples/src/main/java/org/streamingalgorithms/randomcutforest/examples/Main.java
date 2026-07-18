@@ -42,6 +42,7 @@ public class Main {
         add(new DensityExample());
         add(new NearNeighborExample());
         add(new RCFCastExample());
+        add(new GappedRCFCastExample());
         add(new ConditionalPredictiveExample());
         add(new MultiSummarize());
         add(new Summarization());

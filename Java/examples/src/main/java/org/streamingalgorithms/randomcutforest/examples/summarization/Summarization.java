@@ -163,7 +163,7 @@ public class Summarization implements Example {
         int newDimensions = 2;
         long randomSeed = 123;
         int dataSize = 1350;
-        int numberOfBlades = 7;
+        int numberOfBlades = 5;
         double range = 15.0;
 
         RandomCutForest newForest = RandomCutForest.builder().numberOfTrees(100).sampleSize(256)
@@ -229,7 +229,8 @@ public class Summarization implements Example {
 
             // ---- build the scene ----
             List<Layer> scene = new ArrayList<>();
-            scene.add(Layers.dots(bg, new Color(218, 218, 218), 1.0));
+            scene.add(Layers.dots(bg, new Color(150, 150, 150), 1.8));
+            //scene.add(Layers.dots(bg, new Color(218, 218, 218), 1.0));
             for (int i = 0; i < summary.size(); i++) {
                 double weight = summary.get(i).getWeight();
                 List<double[]> rp = new ArrayList<>();

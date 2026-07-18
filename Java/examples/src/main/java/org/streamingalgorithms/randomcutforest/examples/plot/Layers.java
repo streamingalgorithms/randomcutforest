@@ -19,6 +19,13 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.FontMetrics;
+import java.awt.Stroke;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Path2D;
+import java.util.Arrays;
 
 /** Factory methods for the common layer types, plus a categorical palette. */
 public final class Layers {
@@ -26,6 +33,9 @@ public final class Layers {
     private Layers() {
     }
 
+    public enum Swatch {
+        BOX, LINE, DASHED, DOTS
+    }
     /**
      * Strong, well-separated colors: red, blue, green, orange, purple, brown, ...
      */
@@ -169,22 +179,56 @@ public final class Layers {
     }
 
     public static Layer legend(String[] labels, Color[] colors) {
+        Swatch[] swatches = new Swatch[labels.length];
+        Arrays.fill(swatches, Swatch.BOX);
+        return legend(labels, colors, swatches);
+    }
+    public static Layer legend(String[] labels, Color[] colors, Swatch[] swatches) {
         return (g, vp) -> {
-            int boxRight = (int) vp.px(vp.xmax());
-            int boxTop = (int) vp.py(vp.ymax());
-            int w = 210;
-            int x = boxRight - w - 10; // 10px inside the right edge of the plot box
-            int y = boxTop + 10; // 10px below the top edge
-            g.setColor(new Color(255, 255, 255, 210)); // translucent backing so lines don't bleed through
-            g.fillRect(x - 6, y - 4, w, labels.length * 16 + 8);
-            g.setColor(new Color(205, 205, 205));
-            g.drawRect(x - 6, y - 4, w, labels.length * 16 + 8);
-            for (int i = 0; i < labels.length; i++) {
-                g.setColor(colors[i]);
-                g.fillRect(x, y + i * 16, 12, 10);
-                g.setColor(new Color(40, 40, 40));
-                g.drawString(labels[i], x + 18, y + i * 16 + 9);
+            FontMetrics fm = g.getFontMetrics();
+            int sw = 16; // swatch column width
+            int gap = 8; // swatch -> text gap
+            int textW = 0;
+            for (String s : labels) {
+                textW = Math.max(textW, fm.stringWidth(s));
             }
+            int w = sw + gap + textW + 12;
+            int rowH = Math.max(16, fm.getHeight());
+            int x = (int) vp.px(vp.xmax()) - w - 10;
+            int y = (int) vp.py(vp.ymax()) + 10;
+
+            g.setColor(new Color(255, 255, 255, 210)); // backing so lines don't bleed through
+            g.fillRect(x - 6, y - 4, w, labels.length * rowH + 8);
+            g.setColor(new Color(205, 205, 205));
+            g.drawRect(x - 6, y - 4, w, labels.length * rowH + 8);
+
+            Stroke old = g.getStroke();
+            for (int i = 0; i < labels.length; i++) {
+                int cy = y + i * rowH + rowH / 2;
+                g.setColor(colors[i]);
+                switch (swatches[i]) {
+                    case BOX:
+                        g.fillRect(x, cy - 5, 14, 10);
+                        break;
+                    case LINE:
+                        g.setStroke(new BasicStroke(2f));
+                        g.drawLine(x, cy, x + sw, cy);
+                        break;
+                    case DASHED:
+                        g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f,
+                                new float[] { 2f, 3f }, 0f));
+                        g.drawLine(x, cy, x + sw, cy);
+                        break;
+                    case DOTS:
+                        for (int d = 0; d < 3; d++) {
+                            g.fill(new Ellipse2D.Double(x + d * 6.0, cy - 1.75, 3.5, 3.5));
+                        }
+                        break;
+                }
+                g.setColor(new Color(40, 40, 40));
+                g.drawString(labels[i], x + sw + gap, cy + fm.getAscent() / 2 - 1);
+            }
+            g.setStroke(old);
         };
     }
 
@@ -207,4 +251,27 @@ public final class Layers {
             g.drawString(text, (int) vp.px(x) + 4, (int) vp.py(y) - 3);
         };
     }
+    /**
+     * A polyline drawn with a dashed stroke. Used to plot series that are shown for
+     * reference but were never fed to the model.
+     *
+     * @param dash the dash pattern, e.g. {@code new float[]{2f, 3f}}
+     */
+    public static Layer dashedPolyline(double[][] xy, Color color, float stroke, float[] dash) {
+        return (g, vp) -> {
+            Path2D path = new Path2D.Double();
+            for (int i = 0; i < xy.length; i++) {
+                if (i == 0) {
+                    path.moveTo(vp.px(xy[i][0]), vp.py(xy[i][1]));
+                } else {
+                    path.lineTo(vp.px(xy[i][0]), vp.py(xy[i][1]));
+                }
+            }
+            g.setColor(color);
+            g.setStroke(new BasicStroke(stroke, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f, dash, 0f));
+            g.draw(path);
+            g.setStroke(new BasicStroke(1f));
+        };
+    }
+
 }

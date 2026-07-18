@@ -64,7 +64,8 @@ public class RCFCastExample implements Example {
         Precision precision = Precision.FLOAT_32;
         int dataSize = 2 * sampleSize;
 
-        int baseDimensions = 2; // comment recommends 1 for single-variate forecasting
+        int baseDimensions = 2;
+        // note that the stream is 2-dimensional and only dimension 0 is plotted
         int vizDim = 0; // the shifted, plotted dimension
         int forecastHorizon = 15;
         int shingleSize = 20;
@@ -97,16 +98,17 @@ public class RCFCastExample implements Example {
         boolean printFile = false;
         boolean livePlot = true;
         boolean saveGif = true;
-        int frameEvery = 3; // matches the gnuplot "do for [...:3]" stepping
+        int frameEvery = 3;
         int frameDelayMs = 8;
         int gifDelayMs = 40;
         int N = fulldata.length;
-        double ymin = -100, ymax = 500;
+        double ymin = -100, ymax = 650;
 
         java.io.BufferedWriter file = printFile ? new java.io.BufferedWriter(new java.io.FileWriter("example")) : null;
 
-        Plot2D plot = livePlot ? Plot2D.openRect("RCFCaster — calibrated forecast", 0, N, ymin, ymax, 1100, 620)
-                : Plot2D.offscreenRect(0, N, ymin, ymax);
+        Plot2D plot = livePlot ? Plot2D.openRect("RCFCaster — calibrated forecast", 0, N + forecastHorizon, ymin, ymax, 1100, 620)
+                                                   : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
+
         GifWriter gif = saveGif ? new GifWriter(new File("rcf_cast.gif"), gifDelayMs, true) : null;
 
         // the full data series (dim vizDim) — static background, computed once
@@ -135,7 +137,7 @@ public class RCFCastExample implements Example {
                 printResult(file, result, current, baseDimensions);
             }
 
-            boolean ready = current >= outputAfter
+            boolean ready = caster.getForest().isOutputReady()
                     && result.getTimedForecast().rangeVector.values.length >= baseDimensions;
             if (!(livePlot || saveGif) || !ready || current % frameEvery != 0) {
                 continue;
@@ -156,9 +158,9 @@ public class RCFCastExample implements Example {
             }
 
             List<Layer> scene = new ArrayList<>();
-            scene.add(Layers.hline(0, cGuide));
-            scene.add(Layers.hline(80, cGuide));
-            scene.add(Layers.hline(100, cGuide));
+            //scene.add(Layers.hline(0, cGuide));
+            //scene.add(Layers.hline(80, cGuide));
+            //scene.add(Layers.hline(100, cGuide));
             scene.add(Layers.polyline(dataLine, cData, false, 0, 1.0f));
 
             // past: observed error distribution + interval accuracy %
@@ -200,11 +202,15 @@ public class RCFCastExample implements Example {
             scene.add(Layers.label(labelX, 100, "Accuracy 1.0", cAcc));
             scene.add(Layers.polyline(fLine, cForecast, false, 0, 2.0f));
             scene.add(Layers.vline(current, cNow, 1.5f));
+
             scene.add(
                     Layers.legend(
                             new String[] { "Data", "Forecast", "Uncertainty (future)", "Error dist (past)",
-                                    "Interval acc % (80/100)" },
-                            new Color[] { cData, cForecast, cForecast, cPast, cAcc }));
+                                                               "Interval acc (fraction)" },
+                                                new Color[] { cData, cForecast, cForecast.brighter(), cPast, cAcc },
+                                      new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.LINE, Layers.Swatch.BOX,
+                                                        Layers.Swatch.BOX, Layers.Swatch.LINE }));
+
 
             if (livePlot) {
                 javax.swing.SwingUtilities.invokeLater(() -> {

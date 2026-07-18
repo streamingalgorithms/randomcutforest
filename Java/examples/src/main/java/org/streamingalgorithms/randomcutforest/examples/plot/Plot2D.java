@@ -133,7 +133,7 @@ public final class Plot2D extends JPanel {
         g2.setColor(new Color(205, 205, 205));
         g2.drawRect((int) vp.px(xmin), (int) vp.py(ymax), (int) (vp.px(xmax) - vp.px(xmin)),
                 (int) (vp.py(ymin) - vp.py(ymax)));
-
+        g2.setClip(margin, margin, w - 2 * margin, h - 2 * margin);
         for (Layer layer : scene) {
             layer.draw(g2, vp);
         }

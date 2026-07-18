@@ -1,251 +1,341 @@
 # Random Cut Forest
 
-This directory contains a Java implementation of the Random Cut Forest data structure and algorithms
-for anomaly detection, density estimation, imputation, and forecast. The goal of this library 
-is to be easy to use and to strike a balance between efficiency and extensibility. Please do not forget 
-to look into the ParkServices package that provide many augmented functionalities such as explicit determination 
-of anomaly grade based on the first hand understanding of the core algorithm. Please also see randomcutforest-examples 
-for a few detailed examples and extensions. Please do not hesitate to create an issue for any discussion item.
+[![Java CI](https://github.com/streamingalgorithms/randomcutforest/actions/workflows/maven.yml/badge.svg)](https://github.com/streamingalgorithms/randomcutforest/actions/workflows/maven.yml)
+[![Rust CI](https://github.com/streamingalgorithms/randomcutforest/actions/workflows/rust.yml/badge.svg)](https://github.com/streamingalgorithms/randomcutforest/actions/workflows/rust.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/org.streamingalgorithms/randomcutforest-core.svg?label=Maven%20Central)](https://central.sonatype.com/namespace/org.streamingalgorithms)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-The core algorithm is described in Guha, Mishra, Roy, and Schrijvers, "Robust Random Cut Forest Based Anomaly Detection on Streams," ICML 2016 ([PDF][rcf-paper]).
+**A sketch of an evolving data stream.**
 
-## Basic operations
+Random Cut Forest (RCF) is a probabilistic data structure that maintains a
+summary of a stream in one pass. It was originally conceived for anomaly detection. But a summary of a stream can 
+answer questions much broader than a specific scoring method. The same forest can answer questions about multiple quantities, such as density, nearest
+neighbors, missing values, and forecasting. Since the data structure continues to maintain itself, 
+one gets automatic, dynamic estimators of these quantities. This library provides a framework that 
+allows one to define other dynamic estimators and inference algorithms. For example, see the forecasting example in Figure 1 below.
 
-To create a RandomCutForest instance with all parameters set to defaults:
+<p align="center">
+  <img src="docs/images/rcf_cast.gif" alt="RCFCaster producing a calibrated forecast over a drifting seasonal stream" width="820">
+</p>
 
-```java
-int dimensions = 5; // The number of dimensions in the input data, required
-RandomCutForest forest = RandomCutForest.defaultForest(dimensions);
+<p align="center">
+  <em>Figure 1. <code>RCFCaster</code> Forecasting a stream -- the algorithm self-adapts. <br>
+  Produced by <a href="examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/RCFCastExample.java">RCFCastExample</a>; see <a href="#reading-that-forecast">Reading that forecast</a>.</em>
+</p>
+
+Periodicity
+is contextual and the (local) periodicity itself changes in Figure 1. GappedRCFCastExample below, in Figure 2, shows the same example when
+segments of the original input (corresponding to vertical yellow and grey stripes indicating occlusion) are never fed to the algorithm, which is about 40% of the input. The input seen by the algorithm 
+is tessalated and the algorithm stops predicting if the occluded gap exceeds the horizon. Note that a separate step to impute the missing data will lead to reconciliation issues with the drift. 
+
+<p align="center">
+  <img src="docs/images/gapped_rcf_cast.gif" alt="GappedRCFCaster producing a calibrated forecast over a stream with segments of missing data" width="820">
+</p>
+<p align="center">
+  <em> Figure 2. <code>GappedRCFCaster</code> The stream imputes the missing data segments (vertical stripes) on the fly.  <br>
+  Produced by <a href="examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/GappedRCFCastExample.java">GappedRCFCastExample</a>
+</p>
+
+Note that RCFs are naturally multidimensional, and while the examples above plot 1 dimension even though the predictions were 
+performed in the code for both. Multidimensional forecasting is fascinating in its connection to 
+<a href=https://en.wikipedia.org/wiki/Granger_causality>Grainger Causality</a> -- but note that a streaming algorithm typically does not make 
+any assumptions about stationarity and hence the algorithm can adapt.
+
+One can have dynamic multidimensional inference such as (multi-centroid) clustering such as in Figure 3, using the same machinary. 
+
+<p align="center">
+  <img src="docs/images/dynamic_summarization.gif" alt="Dynamic multicentroid clustering over a stream" width="400">
+</p>
+<p align="center">
+  <em> Figure 3. <code>DynamicSummarization</code> The time decay is set high to expire the previously input points. <br>
+  Produced by <a href="examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/summarization/Summarization.java">Summarization</a>
+</p>
+---
+
+## The connection to random forests
+
+Historically decisions trees employed complicated partitioning rule in <a href=https://en.wikipedia.org/wiki/Decision_tree_learning>Classification and Regression Trees (CART)</a>, chosen to
+separate the training data optimally with a simpler inference rule. There has been
+continued effort in determination of partitioning rules, icluding small space projections as in <a href=https://en.wikipedia.org/wiki/Random_forest>Random Forests</a>. Randomization has been 
+seen as a vehicle for generalization and stochastic (batch) discrimination. But most such analyis would require the trees 
+to be rebuilt -- or have a deliberate discrepancy between stated construction and use.
+
+RCF inverts the thinking -- the partitioning is simple **(recursive) random cuts**: pick a dimension with
+probability proportional to its extent, pick a split point uniformly. The goal is to preserve arbitrary
+but natural (for example distances) properties over a collection of trees -- drawing upon online algorithms that 
+it is easier to solve optimization problem if the underlying graph is a tree. RCF shows that the specific 
+recursive partitioning can be maintained under insertion *and deletion* using stochastic coupling over the 
+time dependent (streaming) input. A collection of such trees is a provable embedding of distances. This makes 
+continuous learning over a stream of unknown length possible provided the sketch 
+can be decoded at inference time -- and if the decoding can be averaged across models then we can use 
+algorithms for trees. 
+
+Complicated data pipelines are eliminated.
+The best piece of data is that which does not have to be collected!
+
+- **The sketch is reusable.** One forest, many scoring functions -- multimodality 
+   of inference, which also implies efficiency because quantities only need to 
+   be computed if they are required for the specific analysis trajectory. We do not need 
+    to over optimize at build time and throughput is an easy guarantee. 
+- **The arrow of time is preserved.** Adaptive re-sampling and batch rebuilds
+  break causality; the future influences the past. RCF's sampler doesn't violate 
+  the arrow of time.
+
+Anomaly detection is usually the *beginning* of an
+investigation, not the end. A single bit saying "anomalous" is rarely actionable.
+The interesting follow-ups — *which dimensions mattered? what should the value
+have been? did the local density move?* — are all questions about the normal, and
+a structure that vends scores of unusuality should be able to describe usual (though 
+not necessarily by the same action or algorithm). 
+
+
+For more, please consider:
+
+| | |
+| --- | --- |
+| [**Random Cut Forests**](https://opensearch.org/blog/random-cut-forests/) | The design tenet, RCFs as sketches, and why simple cuts plus rich inference beats the alternative. Start here. |
+| [**Streaming analytics**](https://opensearch.org/blog/streaming-analytics/) | What you build on top: thresholding, grades, forecasting, and the practicalities of a stream that never stops. |
+| [**One million entities in one minute**](https://opensearch.org/blog/one-million-enitities-in-one-minute/) | What it costs at scale. |
+| [Guha, Mishra, Roy, Schrijvers, ICML 2016](https://proceedings.mlr.press/v48/guha16.pdf) | The paper. |
+
+---
+
+## Quick start
+
+Requires **JDK 21 or later**.
+
+```xml
+<dependency>
+  <groupId>org.streamingalgorithms</groupId>
+  <artifactId>randomcutforest-parkservices</artifactId>
+  <version>5.0.0</version>
+</dependency>
 ```
-We recommend using shingle size which correspond to contextual analysis of data, 
-and RCF uses ideas not dissimilar from higher order Markov Chains to improve its 
-accuracy. An option is provided to have the shingles be constructed internally. 
-To explicitly set optional parameters like number of trees in the forest or 
-sample size, RandomCutForest provides a builder (for example with 4 input dimensions for 
-a 4-way multivariate analysis):
+
+```groovy
+implementation 'org.streamingalgorithms:randomcutforest-parkservices:5.0.0'
+```
+
+`parkservices` pulls in `randomcutforest-core` transitively. Take
+`randomcutforest-core` alone if you want raw scores and intend to do your own
+thresholding.
+
+> **Vector API.** The core uses the incubating `jdk.incubator.vector` module.
+> Add `--add-modules jdk.incubator.vector` to your JVM arguments, or the runtime
+> will refuse to load the module. This is an incubator module and may move
+> between JDK releases.
+
+### Detect anomalies
+
+`ThresholdedRandomCutForest` turns raw scores into a graded determination, so you
+are not left calibrating a threshold by hand.
 
 ```java
-RandomCutForest forest = RandomCutForest.builder()
-        .numberOfTrees(90)
-        .sampleSize(200) // use this cover the phenomenon of interest
-                         // for analysis of 5 minute aggregations, a week has
-                         // about 12 * 24 * 7 starting points of interest
-                         // larger sample sizes will be larger models 
-        .dimensions(inputDimension*4) // still required!
-        .timeDecay(0.2) // determines half life of data
-        .randomSeed(123)
-        .internalShingleEnabled(true)
-        .shingleSize(7)
+int baseDimensions = 3;   // your actual variables
+int shingleSize = 8;      // how much context defines "normal here"
+
+ThresholdedRandomCutForest forest = ThresholdedRandomCutForest.builder()
+        .dimensions(baseDimensions * shingleSize)   // note: the product
+        .shingleSize(shingleSize)
+        .internalShinglingEnabled(true)
+        .anomalyRate(0.01)
         .build();
-```
 
-Typical usage of a forest is to compute a statistic on an input data point and then update the forest with that point 
-in a loop. Note that in more recent versions float[] is supported and can be beneficial, the core library operates 
-on single precision.
-
-```java
-Supplier<double[]> input = ...;
-
-while (true) {
-    double[] point = input.get();
-    double score = forest.getAnomalyScore(point);
-    forest.update(point);
-    System.out.println("Anomaly Score: " + score);
+for (double[] point : stream) {
+    AnomalyDescriptor result = forest.process(point, timestamp);
+    if (result.getAnomalyGrade() > 0) {
+        System.out.printf("t=%d grade=%.2f expected=%s%n",
+                result.getInternalTimeStamp(),
+                result.getAnomalyGrade(),
+                Arrays.toString(result.getExpectedValuesList()[0]));
+    }
 }
 ```
 
-## Limitations
+Note what comes back alongside the grade: the *expected* value, the relative
+attribution across dimensions, and how far back the deviation began. That allows 
+one to initiate a root-cause process — it comes from the same trees. And that is no coincidence 
+-- it maybe possible that a powerful algorithm/agent reverse engineers an algorithm and explains it, but would
+it not be easier if the algorithm willingly provided "here is what the decision was based on"? This is based on decades old 
+predictor-corrector paradigms. In fact the existing ThresholdedRandomCutForest employs more than 
+one specific score in its corrector step to suppress anomalies.
 
-* Update operations in a forest are *not thread-safe*. Running concurrent updates or running an update concurrently
-  with a traversal may result in errors.
+### Forecast
 
+`RCFCaster` extrapolates over a horizon and, more usefully, tells you how much to
+trust it. Intervals are conformally calibrated against the errors the model has
+actually been making on this stream, so they widen when the stream turns and
+tighten when it settles.
 
-## Forest Configuration
+```java
+RCFCaster caster = RCFCaster.builder()
+        .dimensions(baseDimensions * shingleSize)
+        .shingleSize(shingleSize)
+        .internalShinglingEnabled(true)
+        .forecastHorizon(15)
+        .transformMethod(TransformMethod.NORMALIZE)
+        .calibration(Calibration.SIMPLE)
+        .build();
 
-The following parameters can be configured in the RandomCutForest builder. 
-
-| Parameter Name              | Type    | Description                                                                                                                                                                                                                                                                                                                                                    | Default Value                                                                         |
-|-----------------------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| dimensions                  | int     | The number of dimensions in the input data.                                                                                                                                                                                                                                                                                                                    | Required, no default value. Should be the product of input dimensions and shingleSize |
-| shingleSize                 | int     | The number of contiguous observations across all the input variables that would be used for analysis                                                                                                                                                                                                                                                           | Strongly recommended for contextual anomalies. Required for Forecast/Extrapolate      |
-| lambda                      | double  | The decay factor used by stream samplers in this forest. See the next section for guidance.                                                                                                                                                                                                                                                                    | 1 / (10 * sampleSize)                                                                 |
-| numberOfTrees               | int     | The number of trees in this forest.                                                                                                                                                                                                                                                                                                                            | 50                                                                                    |
-| outputAfter                 | int     | The number of points required by stream samplers before results are returned.                                                                                                                                                                                                                                                                                  | 0.25 * sampleSize                                                                     |
-| internalShinglingEnabled    | boolean | Whether the shingling is performed by RCF itself since it has already seen previous values.                                                                                                                                                                                                                                                                    | false (for historical reasons). Recommended : true, will result in smaller models.    |
-| parallelExecutionEnabled    | boolean | If true, then the forest will create an internal threadpool. Forest updates and traversals will be submitted to this threadpool, and individual trees will be updated or traversed in parallel. For larger shingle sizes, dimensions, and number of trees, parallelization may improve throughput. We recommend users benchmark against their target use case. | false                                                                                 |
-| randomSeed                  | long    | A seed value used to initialize the random number generators in this forest.                                                                                                                                                                                                                                                                                   |                                                                                       |
-| sampleSize                  | int     | The sample size used by stream samplers in this forest                                                                                                                                                                                                                                                                                                         | 256                                                                                   |
-| centerOfMassEnabled         | boolean | If true, then tree nodes in the forest will compute their center of mass as part of tree update operations.                                                                                                                                                                                                                                                    | false                                                                                 |
-| storeSequenceIndexesEnabled | boolean | If true, then sequence indexes (ordinals indicating when a point was added to a tree) will be stored in the forest along with poitn values.                                                                                                                                                                                                                    | false                                                                                 |
-| threadPoolSize              | int     | The number of threads to use in the internal threadpool.                                                                                                                                                                                                                                                                                                       | Number of available processors - 1                                                    |
-
-The above parameters are the most common and historical. Please use the issues to request additions/discussions of other parameters of interest.
-
-RandomCutForest primarily provides an estimation (say anomaly score, or extrapolation over a forecast horizon) and using that raw estimation can be challenging. The ParkServices package provides 
-several capabilities (ThresholdedRandomCutForest, RCFCaster, respectively) for distilling the scores to a determination of 
-anomaly/otherwise (an assesment of grade) or calibrated conformal forecasts. These have natural parameter choices that are different 
-from the core RandomCutForest -- for example internalShinglingEnabled defaults to true since that is more natural in those contexts.
-The package examples provides a collection of examples and uses of parameters, we draw the attention to ThresholdedMultiDimensionalExample 
-and RCFCasterExample. If one is interested in sequential analysis of a series of consecutive inputs, check out SequentialAnomalyExample. 
-ParkServices also exposes many other functionalities of RCF which were covert, such as clustering (including multi-centroid representations) 
--- see NumericGLADExample for instance. 
-
-## Choosing a `timeDecay` value for your application
-
-When we submit a point to the sampler, it is included into the sample with some probability, and 
-it will remain in the for some number of steps before being replaced. Call the number of steps that
-a point is included in the sample the "lifetime" of the point (which may be 0). Over a finite time
-window, the distribution of the lifetime of a point is approximately exponential with parameter
-`lambda`. Thus, `1 / timmeDecay` is approximately the average number of steps that a point will be included
-in the sample. By default, we set `timeDecay` equal to `1 / (10 * sampleSize)`.
-
-Alternatively, if you want the probability that a point survives longer than n steps to be 0.05,
-you can solve for `lambda` in the equation `exp(-lambda * n) = 0.05`.
-
-We note again that this is heuristic and not mathematically rigorous. We refer the interested reader
-to [Weighted Random Sampling (2005;  Efraimidis, Spirakis)](http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=BEB1FE0AB3C0129B822D2CE5EABBFD42?doi=10.1.1.591.4194&rep=rep1&type=pdf).
-
-## Setup
-
-1. Checkout this package from our GitHub repository.
-1. Install [Apache Maven](https://maven.apache.org/) by following the directions on that site.
-1. Set your `JAVA_HOME` environment variable to a JDK version 21 or greater.
-
-## Build
-
-Build the modules in this package and run the full test suite by running
-
-```text
-mvn package
+for (double[] point : stream) {
+    ForecastDescriptor result = caster.process(point, timestamp);
+    RangeVector forecast = result.getTimedForecast().rangeVector;
+    // forecast.values / .lower / .upper, laid out horizon-major:
+    //   index i * baseDimensions + d  ==  step i ahead, dimension d
+    float[] intervalAccuracy = result.getIntervalPrecision();  // how often past
+                                                               // intervals held
+}
 ```
 
-For a faster build that excludes the long-running "functional" tests, run
+### Shingle size, briefly
 
-```text
+`dimensions` is the product of input dimensions and `shingleSize`, and
+getting this wrong is the single most common mistake. A shingle is the
+sliding window of recent observations that defines context: with `shingleSize=1`
+a point is judged against the (here till now) global distribution; it is the conceptual 
+definition of disconnectivity in time. A large shingle is the conceptual (and algorithmic)
+guarantee of what is imminent is connected to immediate past, in the manner of a
+higher-order Markov chain. Contextual anomalies — a value that is unremarkable in
+isolation but wrong *there* — also need a shingle. Forecasting requires one.
+
+Set `internalShinglingEnabled(true)` and let the forest build them; the models
+come out smaller because the algorithm can use knowledge of the shingle to 
+continually keep compressing the points.
+
+Full parameter reference, `timeDecay` guidance, CLI runners, and benchmarks:
+**[Java/README.md](Java/README.md)**.
+
+---
+
+## Reading that forecast
+
+The animation at the top is one `RCFCaster` consuming a two-dimensional stream
+point by point. Around the two-thirds mark the generating process changes — a
+different seasonality, phase and amplitude — with no warning and no retraining.
+
+| | |
+| --- | --- |
+| **Black** | the observed series (one plotted dimension) |
+| **Blue line and band** | the forecast over the next 15 steps, with its calibrated interval |
+| **Brown band** | the error distribution actually observed over the last 15 steps |
+| **Magenta** | interval accuracy: the fraction of past intervals that contained the truth, against guides at 0.0, 0.8 and 1.0 |
+| **Grey vertical** | now |
+
+The magenta trace is the point of the whole exercise. A forecast that reports
+80% intervals and hits 80% is honest; one that reports 80% and hits 40% is a
+liability, and you would like to find that out from the model rather than from
+production. Watch what it does at the regime change — the intervals widen, the
+accuracy dips, and both recover.
+
+Reproduce it:
+
+```bash
+cd Java
 mvn package -DexcludedGroups=functional
+java --add-modules jdk.incubator.vector \
+     -cp examples/target/randomcutforest-examples-5.0.0.jar \
+     org.streamingalgorithms.randomcutforest.examples.Main rcf_cast
 ```
 
-## Build Command-line (CLI) usage
+---
 
-> **Important.** The CLI applications use `String::split` to read delimited data
-> and as such are **not intended for production use**.
+## Examples
 
-For some of the algorithms included in this package there are CLI applications
-that can be used for experimentation as well as a way to learn about these
-algorithms and their hyperparameters. After building the project you can invoke
-an example CLI application by adding the core jar file to your classpath.
+The [`examples`](Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/)
+module is the real documentation. Each one is a self-contained, runnable
+scenario; several plot as they go.
 
-In the example below we train and score a Random Cut Forest model on the
-three-dimensional data shown the original repo.
-
-```text
--5.0074,-0.0038,-0.0237
--5.0029,0.0170,-0.0057
--4.9975,-0.0102,-0.0065
-4.9878,0.0136,-0.0087
-5.0118,0.0098,-0.0057
-0.0158,0.0061,0.0091
-5.0167,0.0041,0.0054
--4.9947,0.0126,-0.0010
--5.0209,0.0004,-0.0033
-4.9923,-0.0142,0.0030
+```bash
+java --add-modules jdk.incubator.vector \
+     -cp examples/target/randomcutforest-examples-5.0.0.jar \
+     org.streamingalgorithms.randomcutforest.examples.Main --help
 ```
 
-(Note that there is one data point above that is not like the others.) The
-`AnomalyScoreRunner` application reads in each line of the input data as a
-vector data point, scores the data point, and then updates the model with this
-point. The program output appends a column of anomaly scores to the input:
+| Command | What it shows |
+| --- | --- |
+| `rcf_cast` | Calibrated forecasting through a regime change. **The one to read first.** |
+| `gapped_rcf_cast` | Forecasting when the stream has holes in it |
+| `Thresholded_Predictive_example` | Predictive forecast across multiple correlated series |
+| `Conditional_predictive_example` | Imputation used as prediction |
+| `multimodal_example` | Streams whose "normal" is several distinct things at once |
+| `density` | Directional, dynamic density estimation |
+| `near_neighbor` | Dynamic nearest-neighbour queries against the sketch |
+| `summarize`, `multi_summarize`, `string_summarize` | Clustering and multi-centroid summarisation, including over strings |
 
-```text
-$ java -cp core/target/randomcutforest-core-4.4.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner < ../"some_example.csv" > "some_example_output.csv"
--5.0029,0.0170,-0.0057,0.8129401629464965
--4.9975,-0.0102,-0.0065,0.6591046054520615
-4.9878,0.0136,-0.0087,0.8552217070518414
-5.0118,0.0098,-0.0057,0.7224686064066762
-0.0158,0.0061,0.0091,2.8299054033889814
-5.0167,0.0041,0.0054,0.7571453322237215
--4.9947,0.0126,-0.0010,0.7259960347128676
--5.0209,0.0004,-0.0033,0.9119498264685114
-4.9923,-0.0142,0.0030,0.7310102658466711
-Done.
+---
+
+## Repository layout
+
+```
+Java/                 the reference implementation
+  core/               RandomCutForest — trees, sampling, traversal, raw estimation
+  parkservices/       ThresholdedRandomCutForest, RCFCaster — the layer you
+                      probably want: grades, calibration, transforms
+  serialization/      model persistence
+  examples/           runnable scenarios and plots
+  benchmark/          JMH microbenchmarks
+  testutils/          internal test scaffolding
+Rust/                 Rust implementation
+python_rcf_wrapper/   Python bindings
 ```
 
-(As you can see the anomalous data point was given large anomaly score.) You can
-read additional usage instructions, including options for setting model
-hyperparameters, using the `--help` flag:
+The split between `core` and `parkservices` is deliberate and matters when you
+choose a dependency. `core` gives you an estimate — an anomaly score, an
+extrapolation. Turning estimations into decisions is hard, and anomaly 
+detection deployments fail because the `exciting` part does not 
+align with `non-exciting` part -- the notion of exciting is to the beholder.  The gestalt 
+any algorithm corresponds to no single line of code being the weakest link. `parkservices` is where that work
+lives. Its defaults differ from `core`'s on purpose: `internalShinglingEnabled`
+is true there, for instance, because it is the natural choice in that context.
 
-```text
-$ java -cp core/target/randomcutforest-core-4.4.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner --help
-Usage: java -cp randomcutforest-core-1.0.jar org.streamingalgorithms.randomcutforest.runner.AnomalyScoreRunner [options] < input_file > output_file
+Consider `core` if you want a new scoring function -- and write that against
+the traversal API using newly written visitors. The library will make it stream automatically. 
+If that is not a goal, consider `parkservices` or your own code to build 
+domain specific adaptations.
 
-Compute scalar anomaly scores from the input rows and append them to the output rows.
+---
 
-Options:
-	--delimiter, -d: The character or string used as a field delimiter. (default: ,)
-	--header-row: Set to 'true' if the data contains a header row. (default: false)
-	--number-of-trees, -n: Number of trees to use in the forest. (default: 100)
-	--random-seed: Random seed to use in the Random Cut Forest (default: 42)
-	--sample-size, -s: Number of points to keep in sample for each tree. (default: 256)
-	--shingle-cyclic, -c: Set to 'true' to use cyclic shingles instead of linear shingles. (default: false)
-	--shingle-size, -g: Shingle size to use. (default: 1)
-	--window-size, -w: Window size of the sample or 0 for no window. (default: 0)
+## Releases
 
-	--help, -h: Print this help message and exit.
-```
+Java artifacts are published to Maven Central under the `org.streamingalgorithms`
+namespace. Jars are compiled, tested and signed by GitHub Actions runners — see
+[Java/RELEASING.md](Java/RELEASING.md) for the process and
+[`.github/workflows/`](.github/workflows/) for the workflows themselves.
 
-Other CLI applications are available in the `org.streamingalgorithms.randomcutforest.runner`
-package.
+GitHub tags carry a `-java` or `-rust` suffix (`5.0.0-java`) because the two
+implementations release independently.
 
-## Testing
+## Relationship to the upstream project
 
-The core library test suite is divided into unit tests and "functional" tests. By "functional", we mean tests that 
-verify the expected behavior of the algorithms defined in the package. For example, a functional test for the anomaly 
-detection algorithm will first train a forest on a pre-defined distribution and then verify that the forest assigns a 
-high anomaly score to anomalous points (where "anomalous" is with respect to the specified distribution). Functional 
-tests are indicated both in the test class name (e.g., `RandomCutForestFunctionalTest`) and in a `@Tag` annotation on 
-the test class.
+This is a fork of [random-cut-forest-by-aws](https://github.com/aws/random-cut-forest-by-aws),
+originally developed at Amazon and released under Apache 2.0. This fork is maintained
+independently under the `streamingalgorithms` organization and is **not
+affiliated with or endorsed by Amazon or AWS**.
 
-The full test suite including functional tests currently takes over 10 minutes to complete. If you are contributing to
-this package, we recommend excluding the functional tests while actively developing, and only running the full test
-suite before creating a pull request. Functional tests can be excluded from Maven build targets by passing
-`-DexcludedGroups=functional` at the command line. For example:
+The Maven coordinates changed accordingly. If you are migrating from the AWS
+artifacts, the package root moved from `com.amazon.randomcutforest` to
+`org.streamingalgorithms.randomcutforest`. See the 5.0.0 release notes for the
+rest.
 
-```text
-% mvn test -DexcludedGroups=functional
-```
+## Contributing
 
-In the core library we have 90% line coverage with the full test suite, and 80% line coverage when running the unit 
-tests only (i.e., when excluding functional tests). We welcome (and 
-encourage!) test contributions. After running tests with Maven, you can see the test coverage broken out by class by 
-opening `target/site/jacoco/index.html` in a web browser.
+Issues and pull requests are welcome — including "the documentation didn't
+explain this" issues, which are as useful as bug reports. See
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Our tests are implemented in [JUnit 5](https://junit.org/junit5/) with [Mockito](https://site.mockito.org/), [Powermock](https://github.com/powermock/powermock), and [Hamcrest](http://hamcrest.org/) for testing. 
-Test dependencies will be downloaded automatically when invoking `mvn test` or `mvn package`.
+Please do not report security issues in public issues; see [SECURITY.md](SECURITY.md).
 
-## Benchmarks
+## References
 
-The benchmark modules defines microbenchmarks using the [JMH](https://openjdk.java.net/projects/code-tools/jmh/) 
-framework. Build an executable jar containing the benchmark code by running
+1. S. Guha, N. Mishra, G. Roy, O. Schrijvers. *Robust Random Cut Forest Based
+   Anomaly Detection on Streams.* ICML 2016.
+   [PDF](https://proceedings.mlr.press/v48/guha16.pdf)
+2. F. T. Liu, K. M. Ting, Z.-H. Zhou. *Isolation-Based Anomaly Detection.*
+   ACM TKDD 6(1), 2012.
 
-```text
-% # (Optional) To benchmark the code in your local repository, build and install to your local Maven repository
-% # Otherwise, benchmark dependencies will be pulled from Maven central
-% mvn package install -DexcludedGroups=functional
-% 
-% mvn -pl benchmark package assembly:single
-```
+## License
 
-To invoke the full benchmark suite:
+Apache License 2.0 — see [LICENSE](LICENSE).
 
-```text
-% java -jar benchmark/target/randomcutforest-benchmark-4.4.0-jar-with-dependencies.jar
-```
-
-The full benchmark suite takes a long time to run. You can also pass a regex at the command-line, then only matching
-benchmark methods will be executed.
-
-```text
-% java -jar benchmark/target/randomcutforest-benchmark-4.4.0-jar-with-dependencies.jar RandomCutForestBenchmark\.updateAndGetAnomalyScore
-```
-
-[rcf-paper]: https://proceedings.mlr.press/v48/guha16.pdf
+Copyright 2019 Amazon.com, Inc. or its affiliates.
+Copyright 2026 The streamingalgorithms authors.

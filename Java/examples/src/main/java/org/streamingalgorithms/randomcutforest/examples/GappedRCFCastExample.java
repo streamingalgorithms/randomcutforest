@@ -40,6 +40,27 @@ import org.streamingalgorithms.randomcutforest.parkservices.config.Calibration;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 
+/**
+ * Forecasting a stream with occlusion: contiguous spans of the input are never
+ * shown to the model. During a span the forecast issued at the last observed
+ * point stays frozen and the now-line sweeps into it; the frozen forecast is
+ * read off as an imputation for each masked step within the horizon.
+ *
+ * <p>
+ * Two things this example is careful about, because both are easy to get wrong:
+ *
+ * <ol>
+ * <li><b>Readiness is a property of the forest, not of the clock.</b>
+ * {@code outputAfter} counts <i>updates delivered to the forest</i>. Roughly 39%
+ * of this stream is withheld, so the forest reaches 256 updates at t=412, not at
+ * t=256. Gating on a timestamp would record ~30% of the imputations while the
+ * forecast is still identically zero -- they plot at y=0 and poison the RMSE.
+ * Ask the forest: {@link org.streamingalgorithms.randomcutforest.RandomCutForest#isOutputReady()}.</li>
+ * <li><b>The plot must distinguish what the model saw from what it did not.</b>
+ * The withheld series is drawn dotted. It is ground truth for scoring only; the
+ * model never receives it.</li>
+ * </ol>
+ */
 public class GappedRCFCastExample implements Example {
 
     public static void main(String[] args) throws Exception {
@@ -53,7 +74,7 @@ public class GappedRCFCastExample implements Example {
 
     @Override
     public String description() {
-        return "Gapped RCFCast Example";
+        return "Forecasting and imputation over a stream with occluded segments";
     }
 
     @Override
@@ -74,6 +95,7 @@ public class GappedRCFCastExample implements Example {
         double shiftForViz = 200;
         System.out.println("seed = " + seed);
 
+        // two regimes back to back: the generating process changes at t = dataSize
         MultiDimData dataWithKeys = multiDimData(dataSize, 50, 50, 5, seed, baseDimensions, 0.01, true);
         for (int i = 0; i < dataSize; i++) {
             fulldata[i] = Arrays.copyOf(dataWithKeys.data[i], baseDimensions);
@@ -94,9 +116,13 @@ public class GappedRCFCastExample implements Example {
         // lowerLimit(new float[baseDimensions])
         // will force the forecast to be nonnegative in every dimension
 
-        // ---- gaps: coin-toss contiguous runs. Keep maxGap <= forecastHorizon so the
-        // frozen forecast can cover the whole gap; longer gaps get a flat hold (see
-        // below).
+        // ---- occlusion: coin-toss contiguous runs -------------------------------
+        // maxGap deliberately EXCEEDS forecastHorizon. A frozen forecast reaches
+        // exactly forecastHorizon-1 steps past the last observation, so long spans
+        // run out of forecast partway through. That is not a defect to be hidden:
+        // the model declining to guess past its horizon is worth showing, so the
+        // unreachable tail of each span is drawn in a different shade and gets no
+        // imputed point.
         boolean[] missing = new boolean[N];
         Random gapRng = new Random(2030L);
         double gapProb = 0.02;
@@ -111,14 +137,44 @@ public class GappedRCFCastExample implements Example {
                 j++;
             }
         }
-        List<double[]> gapSpans = new ArrayList<>();
+
+        // occluded spans, split into the part the frozen forecast can reach and the
+        // part it cannot
+        List<double[]> reachSpans = new ArrayList<>();
+        List<double[]> beyondSpans = new ArrayList<>();
         for (int j = 0; j < N; j++) {
             if (missing[j]) {
                 int s = j;
-                while (j < N && missing[j])
+                while (j < N && missing[j]) {
                     j++;
-                gapSpans.add(new double[] { s, j - 1 });
+                }
+                int e = j - 1;
+                // offset = current - lastObserved, imputed while offset < forecastHorizon
+                int reachEnd = Math.min(e, s + forecastHorizon - 2);
+                reachSpans.add(new double[] { s, reachEnd });
+                if (e > reachEnd) {
+                    beyondSpans.add(new double[] { reachEnd + 1, e });
+                }
             }
+        }
+
+        // ---- the series, split into runs the model saw and runs it did not ------
+        List<double[][]> seenRuns = new ArrayList<>();
+        List<double[][]> withheldRuns = new ArrayList<>();
+        for (int j = 0; j < N;) {
+            boolean m = missing[j];
+            int s = j;
+            while (j < N && missing[j] == m) {
+                j++;
+            }
+            // overlap each run by one index so consecutive runs meet on screen
+            int lo = Math.max(0, s - 1), hi = Math.min(N - 1, j);
+            double[][] seg = new double[hi - lo + 1][2];
+            for (int k = lo; k <= hi; k++) {
+                seg[k - lo][0] = k;
+                seg[k - lo][1] = fulldata[k][vizDim];
+            }
+            (m ? withheldRuns : seenRuns).add(seg);
         }
 
         // ---- viz config ----
@@ -128,69 +184,85 @@ public class GappedRCFCastExample implements Example {
         int frameEvery = 3;
         int frameDelayMs = 8;
         int gifDelayMs = 40;
-        double ymin = -100, ymax = 500;
+        // ymax lifted 500 -> 650: the 9-row legend is 152px tall and at ymax=500 its
+        // bottom edge lands at data y=299, straight through a series that peaks at
+        // 355.6. At 650 it clears by 43. RCFCastExample uses the same box so the two
+        // figures stay comparable.
+        double ymin = -100, ymax = 650;
 
-        java.io.BufferedWriter file = printFile ? new java.io.BufferedWriter(new java.io.FileWriter("example")) : null;
+        BufferedWriter file = printFile ? new BufferedWriter(new java.io.FileWriter("example")) : null;
 
-        Plot2D plot = livePlot ? Plot2D.openRect("Gapped RCFCaster — freeze + impute", 0, N, ymin, ymax, 1100, 620)
-                : Plot2D.offscreenRect(0, N, ymin, ymax);
+        Plot2D plot = livePlot ? Plot2D.openRect("Gapped RCFCaster — freeze + impute", 0, N + forecastHorizon, ymin, ymax, 1100,
+                620)
+                : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
         GifWriter gif = saveGif ? new GifWriter(new File("gapped_rcf_cast.gif"), gifDelayMs, true) : null;
 
-        double[][] dataLine = new double[N][2];
-        for (int j = 0; j < N; j++) {
-            dataLine[j][0] = j;
-            dataLine[j][1] = fulldata[j][vizDim];
-        }
-
         Color cData = Color.BLACK;
+        // bright red: the withheld series is the one thing here the model never
+        // receives, and grey put it 3.8 dE from the occlusion band. Matches
+        // Summarization.PALETTE[0]; dE 40.3 from its nearest neighbour (cImputed).
+        Color cWithheld = new Color(214, 39, 40);
+        Color cReach = new Color(255, 180, 0);
+        Color cBeyond = new Color(150, 150, 150);
         Color cForecast = new Color(31, 119, 180);
         Color cPast = new Color(140, 86, 75);
+        Color cImputed = new Color(55, 200, 200);
         Color cAcc = new Color(200, 0, 160);
         Color cNow = new Color(110, 110, 110);
         Color cGuide = new Color(150, 150, 150);
+        float[] dash = new float[] { 2f, 3f };
 
         List<float[]> imputedPts = new ArrayList<>();
         double gapSe = 0;
         int gapN = 0;
+        int skippedNotReady = 0, skippedBeyondHorizon = 0;
 
         ForecastDescriptor lastResult = null; // forecast from the most recent OBSERVED step
         int lastObserved = -1;
+        boolean lastResultValid = false; // was the forest output-ready when it was produced?
 
         Instant start = Instant.now();
         long processNanos = 0;
 
         for (int current = 0; current < N; current++) {
             if (!missing[current]) {
-                // observed: process normally (updates forest, calibrates errors, forecasts)
                 Instant p0 = Instant.now();
-                lastResult = caster.process(toDoubleArray(fulldata[current]), current); // timestamp = current
+                lastResult = caster.process(toDoubleArray(fulldata[current]), current);
                 processNanos += Duration.between(p0, Instant.now()).toNanos();
                 lastObserved = current;
+                // readiness is a property of the forest (updates delivered), never of
+                // `current` -- 39% of timestamps here never reach the forest at all
+                lastResultValid = caster.getForest().isOutputReady();
                 if (printFile) {
                     printResult(file, lastResult, current, baseDimensions);
                 }
             } else if (lastResult != null) {
-                RangeVector f = lastResult.getTimedForecast().rangeVector;
-                int h = f.values.length / baseDimensions;
-                int offset = current - lastObserved;
-                if (h > 0 && offset < h) { // only within the forecast horizon
-                    float imputedVal = f.values[offset * baseDimensions + vizDim];
-                    imputedPts.add(new float[] { current, imputedVal });
-                    double e = imputedVal - fulldata[current][vizDim];
-                    gapSe += e * e;
-                    gapN++;
+                if (!lastResultValid) {
+                    skippedNotReady++; // forecast is still identically zero; not an imputation
+                } else {
+                    RangeVector f = lastResult.getTimedForecast().rangeVector;
+                    int h = f.values.length / baseDimensions;
+                    int offset = current - lastObserved;
+                    if (h > 0 && offset < h) {
+                        float imputedVal = f.values[offset * baseDimensions + vizDim];
+                        imputedPts.add(new float[] { current, imputedVal });
+                        double e = imputedVal - fulldata[current][vizDim];
+                        gapSe += e * e;
+                        gapN++;
+                    } else {
+                        skippedBeyondHorizon++; // the model has nothing to say this far out
+                    }
                 }
-                // beyond horizon: no dot, no score — the model has nothing to say here
             }
 
-            boolean ready = lastResult != null && lastObserved >= outputAfter
+            boolean ready = lastResultValid
                     && lastResult.getTimedForecast().rangeVector.values.length >= baseDimensions;
             if (!(livePlot || saveGif) || !ready || current % frameEvery != 0) {
                 continue;
             }
 
-            // forecast is anchored at lastObserved; during a gap it stays put and the
-            // now-line sweeps into it
+            // the forecast is anchored at lastObserved; inside a span it stays put and
+            // the now-line sweeps into it
             RangeVector forecast = lastResult.getTimedForecast().rangeVector;
             int horizon = forecast.values.length / baseDimensions;
             double[] fx = new double[horizon], fv = new double[horizon], fl = new double[horizon],
@@ -204,7 +276,8 @@ public class GappedRCFCastExample implements Example {
             }
 
             List<Layer> scene = new ArrayList<>();
-            scene.add(Layers.xBands(gapSpans.toArray(new double[0][]), new Color(255, 180, 0), 40));
+            scene.add(Layers.xBands(reachSpans.toArray(new double[0][]), cReach, 40));
+            scene.add(Layers.xBands(beyondSpans.toArray(new double[0][]), cBeyond, 45));
 
             double labelX = 8;
             scene.add(Layers.hline(0, cGuide));
@@ -214,8 +287,14 @@ public class GappedRCFCastExample implements Example {
             scene.add(Layers.hline(100, cGuide));
             scene.add(Layers.label(labelX, 100, "Accuracy 1.0", cAcc));
 
-            scene.add(Layers.polyline(dataLine, cData, false, 0, 1.0f));
-            scene.add(Layers.dots(imputedPts.toArray(new float[0][]), new Color(230, 120, 0), 3.5));
+            // what the model consumed, and what it never saw
+            for (double[][] seg : seenRuns) {
+                scene.add(Layers.polyline(seg, cData, false, 0, 1.0f));
+            }
+            for (double[][] seg : withheldRuns) {
+                scene.add(Layers.dashedPolyline(seg, cWithheld, 1.0f, dash));
+            }
+            scene.add(Layers.dots(imputedPts.toArray(new float[0][]), cImputed, 3.5));
 
             // past: observed error distribution + interval accuracy %, anchored at
             // lastObserved
@@ -249,11 +328,16 @@ public class GappedRCFCastExample implements Example {
                 fLine[i][1] = fv[i];
             }
             scene.add(Layers.polyline(fLine, cForecast, false, 0, 2.0f));
-            scene.add(Layers.vline(current, cNow, 1.5f)); // now-line at current, may be inside a gap
+            scene.add(Layers.vline(current, cNow, 1.5f));
             scene.add(Layers.legend(
-                    new String[] { "Data", "Forecast (frozen in gap)", "Uncertainty", "Error dist (past)",
-                            "Imputed / acc %" },
-                    new Color[] { cData, cForecast, cForecast, cPast, new Color(230, 120, 0) }));
+                    new String[] { "Data (seen by model)", "Withheld (never seen)", "Occluded, within horizon",
+                            "Occluded, beyond horizon", "Forecast (frozen in gap)", "Uncertainty",
+                            "Error dist (past)", "Imputed", "Interval acc (fraction)" },
+                    new Color[] { cData, cWithheld, cReach, cBeyond, cForecast, cForecast.brighter(), cPast, cImputed,
+                            cAcc },
+                    new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.DASHED, Layers.Swatch.BOX,
+                            Layers.Swatch.BOX, Layers.Swatch.LINE, Layers.Swatch.BOX, Layers.Swatch.BOX,
+                            Layers.Swatch.DOTS, Layers.Swatch.LINE }));
 
             if (livePlot) {
                 javax.swing.SwingUtilities.invokeLater(() -> {
@@ -274,8 +358,19 @@ public class GappedRCFCastExample implements Example {
             }
         }
 
+        int withheld = 0;
+        for (boolean m : missing) {
+            if (m) {
+                withheld++;
+            }
+        }
+        System.out.printf("%nwithheld %d / %d steps (%.1f%% of the stream)%n", withheld, N, 100.0 * withheld / N);
+        System.out.printf("  imputed          : %d%n", gapN);
+        System.out.printf("  skipped, warmup  : %d (forest not output-ready)%n", skippedNotReady);
+        System.out.printf("  skipped, beyond  : %d (further than %d steps past the last observation)%n",
+                skippedBeyondHorizon, forecastHorizon);
         if (gapN > 0) {
-            System.out.printf("imputation RMSE over %d masked points: %.3f%n", gapN, Math.sqrt(gapSe / gapN));
+            System.out.printf("imputation RMSE over %d imputed points: %.3f%n", gapN, Math.sqrt(gapSe / gapN));
         }
         if (gif != null) {
             gif.close();
@@ -323,5 +418,4 @@ public class GappedRCFCastExample implements Example {
         file.append("\n");
         file.append("\n");
     }
-
 }
