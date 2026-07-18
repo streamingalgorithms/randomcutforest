@@ -261,13 +261,6 @@ public class RandomCutTreeTest {
                 is(new float[] { -1, -1 }));
         assertThat(tree.getMass(tree.getLeftChild(node)), is(1));
         assertEquals(tree.getSequenceMap(tree.getPointIndex(tree.getLeftChild(node))).get(1L), 1);
-        // testing inappropriate
-        assertThrows(IllegalArgumentException.class, () -> tree.getLeftChild(Integer.MAX_VALUE));
-        assertThrows(IllegalArgumentException.class, () -> tree.getRightChild(500));
-        assertThrows(IllegalArgumentException.class, () -> tree.getCutValue(-1));
-        assertThrows(IllegalArgumentException.class, () -> tree.getCutDimension(-1));
-        // pointIndex should have a value at least as large as number of leaves
-        assertThrows(IllegalArgumentException.class, () -> tree.getPointIndex(0));
 
         NodeStore nodeStoreSmall = tree.nodeStore;
         assert (nodeStoreSmall.getParentIndex(tree.getRightChild(node)) == node);

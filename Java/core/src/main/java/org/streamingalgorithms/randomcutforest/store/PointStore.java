@@ -32,6 +32,7 @@
 package org.streamingalgorithms.randomcutforest.store;
 
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
@@ -252,7 +253,7 @@ public class PointStore implements IPointStore<Integer, float[]> {
         if (indexManager.isEmpty()) {
             if (indexManager.getCapacity() < capacity) {
                 int oldCapacity = indexManager.getCapacity();
-                int newCapacity = Math.min(capacity, 1 + (int) Math.floor(1.1 * oldCapacity));
+                int newCapacity = min(capacity, 1 + (int) Math.floor(1.1 * oldCapacity));
                 indexManager.extendCapacity(newCapacity);
                 refCount = Arrays.copyOf(refCount, newCapacity);
                 extendLocationList(newCapacity);
@@ -899,7 +900,7 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     void resizeStore() {
         int maxCapacity = (rotationEnabled) ? 2 * capacity : capacity;
-        int newCapacity = (int) Math.floor(Math.min(1.1 * currentStoreCapacity, maxCapacity));
+        int newCapacity = (int) Math.floor(min(1.1 * currentStoreCapacity, maxCapacity));
         if (newCapacity > currentStoreCapacity) {
             float[] newStore = new float[newCapacity * dimensions];
             System.arraycopy(store, 0, newStore, 0, currentStoreCapacity * dimensions);
@@ -971,6 +972,30 @@ public class PointStore implements IPointStore<Integer, float[]> {
             VectorSupport.expandInto(store, address, values, offset, dimensions);
         } else {
             VectorSupport.expandInto(getNumericVector(index), 0, values, offset, dimensions);
+        }
+    }
+
+    double addToLinearSlice(float[] values, int offset, int[] array, int num) {
+        double val = 0;
+        for (int i = 0; i < num; i++) {
+            val = VectorSupport.addPointInPlace(values, offset, dimensions, store, getLocation(array[i]));
+        }
+        return val; // overwrites to the last range
+    }
+
+    double addToRotatedSlice(float[] values, int offset, int[] array, int num) {
+        double val = 0;
+        for (int i = 0; i < num; i++) { // allocates
+            val = VectorSupport.addPointInPlace(values, offset, dimensions, getNumericVector(array[i]), 0);
+        }
+        return val;
+    }
+
+    public double addToSlice(float[] values, int offset, int[] array, int num) {
+        if (!rotationEnabled) {
+            return addToLinearSlice(values, offset, array, num);
+        } else {
+            return addToRotatedSlice(values, offset, array, num);
         }
     }
 

@@ -55,12 +55,11 @@ while (true) {
 
 * Update operations in a forest are *not thread-safe*. Running concurrent updates or running an update concurrently
   with a traversal may result in errors. Note that the same is true for caching settings -- RCF allows for caching 
-  to provide a space-time tradeoff. Use boundingBox caching = 1.0 if a forest is being run from different threads -- because
-  different threads may try to fix the same cache location. Note that the recent GC improvements also relied on reuse of 
-  data structures. Multiple thread execution will be more expensive in memory use. The CPUTest in the repository found 
-  that it was faster to dun 10 forests on 10 threads than reach for 10-way parallelism within a forest and have 10 such 
-  sequential steps. The upgrade to SIMD also makes multithreaded scoring less-needed. Create an issue if this limitation 
-  (caching at values not at 1, multiple threads using the same forest to score) is a critical blocker.  
+  to provide a space-time tradeoff. However, caching is a change of state -- and changing the cache fraction
+  is a change of state -- do not attempt changing cache values or non 0/1 values, if the forest is going to be 
+  accessed by multiple threads. In a single threaded case consider setting cache-fraction to 0.001 specially if
+  shingle size is more than 1.
+
 
 
 ## Forest Configuration

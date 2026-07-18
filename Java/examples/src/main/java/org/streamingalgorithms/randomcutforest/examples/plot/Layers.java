@@ -17,10 +17,6 @@ package org.streamingalgorithms.randomcutforest.examples.plot;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Path2D;
-import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.FontMetrics;
 import java.awt.Stroke;
 import java.awt.geom.Ellipse2D;
@@ -36,6 +32,7 @@ public final class Layers {
     public enum Swatch {
         BOX, LINE, DASHED, DOTS
     }
+
     /**
      * Strong, well-separated colors: red, blue, green, orange, purple, brown, ...
      */
@@ -183,6 +180,7 @@ public final class Layers {
         Arrays.fill(swatches, Swatch.BOX);
         return legend(labels, colors, swatches);
     }
+
     public static Layer legend(String[] labels, Color[] colors, Swatch[] swatches) {
         return (g, vp) -> {
             FontMetrics fm = g.getFontMetrics();
@@ -207,23 +205,23 @@ public final class Layers {
                 int cy = y + i * rowH + rowH / 2;
                 g.setColor(colors[i]);
                 switch (swatches[i]) {
-                    case BOX:
-                        g.fillRect(x, cy - 5, 14, 10);
-                        break;
-                    case LINE:
-                        g.setStroke(new BasicStroke(2f));
-                        g.drawLine(x, cy, x + sw, cy);
-                        break;
-                    case DASHED:
-                        g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f,
-                                new float[] { 2f, 3f }, 0f));
-                        g.drawLine(x, cy, x + sw, cy);
-                        break;
-                    case DOTS:
-                        for (int d = 0; d < 3; d++) {
-                            g.fill(new Ellipse2D.Double(x + d * 6.0, cy - 1.75, 3.5, 3.5));
-                        }
-                        break;
+                case BOX:
+                    g.fillRect(x, cy - 5, 14, 10);
+                    break;
+                case LINE:
+                    g.setStroke(new BasicStroke(2f));
+                    g.drawLine(x, cy, x + sw, cy);
+                    break;
+                case DASHED:
+                    g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f,
+                            new float[] { 2f, 3f }, 0f));
+                    g.drawLine(x, cy, x + sw, cy);
+                    break;
+                case DOTS:
+                    for (int d = 0; d < 3; d++) {
+                        g.fill(new Ellipse2D.Double(x + d * 6.0, cy - 1.75, 3.5, 3.5));
+                    }
+                    break;
                 }
                 g.setColor(new Color(40, 40, 40));
                 g.drawString(labels[i], x + sw + gap, cy + fm.getAscent() / 2 - 1);
@@ -251,6 +249,7 @@ public final class Layers {
             g.drawString(text, (int) vp.px(x) + 4, (int) vp.py(y) - 3);
         };
     }
+
     /**
      * A polyline drawn with a dashed stroke. Used to plot series that are shown for
      * reference but were never fed to the model.

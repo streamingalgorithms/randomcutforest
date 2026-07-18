@@ -230,7 +230,7 @@ public class Summarization implements Example {
             // ---- build the scene ----
             List<Layer> scene = new ArrayList<>();
             scene.add(Layers.dots(bg, new Color(150, 150, 150), 1.8));
-            //scene.add(Layers.dots(bg, new Color(218, 218, 218), 1.0));
+            // scene.add(Layers.dots(bg, new Color(218, 218, 218), 1.0));
             for (int i = 0; i < summary.size(); i++) {
                 double weight = summary.get(i).getWeight();
                 List<double[]> rp = new ArrayList<>();

@@ -158,9 +158,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     // dynamically change the fraction of the new nodes which caches their bounding
-    // boxes
+    // boxes. However in prior releases, it was not made explicit that any value
+    // other
+    // than 0 or 1 would have changed state (i.e., writes, the essence of caching!)
     // 0 would mean less space usage, but slower throughput
     // 1 would imply larger space but better throughput
+    // Note that switching the values is also a change of state
+    // These two values {0,1} should not change state
+    // We recommend considering 0.001 that provides a minimal data dependent
+    // caching (which is one of the reasons for caching) and yet uses little space
     public void setBoundingBoxCacheFraction(double fraction) {
         checkArgument(0 <= fraction && fraction <= 1, "incorrect parameter");
         boundingBoxCacheFraction = fraction;
@@ -317,7 +323,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             helper.resize(numberOfLeaves); // should be a no-op
         }
         if (root == Null) {
-            root = convertToLeaf(pointIndex);
+            root = nodeStore.convertToLeaf(pointIndex);
             addLeaf(pointIndex, sequenceIndex);
             return pointIndex;
         }
@@ -578,9 +584,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         if (!isLeaf(leafNode)) {
             if (parentNode == Null) {
-                root = convertToLeaf(pointIndex);
+                root = nodeStore.convertToLeaf(pointIndex);
             } else {
-                nodeStore.assignInPartialTree(parentNode, point, convertToLeaf(pointIndex));
+                nodeStore.assignInPartialTree(parentNode, point, nodeStore.convertToLeaf(pointIndex));
                 addLeaf(pointIndex, sequenceIndex);
             }
             return pointIndex;
@@ -670,44 +676,42 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     //// leaf, nonleaf representations
 
-    public boolean isLeaf(int index) {
+    protected boolean isLeaf(int index) {
         // note that numberOfLeaves - 1 corresponds to an unspefied leaf in partial tree
         // 0 .. numberOfLeaves - 2 corresponds to internal nodes
         return index >= numberOfLeaves;
     }
 
-    public boolean isInternal(int index) {
+    protected boolean isInternal(int index) {
         // note that numberOfLeaves - 1 corresponds to an unspefied leaf in partial tree
         // 0 .. numberOfLeaves - 2 corresponds to internal nodes
         return index < numberOfLeaves - 1 && index >= 0;
     }
 
-    public int convertToLeaf(int pointIndex) {
-        return pointIndex + numberOfLeaves;
+    protected int getPointIndex(int index) {
+        return nodeStore.translateIndex(index);
     }
 
-    public int getPointIndex(int index) {
-        checkArgument(index >= numberOfLeaves, " does not have a point associated with this index");
-        return index - numberOfLeaves;
-    }
-
-    public int getLeftChild(int index) {
-        checkArgument(isInternal(index), "incorrect call to get left Index ");
+    protected int getLeftChild(int index) {
+        // checkArgument(isInternal(index), "incorrect call to get left Index ");
         return nodeStore.getLeftIndex(index);
     }
 
-    public int getRightChild(int index) {
-        checkArgument(isInternal(index), () -> "incorrect call to get right child " + index);
+    protected int getRightChild(int index) {
+        // checkArgument(isInternal(index), () -> "incorrect call to get right child " +
+        // index);
         return nodeStore.getRightIndex(index);
     }
 
-    public int getCutDimension(int index) {
-        checkArgument(isInternal(index), () -> "incorrect call to get cut dimension " + index);
+    protected int getCutDimension(int index) {
+        // checkArgument(isInternal(index), () -> "incorrect call to get cut dimension "
+        // + index);
         return nodeStore.getCutDimension(index);
     }
 
-    public double getCutValue(int index) {
-        checkArgument(isInternal(index), () -> "incorrect call to get cut value " + index);
+    protected double getCutValue(int index) {
+        // checkArgument(isInternal(index), () -> "incorrect call to get cut value " +
+        // index);
         return nodeStore.getCutValue(index);
     }
 
@@ -753,7 +757,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     public void resizeCache(double fraction) {
         basicCache = min((int) (2 * log(numberOfLeaves) / log(2.0)), MAX_BASIC_CACHE);
         limit = min(basicCache + (int) Math.floor(fraction * (numberOfLeaves - 1)), numberOfLeaves - 1);
-        if (limit == numberOfLeaves - 1) {
+        if (limit == numberOfLeaves - 1 || fraction == 0) {
+            // fracion is a hard signal
             basicCache = 0;
             smallMap = null;
             spareMap = null;
@@ -769,8 +774,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             smallMap.clear();
             spareMap.clear();
         }
-        rangeSumData = new double[limit];
-        boundingBoxData = new float[limit * 2 * dimension];
+        if (fraction > 0) {
+            rangeSumData = new double[limit];
+            boundingBoxData = new float[limit * 2 * dimension];
+        } else {
+            limit = 0;
+            rangeSumData = null;
+            boundingBoxData = null;
+        }
         boundingBoxCacheFraction = fraction;
     }
 
@@ -849,6 +860,14 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         smallMap.clear();
         spareMap = smallMap;
         smallMap = temp;
+    }
+
+    int addLeafPoints(int[] leafArray, int node, int firstEmpty) {
+        if (isLeaf(node)) {
+            leafArray[firstEmpty++] = getPointIndex(node);
+            return firstEmpty;
+        }
+        return addLeafPoints(leafArray, getRightChild(node), addLeafPoints(leafArray, getLeftChild(node), firstEmpty));
     }
 
     void copyArrayBoxToData(int idx, ArrayBox box) {
@@ -1130,6 +1149,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             currentNodeView.setCurrentNode(node, getPointIndex(node), true);
             visitor.acceptLeaf(currentNodeView, depthOfNode);
             // have all the nodes in the path in nodeScratch[0,depthOfnode)
+            // will have nulled fields for boundingboxFraction=0
             installCache(currentNodeView.nodeScratch, count, depthOfNode);
         } else {
             checkState(isInternal(node), " incomplete state ");

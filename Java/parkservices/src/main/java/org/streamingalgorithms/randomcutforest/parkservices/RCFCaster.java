@@ -212,10 +212,23 @@ public class RCFCaster extends ThresholdedRandomCutForest {
         checkArgument(missingValues == null, "on the fly imputation and error estimation should not mix");
         ForecastDescriptor answer = new ForecastDescriptor(inputPoint, timestamp, forecastHorizon);
         answer.setScoringStrategy(scoringStrategy);
+        boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
         try {
+            // Note that this entire block in the prior releases
+            // (a) changed the cache state
+            // (b) changed the tree state (update/etc)
+            // This block should not be executed simultaneously
+            // but the changes here do not change any prior behavior.
+            // Now, the remark about caching was absent in prior releases.
+            if (cacheDisabled) { // turn caching on temporarily
+                forest.setBoundingBoxCacheFraction(0.001);
+            }
             augment(answer);
         } finally {
-            // placeholder
+            if (cacheDisabled) {
+                // turn caching off
+                forest.setBoundingBoxCacheFraction(0);
+            }
         }
 
         return answer;

@@ -106,8 +106,9 @@ public class RCFCastExample implements Example {
 
         java.io.BufferedWriter file = printFile ? new java.io.BufferedWriter(new java.io.FileWriter("example")) : null;
 
-        Plot2D plot = livePlot ? Plot2D.openRect("RCFCaster — calibrated forecast", 0, N + forecastHorizon, ymin, ymax, 1100, 620)
-                                                   : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
+        Plot2D plot = livePlot
+                ? Plot2D.openRect("RCFCaster — calibrated forecast", 0, N + forecastHorizon, ymin, ymax, 1100, 620)
+                : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
 
         GifWriter gif = saveGif ? new GifWriter(new File("rcf_cast.gif"), gifDelayMs, true) : null;
 
@@ -158,9 +159,9 @@ public class RCFCastExample implements Example {
             }
 
             List<Layer> scene = new ArrayList<>();
-            //scene.add(Layers.hline(0, cGuide));
-            //scene.add(Layers.hline(80, cGuide));
-            //scene.add(Layers.hline(100, cGuide));
+            // scene.add(Layers.hline(0, cGuide));
+            // scene.add(Layers.hline(80, cGuide));
+            // scene.add(Layers.hline(100, cGuide));
             scene.add(Layers.polyline(dataLine, cData, false, 0, 1.0f));
 
             // past: observed error distribution + interval accuracy %
@@ -203,14 +204,12 @@ public class RCFCastExample implements Example {
             scene.add(Layers.polyline(fLine, cForecast, false, 0, 2.0f));
             scene.add(Layers.vline(current, cNow, 1.5f));
 
-            scene.add(
-                    Layers.legend(
-                            new String[] { "Data", "Forecast", "Uncertainty (future)", "Error dist (past)",
-                                                               "Interval acc (fraction)" },
-                                                new Color[] { cData, cForecast, cForecast.brighter(), cPast, cAcc },
-                                      new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.LINE, Layers.Swatch.BOX,
-                                                        Layers.Swatch.BOX, Layers.Swatch.LINE }));
-
+            scene.add(Layers.legend(
+                    new String[] { "Data", "Forecast", "Uncertainty (future)", "Error dist (past)",
+                            "Interval acc (fraction)" },
+                    new Color[] { cData, cForecast, cForecast.brighter(), cPast, cAcc },
+                    new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.LINE, Layers.Swatch.BOX, Layers.Swatch.BOX,
+                            Layers.Swatch.LINE }));
 
             if (livePlot) {
                 javax.swing.SwingUtilities.invokeLater(() -> {

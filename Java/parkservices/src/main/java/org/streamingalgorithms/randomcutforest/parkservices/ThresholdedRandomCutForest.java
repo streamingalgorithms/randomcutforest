@@ -249,7 +249,17 @@ public class ThresholdedRandomCutForest {
 
         AnomalyDescriptor description = new AnomalyDescriptor(inputPoint, timestamp);
         description.setScoringStrategy(scoringStrategy);
+        boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
         try {
+            // Note that this entire block in the prior releases
+            // (a) changed the cache state
+            // (b) changed the tree state (update/etc)
+            // This block should not be executed simultaneously
+            // but the changes here do not change any prior behavior.
+            // Now, the remark about caching was absent in prior releases.
+            if (cacheDisabled) { // turn caching on temporarily
+                forest.setBoundingBoxCacheFraction(0.001);
+            }
             if (missingValues != null) {
                 checkArgument(missingValues.length <= inputPoint.length, " incorrect data");
                 for (int i = 0; i < missingValues.length; i++) {
@@ -261,8 +271,9 @@ public class ThresholdedRandomCutForest {
             }
             augment(description);
         } finally {
-            // if there was no update then we should not have any exceptions
-            // keeping the placeholder
+            if (cacheDisabled) { // turn caching off
+                forest.setBoundingBoxCacheFraction(0);
+            }
         }
         if (saveDescriptor(description)) {
             lastAnomalyDescriptor = description.copyOf();

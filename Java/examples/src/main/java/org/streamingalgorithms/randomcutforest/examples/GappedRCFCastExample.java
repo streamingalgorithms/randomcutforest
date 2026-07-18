@@ -51,11 +51,12 @@ import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
  *
  * <ol>
  * <li><b>Readiness is a property of the forest, not of the clock.</b>
- * {@code outputAfter} counts <i>updates delivered to the forest</i>. Roughly 39%
- * of this stream is withheld, so the forest reaches 256 updates at t=412, not at
- * t=256. Gating on a timestamp would record ~30% of the imputations while the
- * forecast is still identically zero -- they plot at y=0 and poison the RMSE.
- * Ask the forest: {@link org.streamingalgorithms.randomcutforest.RandomCutForest#isOutputReady()}.</li>
+ * {@code outputAfter} counts <i>updates delivered to the forest</i>. Roughly
+ * 39% of this stream is withheld, so the forest reaches 256 updates at t=412,
+ * not at t=256. Gating on a timestamp would record ~30% of the imputations
+ * while the forecast is still identically zero -- they plot at y=0 and poison
+ * the RMSE. Ask the forest:
+ * {@link org.streamingalgorithms.randomcutforest.RandomCutForest#isOutputReady()}.</li>
  * <li><b>The plot must distinguish what the model saw from what it did not.</b>
  * The withheld series is drawn dotted. It is ground truth for scoring only; the
  * model never receives it.</li>
@@ -192,8 +193,8 @@ public class GappedRCFCastExample implements Example {
 
         BufferedWriter file = printFile ? new BufferedWriter(new java.io.FileWriter("example")) : null;
 
-        Plot2D plot = livePlot ? Plot2D.openRect("Gapped RCFCaster — freeze + impute", 0, N + forecastHorizon, ymin, ymax, 1100,
-                620)
+        Plot2D plot = livePlot
+                ? Plot2D.openRect("Gapped RCFCaster — freeze + impute", 0, N + forecastHorizon, ymin, ymax, 1100, 620)
                 : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
         GifWriter gif = saveGif ? new GifWriter(new File("gapped_rcf_cast.gif"), gifDelayMs, true) : null;
 
@@ -331,8 +332,8 @@ public class GappedRCFCastExample implements Example {
             scene.add(Layers.vline(current, cNow, 1.5f));
             scene.add(Layers.legend(
                     new String[] { "Data (seen by model)", "Withheld (never seen)", "Occluded, within horizon",
-                            "Occluded, beyond horizon", "Forecast (frozen in gap)", "Uncertainty",
-                            "Error dist (past)", "Imputed", "Interval acc (fraction)" },
+                            "Occluded, beyond horizon", "Forecast (frozen in gap)", "Uncertainty", "Error dist (past)",
+                            "Imputed", "Interval acc (fraction)" },
                     new Color[] { cData, cWithheld, cReach, cBeyond, cForecast, cForecast.brighter(), cPast, cImputed,
                             cAcc },
                     new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.DASHED, Layers.Swatch.BOX,

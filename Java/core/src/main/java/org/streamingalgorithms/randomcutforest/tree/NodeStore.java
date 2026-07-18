@@ -19,7 +19,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.unpackFloats;
 
 import java.util.BitSet;
-import java.util.Stack;
 
 import org.streamingalgorithms.randomcutforest.store.IndexIntervalManager;
 import org.streamingalgorithms.randomcutforest.util.ArrayEncoder;
@@ -247,6 +246,22 @@ public class NodeStore {
         return cutValue;
     }
 
+    protected int convertToLeaf(int pointIndex) {
+        return pointIndex + numberOfLeaves;
+    }
+
+    protected int addLeafPoints(int[] leafArray, int node, int firstEmpty) {
+        if (isLeaf(node)) {
+            leafArray[firstEmpty++] = translateIndex(node);
+            return firstEmpty;
+        }
+        return addLeafPoints(leafArray, getRightIndex(node), addLeafPoints(leafArray, getLeftIndex(node), firstEmpty));
+    }
+
+    int translateIndex(int index) {
+        return index - numberOfLeaves;
+    }
+
     public int getParentIndex(int node) {
         return (parent == null) ? Null : (parent.get(node) == parent.sentinel() ? Null : parent.get(node));
     }
@@ -345,7 +360,7 @@ public class NodeStore {
         return point[getCutDimension(off)] <= cutValue[off];
     }
 
-    public int getSibling(int node, int parentNode) {
+    protected int getSibling(int node, int parentNode) {
         int sibling = getLeftIndex(parentNode);
         if (node == sibling)
             sibling = getRightIndex(parentNode);
@@ -356,7 +371,7 @@ public class NodeStore {
      * Fills path[0..depth) root→leaf, returns depth. path must hold numberOfLeaves
      * entries.
      */
-    public int getPathInto(int root, float[] point, int[] path) {
+    protected int getPathInto(int root, float[] point, int[] path) {
         int node = root, depth = 0;
         path[depth++] = node;
         while (isInternal(node)) {
@@ -364,22 +379,6 @@ public class NodeStore {
             path[depth++] = node;
         }
         return depth;
-    }
-
-    public Stack<int[]> getPath(int root, float[] point, boolean verbose) {
-        int node = root;
-        Stack<int[]> answer = new Stack<>();
-        answer.push(new int[] { root, capacity });
-        while (isInternal(node)) {
-            if (leftOf(node, point)) {
-                answer.push(new int[] { getLeftIndex(node), getRightIndex(node) });
-                node = getLeftIndex(node);
-            } else {
-                answer.push(new int[] { getRightIndex(node), getLeftIndex(node) });
-                node = getRightIndex(node);
-            }
-        }
-        return answer;
     }
 
     public int addNode(int parentIndex, float[] point, long sequenceIndex, int pointIndex, int childIndex,

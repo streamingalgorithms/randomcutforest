@@ -117,6 +117,7 @@ public class NodeView implements INodeView {
         currentNodeOffset = newNode;
         tree.pointStoreView.getNumericVectorInto(index, leafPoint);
         if (setBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
+            // no side effect on tree
             pathBox.fromPoint(leafPoint);
             currentBox = pathBox;
         }
@@ -128,8 +129,12 @@ public class NodeView implements INodeView {
 
     public void updateToParent(int parent, int currentSibling, boolean updateBox) {
         currentNodeOffset = parent;
-        if (updateBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
-            tree.growArrayBox(currentBox, tree.pointStoreView, currentSibling); // in-place, currentBox==pathBox
+        if (updateBox && tree.boundingBoxCacheFraction == 0) {
+            // bypasses tree to have no side effects in cache
+            growBox(currentBox, currentSibling, nodeScratch, tree.pointStoreView);
+        } else if (updateBox && tree.boundingBoxCacheFraction < SWITCH_FRACTION) {
+            // will change state in tree
+            tree.growArrayBox(currentBox, tree.pointStoreView, currentSibling);
         }
     }
 
@@ -138,5 +143,10 @@ public class NodeView implements INodeView {
     protected boolean toLeft(float[] point) {
         return point[tree.nodeStore.getCutDimension(currentNodeOffset)] <= tree.nodeStore
                 .getCutValue(currentNodeOffset);
+    }
+
+    protected void growBox(ArrayBox box, int sibling, int[] scratch, IPointStoreView<float[]> pointStoreView) {
+        int numLeaves = tree.addLeafPoints(scratch, sibling, 0);
+        box.rangeSum = pointStoreView.addToSlice(box.values, box.offset, scratch, numLeaves);
     }
 }

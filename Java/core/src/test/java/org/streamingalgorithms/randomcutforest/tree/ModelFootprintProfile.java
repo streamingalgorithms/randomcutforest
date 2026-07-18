@@ -45,7 +45,7 @@ public class ModelFootprintProfile {
     private static final int WARMUP = Integer.getInteger("rcf.warmup", 50_000);
     private static final int MEASURED = Integer.getInteger("rcf.measured", 50_000);
 
-    private static final double[] CACHE_FRACTIONS = { 0.0, 0.1, 0.25, 0.5, 1.0 };
+    private static final double[] CACHE_FRACTIONS = { 0.0, 0.001, 0.1, 0.25, 0.5, 1.0 };
 
     /** 8 GB heap x plugins.anomaly_detection.model_max_size_percent (10%). */
     private static final double AD_BYTES_PER_NODE = 8.096e9 * 0.10;
@@ -187,7 +187,6 @@ public class ModelFootprintProfile {
 
         long storeSize = GraphLayout.parseInstance(forest.getUpdateCoordinator().getStore()).totalSize();
         long treeSize = GraphLayout.parseInstance(firstTree(forest)).totalSize() - storeSize;
-        long cache = GraphLayout.parseInstance(firstTree(forest).boundingBoxData).totalSize();
 
         long t0 = System.nanoTime();
         double sink = 0;
