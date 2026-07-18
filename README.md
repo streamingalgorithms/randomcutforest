@@ -48,9 +48,9 @@ One can have dynamic multidimensional inference such as (multi-centroid) cluster
 </p>
 <p align="center">
   <em> Figure 3. <code>DynamicSummarization</code> The time decay is set high to expire the previously input points. <br>
-  Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/summarization/Summarization.java">Summarization</a>
+  Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/summarization/Summarization.java">Summarization</a></em>
 </p>
----
+
 
 ## The connection to random forests
 
