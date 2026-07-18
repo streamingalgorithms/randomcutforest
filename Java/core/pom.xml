@@ -12,6 +12,8 @@
   <artifactId>randomcutforest-core</artifactId>
   <packaging>jar</packaging>
 
+  <name>${project.groupId}:${project.artifactId}</name>
+
   <dependencies>
     <dependency>
       <groupId>org.streamingalgorithms</groupId>
