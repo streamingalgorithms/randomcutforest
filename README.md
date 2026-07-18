@@ -56,9 +56,9 @@ One can have dynamic multidimensional inference such as (multi-centroid) cluster
 
 Historically decisions trees employed complicated partitioning rule in <a href=https://en.wikipedia.org/wiki/Decision_tree_learning>Classification and Regression Trees (CART)</a>, chosen to
 separate the training data optimally with a simpler inference rule. There has been
-continued effort in determination of partitioning rules, icluding small space projections as in <a href=https://en.wikipedia.org/wiki/Random_forest>Random Forests</a>. Randomization has been 
-seen as a vehicle for generalization and stochastic (batch) discrimination. But most such analyis would require the trees 
-to be rebuilt -- or have a deliberate discrepancy between stated construction and use.
+continued effort in determination of partitioning rules, icluding small space projections as in <a href=https://en.wikipedia.org/wiki/Random_forest>Random Forests</a> and continued to <a href=https://en.wikipedia.org/wiki/Isolation_forest>Isolation Forests</a>. Randomization has been 
+seen as a vehicle for generalization and stochastic (batch) discrimination. But most such analysis would require the trees 
+to be rebuilt or have a deliberate discrepancy between stated construction and use. The latter is a common failure mode. 
 
 RCF inverts the thinking -- the partitioning is simple **(recursive) random cuts**: pick a dimension with
 probability proportional to its extent, pick a split point uniformly. The goal is to preserve arbitrary
@@ -68,9 +68,7 @@ recursive partitioning can be maintained under insertion *and deletion* using st
 time dependent (streaming) input. A collection of such trees is a provable embedding of distances. This makes 
 continuous learning over a stream of unknown length possible provided the sketch 
 can be decoded at inference time -- and if the decoding can be averaged across models then we can use 
-algorithms for trees. 
-
-Complicated data pipelines are eliminated.
+algorithms designed for trees. Complicated data pipelines are eliminated.
 The best piece of data is that which does not have to be collected!
 
 - **The sketch is reusable.** One forest, many scoring functions -- multimodality 
@@ -324,13 +322,6 @@ explain this" issues, which are as useful as bug reports. See
 
 Please do not report security issues in public issues; see [SECURITY.md](SECURITY.md).
 
-## References
-
-1. S. Guha, N. Mishra, G. Roy, O. Schrijvers. *Robust Random Cut Forest Based
-   Anomaly Detection on Streams.* ICML 2016.
-   [PDF](https://proceedings.mlr.press/v48/guha16.pdf)
-2. F. T. Liu, K. M. Ting, Z.-H. Zhou. *Isolation-Based Anomaly Detection.*
-   ACM TKDD 6(1), 2012.
 
 ## License
 
