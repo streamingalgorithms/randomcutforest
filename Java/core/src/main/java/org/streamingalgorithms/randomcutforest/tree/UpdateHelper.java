@@ -15,11 +15,10 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
-
 import lombok.Getter;
 
 @Getter
-public class UpdateHelper<P>  {
+public class UpdateHelper<P> {
     protected final int dimension;
     protected final float[] pointScratch;
     protected int[] nodeScratch; // trees of different sizes can reassign if needed

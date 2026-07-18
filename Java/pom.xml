@@ -35,6 +35,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <vector.compile.addmodules>jdk.incubator.vector</vector.compile.addmodules>
         <vector.runtime.addmodules>jdk.incubator.vector</vector.runtime.addmodules>
+        <central.autoPublish>false</central.autoPublish>
         <argLine></argLine>
         <lombok.version>1.18.46</lombok.version>
     </properties>
@@ -85,11 +86,6 @@
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-junit-jupiter</artifactId>
                 <version>5.12.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.powermock</groupId>
-                <artifactId>powermock-api-easymock</artifactId>
-                <version>2.0.7</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>
@@ -234,14 +230,22 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.13</version>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.10.0</version> <!-- check for a newer version at release time -->
                 <extensions>true</extensions>
                 <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://aws.oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>false</autoReleaseAfterClose>
+                    <publishingServerId>central</publishingServerId>
+                    <deploymentName>randomcutforest ${project.version}</deploymentName>
+                    <!-- false => deployment stops at VALIDATED and a human clicks Publish
+                         at central.sonatype.com. The release workflow overrides this via
+                         -Dcentral.autoPublish=true when you want it hands-off. -->
+                    <autoPublish>${central.autoPublish}</autoPublish>
+                    <waitUntil>validated</waitUntil>
+                    <excludeArtifacts>
+                        <artifact>randomcutforest-testutils</artifact>
+                        <artifact>randomcutforest-benchmark</artifact>
+                    </excludeArtifacts>
                 </configuration>
             </plugin>
         </plugins>
@@ -250,13 +254,9 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>ossrh-snapshot</id>
-            <url>https://aws.oss.sonatype.org/content/repositories/snapshots</url>
+            <id>central</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
         </snapshotRepository>
-        <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
     </distributionManagement>
 
     <scm>
@@ -272,20 +272,12 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.1.0</version>
+                        <version>3.2.8</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
                                 <phase>verify</phase>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                                <configuration>
-                                    <gpgArguments>
-                                        <arg>--pinentry-mode</arg>
-                                        <arg>loopback</arg>
-                                    </gpgArguments>
-                                </configuration>
+                                <goals><goal>sign</goal></goals>
                             </execution>
                         </executions>
                     </plugin>

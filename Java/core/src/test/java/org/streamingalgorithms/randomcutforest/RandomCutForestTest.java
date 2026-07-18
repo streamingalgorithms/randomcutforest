@@ -43,6 +43,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.*;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -54,7 +55,6 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.powermock.reflect.Whitebox;
 import org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor;
 import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.config.Config;
@@ -106,6 +106,22 @@ public class RandomCutForestTest {
         }
     }
 
+    private static void setInternalState(Object target, String name, Object value) {
+        for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                f.set(target, value);
+                return;
+            } catch (NoSuchFieldException e) {
+                // walk up the hierarchy
+            } catch (IllegalAccessException e) {
+                throw new AssertionError("could not set " + name, e);
+            }
+        }
+        throw new IllegalArgumentException("no such field: " + name);
+    }
+
     @BeforeEach
     public void setUp() {
         dimensions = 2;
@@ -129,8 +145,8 @@ public class RandomCutForestTest {
                 .numberOfTrees(numberOfTrees).sampleSize(sampleSize);
         forest = spy(new RandomCutForest(builder, updateCoordinator, components, builder.getRandom()));
 
-        Whitebox.setInternalState(forest, "traversalExecutor", traversalExecutor);
-        Whitebox.setInternalState(forest, "updateExecutor", updateExecutor);
+        setInternalState(forest, "traversalExecutor", traversalExecutor);
+        setInternalState(forest, "updateExecutor", updateExecutor);
     }
 
     @Test
@@ -749,7 +765,7 @@ public class RandomCutForestTest {
                     any(IVisitorFactory.class))).thenReturn(Optional.empty());
         }
 
-        Whitebox.setInternalState(forest, "storeSequenceIndexesEnabled", true);
+        setInternalState(forest, "storeSequenceIndexesEnabled", true);
 
         doReturn(true).when(forest).isOutputReady();
         List<Neighbor> neighbors = forest.getNearNeighborsInSample(new double[] { 0, 0 }, 5);
