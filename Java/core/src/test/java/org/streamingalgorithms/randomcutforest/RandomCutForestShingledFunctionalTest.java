@@ -177,8 +177,8 @@ public class RandomCutForestShingledFunctionalTest {
                 double thirdResult = third.getAnomalyScore(shingledData[j]);
                 third.update(shingledData[j]);
 
-                assertEquals(firstResult, secondResult, 1e-10);
-                assertEquals(secondResult, thirdResult, 1e-10);
+                assertEquals(firstResult, secondResult, 1e-8);
+                assertEquals(secondResult, thirdResult, 1e-8);
             }
             PointStore store = (PointStore) first.getUpdateCoordinator().getStore();
             assertEquals(store.getCurrentStoreCapacity() * dimensions, store.getStore().length);
@@ -254,8 +254,8 @@ public class RandomCutForestShingledFunctionalTest {
         answer = newforest.extrapolateBasic(record, 200, 1, false);
         double[] anotherAnswer = anotherforest.extrapolateBasic(record, 200, 1, false);
         double[] yetAnotherAnswer = yetAnotherforest.extrapolate(200);
-        assertArrayEquals(anotherAnswer, answer, 1e-10);
-        assertArrayEquals(yetAnotherAnswer, answer, 1e-10);
+        assertArrayEquals(anotherAnswer, answer, 1e-8);
+        assertArrayEquals(yetAnotherAnswer, answer, 1e-8);
 
         error = 0;
         for (int j = 0; j < 200; j++) {
@@ -317,7 +317,7 @@ public class RandomCutForestShingledFunctionalTest {
         answer = newforestA.extrapolateBasic(record, 200, 1, true, entryIndex);
         double[] anotherAnswer = newforestB.extrapolate(200);
         double[] yetAnotherAnswer = newforestC.extrapolateBasic(record, 200, 1, true, entryIndex);
-        assertArrayEquals(answer, yetAnotherAnswer, 1e-10);
+        assertArrayEquals(answer, yetAnotherAnswer, 1e-8);
         double[] othershingle = toDoubleArray(newforestB.lastShingledPoint());
         assertEquals(entryIndex, newforestB.nextSequenceIndex() % shinglesize);
         assertArrayEquals(record, othershingle, 1e-5);

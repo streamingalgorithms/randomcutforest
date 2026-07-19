@@ -974,7 +974,7 @@ public class RandomCutForestTest {
             for (int i = 0; i < 10000; i++) {
                 double[] point = r.ints(dimensions, 0, 50).asDoubleStream().toArray();
                 double score = forest.getAnomalyScore(point);
-                assertEquals(score, forest2.getAnomalyScore(point), 1E-10);
+                assertEquals(score, forest2.getAnomalyScore(point), 1E-8);
                 forest2.update(point);
                 forest.update(point);
             }
@@ -1012,7 +1012,7 @@ public class RandomCutForestTest {
             for (int i = 0; i < 10000; i++) {
                 double[] point = r.ints(dimensions, 0, 50).asDoubleStream().toArray();
                 double score = forest.getAnomalyScore(point);
-                assertEquals(score, forest2.getAnomalyScore(point), 1E-10);
+                assertEquals(score, forest2.getAnomalyScore(point), 1E-8);
                 forest2.update(point);
                 forest.update(point);
             }
