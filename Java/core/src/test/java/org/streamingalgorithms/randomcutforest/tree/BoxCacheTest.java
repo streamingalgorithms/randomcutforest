@@ -33,7 +33,7 @@ public class BoxCacheTest {
         int sampleSize = 64;
         int dataSize = 1000 * sampleSize;
         Random random = new Random();
-        long seed = 42; 
+        long seed = 42;
         double[][] big = RandomCutForestTest.generateShingledData(dataSize, dimensions, 2);
         RandomCutForest forest = RandomCutForest.builder().compact(true).dimensions(dimensions)
                 .numberOfTrees(numberOfTrees).sampleSize(sampleSize).precision(Precision.FLOAT_32).randomSeed(seed)
