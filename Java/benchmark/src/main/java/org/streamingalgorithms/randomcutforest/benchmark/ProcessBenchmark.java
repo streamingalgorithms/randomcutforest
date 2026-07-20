@@ -74,7 +74,7 @@ public class ProcessBenchmark {
     @Param({ "D1", "D2" })
     Datasets.Id dataset;
 
-    @Param({ "0.0", "0.2", "0.5", "1.0" })
+    @Param({ "0.0", "0.001", "0.2", "0.5", "1.0" })
     double cacheFraction;
 
     private Models.Kind kind;
