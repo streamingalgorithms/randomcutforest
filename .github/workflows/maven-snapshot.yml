@@ -1,0 +1,54 @@
+name: Publish Java snapshot
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'Java/**', '.github/workflows/maven-snapshot.yml' ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: Java/
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    name: Build and publish SNAPSHOT
+    runs-on: ubuntu-latest
+    environment: snapshot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Resolve project version
+        id: project
+        run: echo "version=$(mvn -q -B -ntp -DforceStdout help:evaluate -Dexpression=project.version)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish snapshot
+        if: ${{ endsWith(steps.project.outputs.version, '-SNAPSHOT') }}
+        run: mvn -B -ntp deploy -Pgpg-sign -DskipTests
+        env:
+          MAVEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Skip notice
+        if: ${{ !endsWith(steps.project.outputs.version, '-SNAPSHOT') }}
+        run: echo "Version ${{ steps.project.outputs.version }} is not a SNAPSHOT; nothing to publish."
+
