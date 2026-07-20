@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.streamingalgorithms</groupId>
     <artifactId>randomcutforest-parent</artifactId>
-    <version>5.0.0</version>
+    <version>5.0.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>randomcutforest-benchmark</artifactId>
@@ -39,6 +39,8 @@
       <groupId>org.streamingalgorithms</groupId>
       <artifactId>randomcutforest-testutils</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
+      <optional>true</optional>
     </dependency>
 
     <!-- ===== JMH harness ===== -->

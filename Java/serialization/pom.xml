@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.streamingalgorithms</groupId>
         <artifactId>randomcutforest-parent</artifactId>
-        <version>5.0.0</version>
+        <version>5.0.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>randomcutforest-serialization</artifactId>
@@ -29,7 +29,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
