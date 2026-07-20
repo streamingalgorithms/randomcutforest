@@ -59,22 +59,23 @@ public class NormalMixtureTestData {
     public double[][] generateTestData(int numberOfRows, int numberOfColumns, int seed) {
         double[][] result = new double[numberOfRows][numberOfColumns];
         boolean anomaly = false;
+        Random rng = new Random(seed);
 
         NormalDistribution dist;
         if (seed != 0)
-            dist = new NormalDistribution(new Random(seed));
+            dist = new NormalDistribution(new Random(rng.nextLong()));
         else
             dist = new NormalDistribution(new Random());
 
         for (int i = 0; i < numberOfRows; i++) {
             if (!anomaly) {
                 fillRow(result[i], dist, baseMu, baseSigma);
-                if (Math.random() < transitionToAnomalyProbability) {
+                if (rng.nextDouble() < transitionToAnomalyProbability) {
                     anomaly = true;
                 }
             } else {
                 fillRow(result[i], dist, anomalyMu, anomalySigma);
-                if (Math.random() < transitionToBaseProbability) {
+                if (rng.nextDouble() < transitionToBaseProbability) {
                     anomaly = false;
                 }
             }
