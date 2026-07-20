@@ -1,0 +1,116 @@
+name: Release Java artifacts to Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, test and sign only. Do not upload anything."
+        type: boolean
+        default: false
+      auto_publish:
+        description: "Publish automatically after Portal validation passes (skips the manual click)."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: Java/
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: ubuntu-latest
+    # Create this environment in Settings -> Environments and add required
+    # reviewers. It is what stops a single compromised token from shipping
+    # a release, and it is where the secrets below should live.
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          # Writes ~/.m2/settings.xml with a <server id="central"> entry.
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Resolve project version
+        id: project
+        run: |
+          v="$(mvn -q -B -ntp -DforceStdout help:evaluate -Dexpression=project.version)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=${v}-java" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $v as tag ${v}-java"
+
+      - name: Refuse to release a SNAPSHOT
+        run: |
+          case "${{ steps.project.outputs.version }}" in
+            *-SNAPSHOT)
+              echo "::error::Version is ${{ steps.project.outputs.version }}. Bump the poms to a release version first."
+              exit 1
+              ;;
+          esac
+
+      - name: Refuse to reuse an existing tag
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.project.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Tag ${{ steps.project.outputs.tag }} already exists. Maven Central is immutable; bump the version."
+            exit 1
+          fi
+
+      - name: Verify formatting is already applied
+        # spotless is bound to `apply` in the pom, which mutates sources.
+        # A release must not depend on that side effect.
+        run: mvn -B -ntp spotless:check
+
+      - name: Build, test, sign and upload to the Central Portal
+        if: ${{ !inputs.dry_run }}
+        run: >
+          mvn -B -ntp deploy -Pgpg-sign
+          -Dcentral.autoPublish=${{ inputs.auto_publish }}
+        env:
+          MAVEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Dry run (build, test and sign, no upload)
+        if: ${{ inputs.dry_run }}
+        run: mvn -B -ntp verify -Pgpg-sign
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Tag and create the GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag "${{ steps.project.outputs.tag }}"
+          git push origin "${{ steps.project.outputs.tag }}"
+          gh release create "${{ steps.project.outputs.tag }}" \
+            --title "${{ steps.project.outputs.tag }}" \
+            --generate-notes \
+            core/target/randomcutforest-core-*.jar \
+            parkservices/target/randomcutforest-parkservices-*.jar \
+            serialization/target/randomcutforest-serialization-*.jar
+
+      - name: Upload build artifacts for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-${{ steps.project.outputs.version }}
+          path: |
+            Java/*/target/*.jar
+            Java/*/target/*.asc
+          if-no-files-found: warn
+
