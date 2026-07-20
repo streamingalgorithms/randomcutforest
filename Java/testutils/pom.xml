@@ -4,7 +4,7 @@
   <parent>
     <artifactId>randomcutforest-parent</artifactId>
     <groupId>org.streamingalgorithms</groupId>
-    <version>5.0.1-SNAPSHOT</version>
+    <version>5.0.1</version>
   </parent>
 
   <artifactId>randomcutforest-testutils</artifactId>
