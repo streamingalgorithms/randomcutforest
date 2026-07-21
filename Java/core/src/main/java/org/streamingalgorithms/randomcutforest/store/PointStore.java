@@ -975,27 +975,27 @@ public class PointStore implements IPointStore<Integer, float[]> {
         }
     }
 
-    double addToLinearSlice(float[] values, int offset, int[] array, int num) {
-        double val = 0;
-        for (int i = 0; i < num; i++) {
-            val = VectorSupport.addPointInPlace(values, offset, dimensions, store, getLocation(array[i]));
-        }
-        return val; // overwrites to the last range
+    double addToLinearSlice(float[] values, int offset, int[] array, int start, int finish) {
+        final int dim = dimensions;
+        for (int k = start; k < finish; k++)
+            array[k] = getLocation(array[k]);
+
+        return VectorSupport.updateBoundsAll(values, offset, dim, store, array, start, finish);
     }
 
-    double addToRotatedSlice(float[] values, int offset, int[] array, int num) {
+    double addToRotatedSlice(float[] values, int offset, int[] array, int start, int finish) {
         double val = 0;
-        for (int i = 0; i < num; i++) { // allocates
+        for (int i = start; i < finish; i++) { // allocates
             val = VectorSupport.addPointInPlace(values, offset, dimensions, getNumericVector(array[i]), 0);
         }
         return val;
     }
 
-    public double addToSlice(float[] values, int offset, int[] array, int num) {
+    public double addToSlice(float[] values, int offset, int[] array, int start, int finish) {
         if (!rotationEnabled) {
-            return addToLinearSlice(values, offset, array, num);
+            return addToLinearSlice(values, offset, array, start, finish);
         } else {
-            return addToRotatedSlice(values, offset, array, num);
+            return addToRotatedSlice(values, offset, array, start, finish);
         }
     }
 

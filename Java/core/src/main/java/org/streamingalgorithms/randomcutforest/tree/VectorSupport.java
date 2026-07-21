@@ -280,6 +280,11 @@ public final class VectorSupport {
         }
     }
 
+    public static double updateBoundsAll(float[] values, int offset, int dim, float[] store, int[] array, int start,
+            int end) {
+        return simd(dim) ? VectorSupportSIMD.updateBoundsAllInterchanged(values, offset, dim, store, array, start, end)
+                : VectorSupportLegacy.updateBoundsAllInterchanged(values, offset, dim, store, array, start, end);
+    }
     // ---- distances ---------------------------------------------------------
 
     public static double L1distance(float[] a, float[] b) {

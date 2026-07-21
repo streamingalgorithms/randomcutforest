@@ -467,6 +467,53 @@ public final class VectorSupportSIMD {
         VectorSupportLegacy.probOnlyRange(gap, dist, inv, i, len);
     }
 
+    public static double updateBoundsAllInterchanged(float[] values, int offset, int dim, float[] store, int[] pOffs,
+            int start, int end) {
+        final int vlen = SP.length();
+        final int bound = SP.loopBound(dim);
+
+        int j = 0;
+        for (; j < bound; j += vlen) {
+            FloatVector h0 = FloatVector.fromArray(SP, values, offset + j);
+            FloatVector l0 = FloatVector.fromArray(SP, values, offset + dim + j);
+            FloatVector seed = FloatVector.broadcast(SP, Float.NEGATIVE_INFINITY); // was: = NEG_INF_V
+            FloatVector h1 = seed, l1 = seed;
+
+            int i = start;
+            for (; i + 1 < end; i += 2) {
+                FloatVector k0 = FloatVector.fromArray(SP, store, pOffs[i] + j);
+                FloatVector k1 = FloatVector.fromArray(SP, store, pOffs[i + 1] + j);
+                h0 = h0.max(k0);
+                h1 = h1.max(k1);
+                l0 = l0.max(k0.neg());
+                l1 = l1.max(k1.neg());
+            }
+            if (i < end) {
+                FloatVector k = FloatVector.fromArray(SP, store, pOffs[i] + j);
+                h0 = h0.max(k);
+                l0 = l0.max(k.neg());
+            }
+            h0.max(h1).intoArray(values, offset + j);
+            l0.max(l1).intoArray(values, offset + dim + j);
+        }
+
+        for (; j < dim; j++) { // scalar tail over j, same interchange
+            float h = values[offset + j];
+            float l = values[offset + dim + j];
+            for (int i = start; i < end; i++) {
+                float k = store[pOffs[i] + j];
+                h = Math.max(h, k);
+                l = Math.max(l, -k);
+            }
+            values[offset + j] = h;
+            values[offset + dim + j] = l;
+        }
+
+        double sum = 0.0; // scalar, original order — agreed
+        for (int j2 = 0; j2 < 2 * dim; j2++)
+            sum += (double) values[offset + j2];
+        return sum;
+    }
     // ---- distances ---------------------------------------------------------
 
     public static double L1distance(float[] a, float[] b) {

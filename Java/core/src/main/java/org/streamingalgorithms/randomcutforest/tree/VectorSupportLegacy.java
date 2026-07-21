@@ -441,6 +441,25 @@ public final class VectorSupportLegacy {
         }
     }
 
+    public static double updateBoundsAllInterchanged(float[] values, int offset, int dim, float[] store, int[] pOffs,
+            int start, int end) {
+        for (int j = 0; j < dim; j++) {
+            float h = values[offset + j];
+            float l = values[offset + dim + j];
+            for (int i = start; i < end; i++) {
+                float k = store[pOffs[i] + j];
+                h = Math.max(h, k);
+                l = Math.max(l, -k);
+            }
+            values[offset + j] = h;
+            values[offset + dim + j] = l;
+        }
+        double sum = 0.0;
+        for (int j = 0; j < 2 * dim; j++)
+            sum += (double) values[offset + j];
+        return sum;
+    }
+
     public static double l1Range(float[] a, float[] b, int from, int to) {
         double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
         int i = from;

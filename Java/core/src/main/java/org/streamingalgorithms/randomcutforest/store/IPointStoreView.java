@@ -55,7 +55,7 @@ public interface IPointStoreView<Point> {
 
     double addToSlice(int index, float[] boxLocation, int offset);
 
-    double addToSlice(float[] values, int offset, int[] array, int num);
+    double addToSlice(float[] values, int offset, int[] array, int start, int finish);
 
     public void setAsSlice(int index, float[] values, int offset);
 

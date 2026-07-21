@@ -147,6 +147,6 @@ public class NodeView implements INodeView {
 
     protected void growBox(ArrayBox box, int sibling, int[] scratch, IPointStoreView<float[]> pointStoreView) {
         int numLeaves = tree.addLeafPoints(scratch, sibling, 0);
-        box.rangeSum = pointStoreView.addToSlice(box.values, box.offset, scratch, numLeaves);
+        box.rangeSum = pointStoreView.addToSlice(box.values, box.offset, scratch, 0, numLeaves);
     }
 }

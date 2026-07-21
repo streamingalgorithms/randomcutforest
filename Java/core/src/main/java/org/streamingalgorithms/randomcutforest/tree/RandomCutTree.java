@@ -442,11 +442,16 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         pointStoreView.getNumericVectorInto(pointList[chosen[start]], helper.pointScratch);
         helper.boxScratch.fromPoint(helper.pointScratch);
 
+        // output is not written yet
         for (int i = start + 1; i < end; i++) {
-            pointStoreView.getNumericVectorInto(pointList[chosen[i]], helper.pointScratch);
-            helper.boxScratch.addPoint(helper.pointScratch);
-        }
+            output[i] = pointList[chosen[i]];
 
+        }
+        helper.boxScratch.rangeSum = pointStoreView.addToSlice(helper.boxScratch.values, 0, output, start + 1, end);
+        // pointStoreView.getNumericVectorInto(pointList[chosen[i]],
+        // helper.pointScratch);
+        // helper.boxScratch.addPoint(helper.pointScratch);
+        // we will overwrite output now
         if (helper.boxScratch.getRangeSum() <= 0) {
             int rep = pointList[chosen[start]];
             // all of these points are now the same as rep
