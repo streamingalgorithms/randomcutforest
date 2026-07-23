@@ -45,6 +45,11 @@ public interface IPointStoreView<Point> {
 
     float[] transformToShingledPoint(Point input);
 
+    void transformToShingledPoint(Point input, float[] output);
+
+    double addToSliceWithGap(float[] values, int offset, int[] array, int start, int finish, float[] exp, int expOff,
+            float[] gapOut, int gapOff, double[] out);
+
     boolean isInternalRotationEnabled();
 
     boolean isInternalShinglingEnabled();

@@ -973,17 +973,25 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             ArrayBox reusableBox) {
         int nodeIdx = translate(node);
         if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
-            int base = 2 * nodeIdx * dimension; // <-- THE surface: flat float slice
+            int base = 2 * nodeIdx * dimension;
             return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint, 0,
                     components);
         } else if (otherBox != null) {
             return otherBox.probabilityOfCut(expandedPoint, components);
-        } else { // fallback: reconstruct (allocates, as today)
+        } else {
             fillArrayBox(node, reusableBox);
             return reusableBox.probabilityOfCut(expandedPoint, components);
         }
     }
 
+    /*
+     * public double probabilityFromCache(int node, float[] expandedPoint, float[]
+     * components, int bs, long[] mask) { int nodeIdx = translate(node); if (nodeIdx
+     * == Integer.MAX_VALUE || rangeSumData[nodeIdx] == 0) { return Double.NaN; //
+     * miss; no explanation offered } int base = 2 * nodeIdx * dimension; return
+     * VectorSupport.gapAttributionPruned(boundingBoxData, base, dimension,
+     * rangeSumData[nodeIdx], expandedPoint, 0, components, bs, mask); }
+     */
     /// additional information at nodes
 
     public float[] getPointSum(int index) {
@@ -1131,7 +1139,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         checkNotNull(point, "point must not be null");
         checkNotNull(visitorFactory, "visitor must not be null");
         Visitor<R> visitor = visitorFactory.newVisitor(this, point);
-        NodeView currentNodeView = new NodeView(this, pointStoreView, root);
+        NodeView currentNodeView = new NodeView(this, pointStoreView, root, point);
         traversePathToLeafAndVisitNodes(point, visitor, currentNodeView, root, 0, 0);
         return visitorFactory.liftResult(this, visitor.getResult());
     }
@@ -1139,7 +1147,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     public <R> NodeView reusableTraverse(float[] point, IRFVisitor<R> v, NodeView view) {
         v.prepare(this, point); // self-arm: I supply my own projection + mass
         if (view == null)
-            view = new NodeView(this, pointStoreView, root);
+            view = new NodeView(this, pointStoreView, root, point);
         else
             view.rearm(this, root);
         traversePathToLeafAndVisitNodes(point, v, view, root, 0, 0);
@@ -1200,7 +1208,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         checkNotNull(point, "point must not be null");
         checkNotNull(visitorFactory, "visitor must not be null");
         MultiVisitor<R> visitor = visitorFactory.newVisitor(this, point);
-        NodeView currentNodeView = new NodeView(this, pointStoreView, root);
+        NodeView currentNodeView = new NodeView(this, pointStoreView, root, point);
         traverseTreeMulti(point, visitor, currentNodeView, root, 0);
         return visitor.getResult(); // liftResult was identity -> gone
     }
@@ -1208,7 +1216,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     public <R> NodeView reusableTraverseMulti(float[] point, IRFMultiVisitor<R> v, NodeView view) {
         v.prepare(this, point);
         if (view == null)
-            view = new NodeView(this, pointStoreView, root);
+            view = new NodeView(this, pointStoreView, root, point);
         else
             view.rearm(this, root);
         traverseTreeMulti(point, v, view, root, 0);

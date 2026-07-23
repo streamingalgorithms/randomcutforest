@@ -151,14 +151,14 @@ public class AnomalyScoreVisitorTest {
         depth--;
         IBoundingBoxView boundingBox = node.getBoundingBox().getMergedBox(new float[] { 1.0f, 1.0f });
         IPointStoreView<float[]> pointStoreView = new PointStore.Builder<>().dimensions(2).capacity(2).build();
-        node = new NodeView(null, pointStoreView, Null);
+        node = new NodeView(null, pointStoreView, Null, pointToScore);
         visitor.accept(node, depth);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
 
         depth--;
         boundingBox = boundingBox.getMergedBox(new float[] { -1.0f, -1.0f });
-        node = new NodeView(null, pointStoreView, Null);
+        node = new NodeView(null, pointStoreView, Null, pointToScore);
         visitor.accept(node, depth);
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));

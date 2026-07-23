@@ -22,6 +22,7 @@ import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.*
 import java.util.Random;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -393,5 +394,54 @@ public class VectorSupportParityTest {
         assertTrue(VectorSupportSIMD.contains(box1, 0, dim / 2, box1, 0));
         assertTrue(VectorSupportLegacy.contains(box1, 0, dim / 2, box1, 0));
         assertTrue(VectorSupport.contains(box1, 0, dim / 2, box1, 0));
+    }
+
+    @Test
+    public void fusedEqualsUnfused() {
+        for (int dim : new int[] { 1, 3, 4, 7, 8, 16, 30, 100 }) {
+            Random r = new Random(42);
+            int nPoints = 5, cap = 64;
+            float[] store = new float[cap * dim];
+            for (int i = 0; i < store.length; i++)
+                store[i] = (float) r.nextGaussian();
+
+            float[] pt = new float[dim];
+            for (int i = 0; i < dim; i++)
+                pt[i] = (float) r.nextGaussian();
+            float[] exp = new float[2 * dim];
+            VectorSupport.expandInto(pt, 0, exp, 0, dim);
+
+            int[] offs = new int[nPoints];
+            for (int i = 0; i < nPoints; i++)
+                offs[i] = r.nextInt(cap) * dim;
+
+            // seed two identical boxes from a leaf point
+            float[] a = new float[2 * dim], b = new float[2 * dim];
+            for (int i = 0; i < dim; i++) {
+                a[i] = b[i] = pt[i];
+                a[dim + i] = b[dim + i] = -pt[i];
+            }
+
+            // reference: union, then gap, as two separate passes
+            double refR = VectorSupport.updateBoundsAll(a, 0, dim, store, offs.clone(), 0, nPoints);
+            float[] refGap = new float[2 * dim];
+            double refP = VectorSupport.gapAttribution(a, 0, dim, refR, exp, 0, refGap);
+
+            // fused
+            double[] out = new double[1];
+            float[] fusedGap = new float[2 * dim];
+            double fusedS = VectorSupport.updateBoundsAndGap(b, 0, dim, store, offs.clone(), 0, nPoints, exp, 0,
+                    fusedGap, 0, out);
+            double fusedR = out[0];
+
+            assertArrayEquals(a, b, 0f); // boxes bit-identical: max is exact
+            assertEquals(refR, fusedR, 1e-5 * Math.max(1.0, Math.abs(refR))); // float ULP, not double
+
+            double fusedP = (fusedS == 0) ? 0 : (fusedR == 0 ? 1 : fusedS / (fusedS + fusedR));
+            assertEquals(refP, fusedP, 1e-9);
+            // refGap is scaled by 1/(R+S); fusedGap is raw
+            for (int i = 0; i < 2 * dim; i++)
+                assertEquals(refGap[i], fusedGap[i] / (float) (refR + fusedS), 1e-6f);
+        }
     }
 }

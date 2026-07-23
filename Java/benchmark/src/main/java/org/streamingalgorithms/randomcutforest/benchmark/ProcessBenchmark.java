@@ -56,9 +56,9 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
  * overhead per tuple. Allocation flow is JMH-native: run with `-prof gc`.
  * Retained footprint is the JOL breakdown in @TearDown (side channel).
  * ===========================================================================
- * run as ts=$(date +%Y%m%d-%H%M%S) java -jar benchmark/target/benchmarks.jar
- * ProcessBenchmark -prof gc \ -rf json -rff "process-$ts.json" | tee
- * "process-$ts.txt"
+ * run as ts=$(date +%Y%m%d-%H%M%S) java --add-modules jdk.incubator.vector -jar
+ * benchmark/target/benchmarks.jar ProcessBenchmark -prof gc \ -rf json -rff
+ * "process-$ts.json" | tee "process-$ts.txt"
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

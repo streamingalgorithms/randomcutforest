@@ -519,4 +519,198 @@ public final class VectorSupportLegacy {
         }
         return m;
     }
+
+    /** out[0] = delta (overhang sum), out[1] = oldRange (pairwise). */
+    public static double deltaAndRange(float[] v, int off, int d, float[] p, int pOff, double[] out) {
+        double g0 = 0, g1 = 0, g2 = 0, g3 = 0, r0 = 0, r1 = 0, r2 = 0, r3 = 0;
+        int i = 0;
+        final int bound = d & ~3;
+        for (; i < bound; i += 4) {
+            float h0 = v[off + i], l0 = v[off + d + i], q0 = p[pOff + i];
+            float h1 = v[off + i + 1], l1 = v[off + d + i + 1], q1 = p[pOff + i + 1];
+            float h2 = v[off + i + 2], l2 = v[off + d + i + 2], q2 = p[pOff + i + 2];
+            float h3 = v[off + i + 3], l3 = v[off + d + i + 3], q3 = p[pOff + i + 3];
+
+            g0 += max(0f, q0 - h0) + max(0f, -q0 - l0);
+            g1 += max(0f, q1 - h1) + max(0f, -q1 - l1);
+            g2 += max(0f, q2 - h2) + max(0f, -q2 - l2);
+            g3 += max(0f, q3 - h3) + max(0f, -q3 - l3);
+
+            r0 += (double) h0 + l0;
+            r1 += (double) h1 + l1;
+            r2 += (double) h2 + l2;
+            r3 += (double) h3 + l3;
+        }
+        double g = (g0 + g1) + (g2 + g3);
+        double r = (r0 + r1) + (r2 + r3);
+        for (; i < d; i++) { // tail, same order
+            float h = v[off + i], l = v[off + d + i], q = p[pOff + i];
+            g += max(0f, q - h) + max(0f, -q - l);
+            r += (double) h + l;
+        }
+        out[0] = g;
+        out[1] = r;
+        return g; // also return delta.
+    }
+
+    /**
+     * Fused union + gap + rangeSum, interchanged. NON-STRUCTURAL callers only:
+     * {@link #updateBoundsAllInterchanged} stays byte-identical for makeTree.
+     *
+     * Blocking by 4 over j is the point. The inner loop reads store[pOffs[i]+j]
+     * with stride `dimensions` between points, so one j pulls a fresh line per
+     * point; four contiguous j share that line.
+     *
+     * @return S over [from,to); out[0] receives R over [from,to).
+     */
+    public static double updateBoundsAndGapRange(float[] values, int offset, int dim, float[] store, int[] pOffs,
+            int start, int end, float[] exp, int expOff, float[] gapOut, int gapOff, double[] out, int from, int to) {
+
+        final boolean fill = gapOut != null;
+        double S = 0.0, R = 0.0;
+        int j = from;
+        final int bound = from + ((to - from) & ~3);
+
+        for (; j < bound; j += 4) {
+            float h0 = values[offset + j], l0 = values[offset + dim + j];
+            float h1 = values[offset + j + 1], l1 = values[offset + dim + j + 1];
+            float h2 = values[offset + j + 2], l2 = values[offset + dim + j + 2];
+            float h3 = values[offset + j + 3], l3 = values[offset + dim + j + 3];
+
+            for (int i = start; i < end; i++) {
+                final int b = pOffs[i] + j; // 4 contiguous floats
+                float k0 = store[b], k1 = store[b + 1], k2 = store[b + 2], k3 = store[b + 3];
+                h0 = max(h0, k0);
+                l0 = max(l0, -k0);
+                h1 = max(h1, k1);
+                l1 = max(l1, -k1);
+                h2 = max(h2, k2);
+                l2 = max(l2, -k2);
+                h3 = max(h3, k3);
+                l3 = max(l3, -k3);
+            }
+
+            values[offset + j] = h0;
+            values[offset + dim + j] = l0;
+            values[offset + j + 1] = h1;
+            values[offset + dim + j + 1] = l1;
+            values[offset + j + 2] = h2;
+            values[offset + dim + j + 2] = l2;
+            values[offset + j + 3] = h3;
+            values[offset + dim + j + 3] = l3;
+
+            float a0 = max(0f, exp[expOff + j] - h0), b0 = max(0f, exp[expOff + dim + j] - l0);
+            float a1 = max(0f, exp[expOff + j + 1] - h1), b1 = max(0f, exp[expOff + dim + j + 1] - l1);
+            float a2 = max(0f, exp[expOff + j + 2] - h2), b2 = max(0f, exp[expOff + dim + j + 2] - l2);
+            float a3 = max(0f, exp[expOff + j + 3] - h3), b3 = max(0f, exp[expOff + dim + j + 3] - l3);
+
+            if (fill) {
+                gapOut[gapOff + j] = a0;
+                gapOut[gapOff + dim + j] = b0;
+                gapOut[gapOff + j + 1] = a1;
+                gapOut[gapOff + dim + j + 1] = b1;
+                gapOut[gapOff + j + 2] = a2;
+                gapOut[gapOff + dim + j + 2] = b2;
+                gapOut[gapOff + j + 3] = a3;
+                gapOut[gapOff + dim + j + 3] = b3;
+            }
+
+            // promote before combining: (double)a + b is exact (at most one is nonzero)
+            S += ((double) a0 + b0) + ((double) a1 + b1) + ((double) a2 + b2) + ((double) a3 + b3);
+            R += ((double) h0 + l0) + ((double) h1 + l1) + ((double) h2 + l2) + ((double) h3 + l3);
+        }
+
+        for (; j < to; j++) {
+            float h = values[offset + j], l = values[offset + dim + j];
+            for (int i = start; i < end; i++) {
+                float k = store[pOffs[i] + j];
+                h = max(h, k);
+                l = max(l, -k);
+            }
+            values[offset + j] = h;
+            values[offset + dim + j] = l;
+            float a = max(0f, exp[expOff + j] - h), b = max(0f, exp[expOff + dim + j] - l);
+            if (fill) {
+                gapOut[gapOff + j] = a;
+                gapOut[gapOff + dim + j] = b;
+            }
+            S += (double) a + b;
+            R += (double) h + l;
+        }
+
+        out[0] = R;
+        return S;
+    }
+
+    /** Whole-range form. */
+    public static double updateBoundsAndGapInterchanged(float[] values, int offset, int dim, float[] store, int[] pOffs,
+            int start, int end, float[] exp, int expOff, float[] gapOut, int gapOff, double[] out) {
+        return updateBoundsAndGapRange(values, offset, dim, store, pOffs, start, end, exp, expOff, gapOut, gapOff, out,
+                0, dim);
+    }
+
+    /** One block, both halves. Shared with SIMD's partial-block case. */
+    public static double blockGap(float[] values, int offset, int dim, float[] exp, int expOff, float[] contrib,
+            int from, int to, boolean fill) {
+        double s = 0.0;
+        for (int j = from; j < to; j++) {
+            float gh = max(0f, exp[expOff + j] - values[offset + j]);
+            float gl = max(0f, exp[expOff + dim + j] - values[offset + dim + j]);
+            if (fill) {
+                contrib[j] = gh;
+                contrib[dim + j] = gl;
+            }
+            s += (double) gh + gl; // exact: at most one term is nonzero
+        }
+        return s;
+    }
+
+    /**
+     * Pruned gapAttribution. Iterates only the blocks whose bit is set in
+     * {@code mask}, and CLEARS the bit of any block whose gaps are all zero --
+     * permanent, since the box only grows. Block b covers [b*bs, min((b+1)*bs,
+     * dim)) in BOTH halves.
+     *
+     * mask is caller-owned (NodeView), length ceil(nBlocks/64), mutated in place.
+     * All-zero mask => the point is inside the box in every coordinate.
+     */
+    public static double gapAttributionPruned(float[] values, int offset, int dim, double rangeSum, float[] exp,
+            int expOff, float[] contrib, int bs, long[] mask) {
+
+        final boolean fill = contrib != null;
+        double S = 0.0;
+
+        for (int w = 0; w < mask.length; w++) {
+            long live = mask[w];
+            final int base = w << 6;
+            for (long m = live; m != 0; m &= m - 1) {
+                final int t = Long.numberOfTrailingZeros(m);
+                final int from = (base + t) * bs, to = Math.min(from + bs, dim);
+                double blockSum = blockGap(values, offset, dim, exp, expOff, contrib, from, to, fill);
+                if (blockSum == 0.0)
+                    live &= ~(1L << t);
+                S += blockSum;
+            }
+            mask[w] = live;
+        }
+
+        if (S == 0.0)
+            return 0.0;
+        final double probability = (rangeSum == 0.0) ? 1.0 : S / (S + rangeSum);
+
+        if (fill) {
+            final float inv = (float) (1.0 / (rangeSum + S));
+            for (int w = 0; w < mask.length; w++) {
+                final int base = w << 6;
+                for (long m = mask[w]; m != 0; m &= m - 1) {
+                    final int from = (base + Long.numberOfTrailingZeros(m)) * bs, to = Math.min(from + bs, dim);
+                    for (int j = from; j < to; j++) {
+                        contrib[j] *= inv;
+                        contrib[dim + j] *= inv;
+                    }
+                }
+            }
+        }
+        return probability;
+    }
 }

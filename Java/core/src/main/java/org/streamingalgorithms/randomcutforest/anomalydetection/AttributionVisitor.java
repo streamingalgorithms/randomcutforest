@@ -161,7 +161,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     @Override
     public double convergingValue() {
         double factor = idempotentRefactor();
-        return sum(directionalAttribution) * factor;
+        return VectorSupport.sum(directionalAttribution) * factor;
     }
 
     @Override
@@ -217,12 +217,4 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             }
         };
     }
-
-    public static double sum(double[] a) {
-        double s = 0.0;
-        for (int i = 0; i < a.length; i++)
-            s += a[i];
-        return s;
-    }
-
 }

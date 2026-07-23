@@ -285,6 +285,16 @@ public final class VectorSupport {
         return simd(dim) ? VectorSupportSIMD.updateBoundsAllInterchanged(values, offset, dim, store, array, start, end)
                 : VectorSupportLegacy.updateBoundsAllInterchanged(values, offset, dim, store, array, start, end);
     }
+
+    public static double updateBoundsAndGap(float[] values, int offset, int dim, float[] store, int[] pOffs, int start,
+            int end, float[] exp, int expOff, float[] gapOut, int gapOff, double[] out) {
+        return simd(dim)
+                ? VectorSupportSIMD.updateBoundsAndGapInterchanged(values, offset, dim, store, pOffs, start, end, exp,
+                        expOff, gapOut, gapOff, out)
+                : VectorSupportLegacy.updateBoundsAndGapInterchanged(values, offset, dim, store, pOffs, start, end, exp,
+                        expOff, gapOut, gapOff, out);
+    }
+
     // ---- distances ---------------------------------------------------------
 
     public static double L1distance(float[] a, float[] b) {

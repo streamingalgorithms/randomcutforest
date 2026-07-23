@@ -68,9 +68,9 @@ import org.streamingalgorithms.randomcutforest.benchmark.operations.ScoringOpera
  * static at 0.0 and 1.0. For dynamic residency add flags for freezing. The cold
  * driver needs no such flag -- it is allowed to be non-stationary.
  * ===========================================================================
- * run as ts=$(date +%Y%m%d-%H%M%S) java -jar benchmark/target/benchmarks.jar
- * ScoringBenchmark -prof gc \ -rf json -rff "scoring-$ts.json" | tee
- * "scoring-$ts.txt"
+ * run as ts=$(date +%Y%m%d-%H%M%S) java --add-modules jdk.incubator.vector -jar
+ * benchmark/target/benchmarks.jar ScoringBenchmark -prof gc \ -rf json -rff
+ * "scoring-$ts.json" | tee "scoring-$ts.txt"
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

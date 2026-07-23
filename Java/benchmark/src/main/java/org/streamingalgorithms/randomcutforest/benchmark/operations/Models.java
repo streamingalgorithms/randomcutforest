@@ -164,7 +164,8 @@ public final class Models {
         switch (kind) {
         case RCF: {
             RandomCutForest f = (RandomCutForest) model;
-            double s = f.getAnomalyScore(point);
+            double s = f.getAnomalyAttribution(point).getHighLowSum();
+            // f.getAnomalyScore(point);
             f.update(point);
             return s;
         }

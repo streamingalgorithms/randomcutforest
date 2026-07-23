@@ -616,6 +616,50 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     /**
+     * Zero-alloc shingle transform. Fills caller-owned {@code output} (length ==
+     * dimensions) with the shingled point for {@code input}, without allocating on
+     * the linear path and without advancing internalShingle.
+     *
+     * Non-destructive (a peek, not a commit): unlike add(), it does not roll the
+     * internal shingle forward, so it must be called for the point being scored
+     * BEFORE that point is committed via add() — same ordering as the old
+     * array-returning version.
+     */
+    @Override
+    public void transformToShingledPoint(float[] input, float[] output) {
+        checkNotNull(input, "input must not be null");
+        checkArgument(output != null && output.length == dimensions,
+                () -> "output must be preallocated to dimensions, currently " + output.length + ", need " + dimensions);
+
+        if (internalShinglingEnabled && input.length == baseDimension) {
+            if (!rotationEnabled) {
+                // shift old shingle left by baseDimension into output (src != dst, no
+                // overlap)...
+                System.arraycopy(internalShingle, baseDimension, output, 0, dimensions - baseDimension);
+                // ...then append the normalized new base block at the tail
+                final int tail = dimensions - baseDimension;
+                for (int i = 0; i < baseDimension; i++) {
+                    float v = input[i];
+                    output[tail + i] = (v == 0.0f) ? 0.0f : v; // canonicalize -0.0 -> +0.0
+                }
+            } else {
+                // rotated: allowed to allocate a scratch, then land it in output
+                float[] rotated = constructShingleInPlace(copyShingle(), input, true);
+                System.arraycopy(rotated, 0, output, 0, dimensions);
+            }
+            return;
+        }
+
+        // not internally shingling (input already full-dimension) or external shingle:
+        // normalized copy into output, still no allocation
+        checkArgument(input.length == dimensions, "non-shingled input must equal dimensions");
+        for (int i = 0; i < dimensions; i++) {
+            float v = input[i];
+            output[i] = (v == 0.0f) ? 0.0f : v;
+        }
+    }
+
+    /**
      * for extrapolation and imputation, in presence of internal shingling we need
      * to update the list of missing values from the space of the input dimensions
      * to the shingled dimensions
@@ -1009,6 +1053,15 @@ public class PointStore implements IPointStore<Integer, float[]> {
         } else {
             return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, getNumericVector(index), 0);
         }
+    }
+
+    public double addToSliceWithGap(float[] values, int offset, int[] array, int start, int finish, float[] exp,
+            int expOff, float[] gapOut, int gapOff, double[] out) {
+        checkState(!rotationEnabled, "fused path is linear-only");
+        for (int k = start; k < finish; k++)
+            array[k] = getLocation(array[k]);
+        return VectorSupport.updateBoundsAndGap(values, offset, dimensions, store, array, start, finish, exp, expOff,
+                gapOut, gapOff, out);
     }
 
     @Override

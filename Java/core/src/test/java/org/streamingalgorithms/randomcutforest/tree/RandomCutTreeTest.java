@@ -480,7 +480,7 @@ public class RandomCutTreeTest {
         assertThat(tree.getCutDimension(node), is(0));
         assertThat(tree.getCutValue(node), closeTo(0.5, EPSILON));
         assertThat(tree.getMass(node), is(3));
-        NodeView nodeView = new NodeView(tree, tree.pointStoreView, node);
+        NodeView nodeView = new NodeView(tree, tree.pointStoreView, node, new float[2]);
         assertTrue(nodeView.getCutDimension() == 0);
         assertTrue(nodeView.getCutValue() == 0.5);
 

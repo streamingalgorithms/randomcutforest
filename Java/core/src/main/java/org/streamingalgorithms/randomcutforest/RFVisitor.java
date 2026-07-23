@@ -49,6 +49,10 @@ public abstract class RFVisitor<R> implements IRFVisitor<R> {
         return pointInsideBox;
     }
 
+    public float[] expandedPoint() {
+        return expandedPoint;
+    }
+
     // shadowbox is the contrafactual if the query was not there
     protected final ArrayBox growShadow(ArrayBox sib) {
         if (!shadowBoxActive) {

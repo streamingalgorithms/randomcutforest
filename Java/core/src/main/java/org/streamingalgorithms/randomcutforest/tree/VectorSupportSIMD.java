@@ -514,6 +514,67 @@ public final class VectorSupportSIMD {
             sum += (double) values[offset + j2];
         return sum;
     }
+
+    public static double gapAttributionPruned(float[] values, int offset, int dim, double rangeSum, float[] exp,
+            int expOff, float[] contrib, int bs, long[] mask) {
+
+        final boolean fill = contrib != null;
+        final FloatVector ZERO = FloatVector.zero(SP); // local; never a field
+        double S = 0.0;
+
+        for (int w = 0; w < mask.length; w++) {
+            long live = mask[w];
+            final int base = w << 6;
+            for (long m = live; m != 0; m &= m - 1) {
+                final int t = Long.numberOfTrailingZeros(m);
+                final int from = (base + t) * bs, to = Math.min(from + bs, dim);
+                double blockSum;
+                if (to - from == LANES) {
+                    FloatVector gh = FloatVector.fromArray(SP, exp, expOff + from)
+                            .sub(FloatVector.fromArray(SP, values, offset + from)).max(ZERO);
+                    FloatVector gl = FloatVector.fromArray(SP, exp, expOff + dim + from)
+                            .sub(FloatVector.fromArray(SP, values, offset + dim + from)).max(ZERO);
+                    if (fill) {
+                        gh.intoArray(contrib, from);
+                        gl.intoArray(contrib, dim + from);
+                    }
+                    blockSum = gh.add(gl).reduceLanes(VectorOperators.ADD);
+                } else {
+                    blockSum = VectorSupportLegacy.blockGap(values, offset, dim, exp, expOff, contrib, from, to, fill);
+                }
+                if (blockSum == 0.0)
+                    live &= ~(1L << t);
+                S += blockSum;
+            }
+            mask[w] = live;
+        }
+
+        if (S == 0.0)
+            return 0.0;
+        final double probability = (rangeSum == 0.0) ? 1.0 : S / (S + rangeSum);
+
+        if (fill) {
+            final float invF = (float) (1.0 / (rangeSum + S));
+            final FloatVector inv = FloatVector.broadcast(SP, invF);
+            for (int w = 0; w < mask.length; w++) {
+                final int base = w << 6;
+                for (long m = mask[w]; m != 0; m &= m - 1) {
+                    final int from = (base + Long.numberOfTrailingZeros(m)) * bs, to = Math.min(from + bs, dim);
+                    if (to - from == LANES) {
+                        FloatVector.fromArray(SP, contrib, from).mul(inv).intoArray(contrib, from);
+                        FloatVector.fromArray(SP, contrib, dim + from).mul(inv).intoArray(contrib, dim + from);
+                    } else {
+                        for (int j = from; j < to; j++) {
+                            contrib[j] *= invF;
+                            contrib[dim + j] *= invF;
+                        }
+                    }
+                }
+            }
+        }
+        return probability;
+    }
+
     // ---- distances ---------------------------------------------------------
 
     public static double L1distance(float[] a, float[] b) {
@@ -602,5 +663,58 @@ public final class VectorSupportSIMD {
 
         double dist = m0.max(m1).max(m2.max(m3)).reduceLanes(VectorOperators.MAX);
         return Math.max(dist, VectorSupportLegacy.lInfRange(a, b, i, n));
+    }
+
+    public static double updateBoundsAndGapInterchanged(float[] values, int offset, int dim, float[] store, int[] pOffs,
+            int start, int end, float[] exp, int expOff, float[] gapOut, int gapOff, double[] out) {
+
+        final boolean fill = gapOut != null;
+        final FloatVector ZERO = FloatVector.zero(SP); // local; never a field
+        double S = 0.0, R = 0.0;
+
+        int j = 0;
+        final int bound = SP.loopBound(dim);
+        for (; j < bound; j += LANES) {
+            FloatVector h0 = FloatVector.fromArray(SP, values, offset + j);
+            FloatVector l0 = FloatVector.fromArray(SP, values, offset + dim + j);
+            FloatVector seed = FloatVector.broadcast(SP, Float.NEGATIVE_INFINITY);
+            FloatVector h1 = seed, l1 = seed;
+
+            int i = start;
+            for (; i + 1 < end; i += 2) {
+                FloatVector k0 = FloatVector.fromArray(SP, store, pOffs[i] + j);
+                FloatVector k1 = FloatVector.fromArray(SP, store, pOffs[i + 1] + j);
+                h0 = h0.max(k0);
+                h1 = h1.max(k1);
+                l0 = l0.max(k0.neg());
+                l1 = l1.max(k1.neg());
+            }
+            if (i < end) {
+                FloatVector k = FloatVector.fromArray(SP, store, pOffs[i] + j);
+                h0 = h0.max(k);
+                l0 = l0.max(k.neg());
+            }
+
+            FloatVector h = h0.max(h1);
+            FloatVector l = l0.max(l1);
+            h.intoArray(values, offset + j);
+            l.intoArray(values, offset + dim + j);
+
+            FloatVector gh = FloatVector.fromArray(SP, exp, expOff + j).sub(h).max(ZERO);
+            FloatVector gl = FloatVector.fromArray(SP, exp, expOff + dim + j).sub(l).max(ZERO);
+            if (fill) {
+                gh.intoArray(gapOut, gapOff + j);
+                gl.intoArray(gapOut, gapOff + dim + j);
+            }
+            S += (double) gh.add(gl).reduceLanes(VectorOperators.ADD);
+            R += (double) h.add(l).reduceLanes(VectorOperators.ADD);
+        }
+
+        // scalar tail: same kernel, one implementation
+        S += VectorSupportLegacy.updateBoundsAndGapRange(values, offset, dim, store, pOffs, start, end, exp, expOff,
+                gapOut, gapOff, out, j, dim);
+        R += out[0]; // read the tail's partial before overwriting
+        out[0] = R;
+        return S;
     }
 }
