@@ -1165,10 +1165,12 @@ public class RandomCutForestTest {
         assertEquals(u, score * trainedForest.numberOfTrees, 1e-6);
     }
 
-
-    /** Runs `threads` concurrent scorers on a shared forest; returns the mismatch list. */
-    private List<String> runConcurrentScoring(RandomCutForest forest, float[][] queries, double[] expected,
-                                              int repeats) throws Exception {
+    /**
+     * Runs `threads` concurrent scorers on a shared forest; returns the mismatch
+     * list.
+     */
+    private List<String> runConcurrentScoring(RandomCutForest forest, float[][] queries, double[] expected, int repeats)
+            throws Exception {
         List<String> failures = Collections.synchronizedList(new ArrayList<>());
         CountDownLatch start = new CountDownLatch(1);
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -1196,24 +1198,24 @@ public class RandomCutForestTest {
     }
 
     /*
-     * the following test is a skeleton that should be refined to clarify the
-     * thread safety of the forest under multiple reads.
+     * the following test is a skeleton that should be refined to clarify the thread
+     * safety of the forest under multiple reads.
      */
     @Test
     public void concurrentScoringSharedForest() throws Exception {
         int dimensions = 30, sampleSize = 256, threads = 10, repeats = 200;
 
         RandomCutForest forest = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
-                .dimensions(dimensions).randomSeed(179)
-                .boundingBoxCacheFraction(0.5)          // the "no side effects" configuration
+                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.5) // the "no side effects"
+                                                                                      // configuration
                 .build();
         RandomCutForest forestZero = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
-                .dimensions(dimensions).randomSeed(179)
-                .boundingBoxCacheFraction(0.0)          // the "no side effects" configuration
+                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.0) // the "no side effects"
+                                                                                      // configuration
                 .build();
         RandomCutForest forestOne = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
-                .dimensions(dimensions).randomSeed(179)
-                .boundingBoxCacheFraction(1.0)          // the "no side effects" configuration
+                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(1.0) // the "no side effects"
+                                                                                      // configuration
                 .build();
 
         NormalMixtureTestData generator = new NormalMixtureTestData();
@@ -1232,11 +1234,11 @@ public class RandomCutForestTest {
             for (int j = 0; j < dimensions; j++) {
                 queries[t][j] = (float) data[t][j];
             }
-            queries[t][t % dimensions] += 5.0f;          // push them apart
+            queries[t][t % dimensions] += 5.0f; // push them apart
             expected[t] = forest.getAnomalyScore(queries[t]);
         }
 
-        assertThrows(ExecutionException.class,()->runConcurrentScoring(forest,queries,expected,repeats));
-        assertThrows(ExecutionException.class,()->runConcurrentScoring(forestZero,queries,expected,repeats));
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest, queries, expected, repeats));
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestZero, queries, expected, repeats));
     }
 }
