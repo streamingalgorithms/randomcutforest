@@ -970,17 +970,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     // the following is over 2*d space
     public double probabilityOfCutExpanded(int node, float[] expandedPoint, ArrayBox otherBox, float[] components,
-            ArrayBox reusableBox) {
+            ArrayBox reusableBox, double[] out) {
         int nodeIdx = translate(node);
         if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
             int base = 2 * nodeIdx * dimension;
-            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint, 0,
-                    components);
+            return gapAttribution(boundingBoxData, base, dimension, rangeSumData[nodeIdx], expandedPoint, 0, components,
+                    out);
         } else if (otherBox != null) {
-            return otherBox.probabilityOfCut(expandedPoint, components);
+            return otherBox.probabilityOfCut(expandedPoint, components, out);
         } else {
             fillArrayBox(node, reusableBox);
-            return reusableBox.probabilityOfCut(expandedPoint, components);
+            return reusableBox.probabilityOfCut(expandedPoint, components, out);
         }
     }
 
@@ -1149,7 +1149,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         if (view == null)
             view = new NodeView(this, pointStoreView, root, point);
         else
-            view.rearm(this, root);
+            view.rearm(this, root, v.needsGap());
         traversePathToLeafAndVisitNodes(point, v, view, root, 0, 0);
         // result extracted from visitor; one can do v.getResult()
         // the viewing tower (not the view) passed along
@@ -1218,7 +1218,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         if (view == null)
             view = new NodeView(this, pointStoreView, root, point);
         else
-            view.rearm(this, root);
+            view.rearm(this, root, v.needsGap());
         traverseTreeMulti(point, v, view, root, 0);
         return view; // result pulled off the slot by the caller
     }

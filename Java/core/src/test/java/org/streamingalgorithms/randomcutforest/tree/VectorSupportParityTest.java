@@ -91,8 +91,8 @@ public class VectorSupportParityTest {
             127, 128, 129, 255, 256, 257 })
     void gapAttributionProbOnly(int dim) {
         Fixture f = new Fixture(dim);
-        double a = VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, null);
-        double b = VectorSupportLegacy.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, null);
+        double a = VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, null, null);
+        double b = VectorSupportLegacy.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, null, null);
         close("gapAttribution(prob)", dim, a, b);
     }
 
@@ -102,8 +102,8 @@ public class VectorSupportParityTest {
     void gapAttributionWithFill(int dim) {
         Fixture f = new Fixture(dim);
         float[] cA = new float[f.n], cB = new float[f.n];
-        double a = VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, cA);
-        double b = VectorSupportLegacy.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, cB);
+        double a = VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, cA, null);
+        double b = VectorSupportLegacy.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, cB, null);
         close("gapAttribution(fill)", dim, a, b);
         close("gapAttribution.contrib", dim, cA, cB);
     }
@@ -115,8 +115,8 @@ public class VectorSupportParityTest {
         Fixture f = new Fixture(dim);
         float[] exact = new float[f.n];
         float[] pooled = new float[f.n + 37]; // oversized, as a pool hands out
-        VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, exact);
-        VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, pooled);
+        VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, exact, null);
+        VectorSupportSIMD.gapAttribution(f.values, 0, dim, f.rangeSum, f.newValues, 0, pooled, null);
         for (int i = 0; i < f.n; i++) {
             assertEquals(exact[i], pooled[i], 0f, "pooled contrib differs at " + i + " (dim=" + dim + ")");
         }
@@ -267,15 +267,15 @@ public class VectorSupportParityTest {
         float[] cA = new float[n], cB = new float[n];
 
         // newValues == values -> every gap 0 -> S == 0 -> probability 0, contrib zeroed
-        close("degenerate.prob", dim, VectorSupportSIMD.gapAttribution(box, 0, dim, 4.0 * dim, same, 0, cA),
-                VectorSupportLegacy.gapAttribution(box, 0, dim, 4.0 * dim, same, 0, cB));
+        close("degenerate.prob", dim, VectorSupportSIMD.gapAttribution(box, 0, dim, 4.0 * dim, same, 0, cA, null),
+                VectorSupportLegacy.gapAttribution(box, 0, dim, 4.0 * dim, same, 0, cB, null));
         close("degenerate.contrib", dim, cA, cB);
 
         // rangeSum == 0 with a real gap -> probability 1.0
         float[] bigger = new float[n];
         java.util.Arrays.fill(bigger, 3f);
-        close("degenerate.rangeSum0", dim, VectorSupportSIMD.gapAttribution(box, 0, dim, 0.0, bigger, 0, null),
-                VectorSupportLegacy.gapAttribution(box, 0, dim, 0.0, bigger, 0, null));
+        close("degenerate.rangeSum0", dim, VectorSupportSIMD.gapAttribution(box, 0, dim, 0.0, bigger, 0, null, null),
+                VectorSupportLegacy.gapAttribution(box, 0, dim, 0.0, bigger, 0, null, null));
 
         // identical vectors -> all distances 0
         close("degenerate.L2", dim, VectorSupportSIMD.L2distance(same, box), VectorSupportLegacy.L2distance(same, box));
@@ -400,6 +400,7 @@ public class VectorSupportParityTest {
     public void fusedEqualsUnfused() {
         for (int dim : new int[] { 1, 3, 4, 7, 8, 16, 30, 100 }) {
             Random r = new Random(42);
+            double[] out = new double[2];
             int nPoints = 5, cap = 64;
             float[] store = new float[cap * dim];
             for (int i = 0; i < store.length; i++)
@@ -425,10 +426,10 @@ public class VectorSupportParityTest {
             // reference: union, then gap, as two separate passes
             double refR = VectorSupport.updateBoundsAll(a, 0, dim, store, offs.clone(), 0, nPoints);
             float[] refGap = new float[2 * dim];
-            double refP = VectorSupport.gapAttribution(a, 0, dim, refR, exp, 0, refGap);
+            double refP = VectorSupport.gapAttribution(a, 0, dim, refR, exp, 0, refGap, out);
 
             // fused
-            double[] out = new double[1];
+
             float[] fusedGap = new float[2 * dim];
             double fusedS = VectorSupport.updateBoundsAndGap(b, 0, dim, store, offs.clone(), 0, nPoints, exp, 0,
                     fusedGap, 0, out);

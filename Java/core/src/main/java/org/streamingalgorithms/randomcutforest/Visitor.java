@@ -73,4 +73,8 @@ public interface Visitor<R> {
     default boolean isConverged() {
         return false;
     }
+
+    default boolean needsGap() {
+        return false;
+    }
 }

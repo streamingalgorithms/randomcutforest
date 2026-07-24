@@ -15,8 +15,6 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
-import java.util.Arrays;
-
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorOperators;
@@ -141,7 +139,7 @@ public final class VectorSupportSIMD {
      * returns the probability.
      */
     public static double gapAttribution(float[] values, int offset, int dimensions, double rangeSum, float[] newValues,
-            int nvOffset, float[] contrib) {
+            int nvOffset, float[] contrib, double[] out) {
         final int n = 2 * dimensions;
         final boolean fill = contrib != null && contrib.length >= n;
 
@@ -184,17 +182,11 @@ public final class VectorSupportSIMD {
 
         S += VectorSupportLegacy.gapRange(newValues, nvOffset, values, offset, fill ? contrib : null, 0, i, n);
 
-        final double probability = (S == 0.0) ? 0.0 : (rangeSum == 0.0 ? 1.0 : S / (S + rangeSum));
-
-        if (fill) {
-            final double denom = rangeSum + S;
-            if (denom == 0.0 || S == 0.0) {
-                Arrays.fill(contrib, 0, n, 0f);
-            } else {
-                scaleInPlace(contrib, n, (float) (1.0 / denom));
-            }
+        if (out != null) {
+            out[0] = S;
+            out[1] = rangeSum;
         }
-        return probability;
+        return (S == 0.0) ? 0.0 : (rangeSum == 0.0 ? 1.0 : S / (S + rangeSum));
     }
 
     /** Elementwise, no reduction. */

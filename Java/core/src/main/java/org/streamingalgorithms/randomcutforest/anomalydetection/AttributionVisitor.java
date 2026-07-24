@@ -16,7 +16,6 @@
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
-import static org.streamingalgorithms.randomcutforest.tree.VectorSupport.multiply;
 
 import java.util.Arrays;
 
@@ -43,7 +42,7 @@ import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
 
     /** Per-half-dimension gap contributions; filled by probabilityOfCut. */
-    protected final float[] probabilityComponents;
+    protected final float[] gapComponents;
 
     /** The accumulated directional attribution (length 2 * dimension). */
     protected final double[] directionalAttribution;
@@ -55,7 +54,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         super(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
         // twice as long as the point: positive and negative gaps stored separately.
-        this.probabilityComponents = new float[2 * dimension];
+        this.gapComponents = new float[2 * dimension];
         this.directionalAttribution = new double[2 * dimension];
         this.foldedAttribution = new double[2 * dimension];
     }
@@ -64,8 +63,6 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
-        System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
     }
 
     public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold) {
@@ -80,11 +77,16 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
 
     @Override
     protected float[] contributionTarget() {
-        return probabilityComponents;
+        return gapComponents;
     }
 
     @Override
-    protected void updateFromNode(double prob, int depth, int mass) {
+    public boolean needsGap() {
+        return true;
+    }
+
+    @Override
+    protected void updateFromNode(double prob, int depth, int mass, float[] gaps) {
         // scalar total, tracked alongside the vector; updated only on the ignoreLeaf
         // path. This is NOT the scalar visitor's removed double-update: savedScore and
         // directionalAttribution are distinct accumulators, and getResult rescales the
@@ -92,24 +94,24 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         if (ignoreLeaf) {
             savedScore = prob * scoreUnseenFn.of(depth, mass) + (1 - prob) * savedScore;
         }
-
         if (prob <= 0) {
             pointInsideBox = true;
         } else {
             double newScore = scoreUnseenFn.of(depth, mass);
-            VectorSupport.updateRecurrence(directionalAttribution, probabilityComponents, newScore, 1 - prob);
+            double denom = ranges[0] + ranges[1];
+            double inv = (denom == 0.0) ? 0.0 : 1.0 / denom;
+            VectorSupport.updateRecurrence(directionalAttribution, gaps, newScore * inv, 1 - prob);
         }
     }
 
     @Override
     public void acceptLeaf(INodeView leafNode, int depthOfNode) {
-        // NOTE: one ArrayBox per visitor lifetime (a visitor makes exactly one
-        // acceptLeaf call). To eliminate it entirely, expose a reused leaf ArrayBox
-        // from INodeView the way getSiblingBoundingBox already reuses the sibling box.
-        double probability;
-        float[] leafPoint = leafNode.getLeafPoint();
-        int dimension = probabilityComponents.length / 2;
-        if (Arrays.equals(leafPoint, pointToScore)) {
+
+        float[] leafPoint = leafNode.getLeafPoint(); // what is in the tree
+        float[] expanded = leafNode.expanded(); // this query
+        int dimension = gapComponents.length / 2;
+        // note the vector {v,-v} still starts with v :)
+        if (Arrays.equals(leafPoint, 0, dimension, expanded, 0, dimension)) {
             hitDuplicates = true;
         }
 
@@ -121,18 +123,16 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
 
         if (hitDuplicates || (ignoreLeaf && (leafNode.getMass() <= ignoreLeafMassThreshold))) {
             // no better option than an equal attribution
-            Arrays.fill(directionalAttribution, savedScore / (2 * pointToScore.length));
+            Arrays.fill(directionalAttribution, savedScore / (2 * dimension));
         } else {
             // AttributionVisitor, else-branch — replaces the whole scalar loop + normalize
             // loop:
-            double sum = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leafPoint, 0, probabilityComponents, 0,
-                    dimension)
-                    + VectorSupport.signedGapInto(expandedPoint, dimension, -1f, leafPoint, 0, probabilityComponents,
-                            dimension, dimension);
+            double sum = VectorSupport.signedGapInto(expanded, 0, +1f, leafPoint, 0, gapComponents, 0, dimension)
+                    + VectorSupport.signedGapInto(expanded, dimension, -1f, leafPoint, 0, gapComponents, dimension,
+                            dimension);
             double factor = (sum == 0) ? 0.0 : savedScore / sum;
             for (int i = 0; i < directionalAttribution.length; i++)
-                directionalAttribution[i] = probabilityComponents[i];
-            multiply(directionalAttribution, factor);
+                directionalAttribution[i] = gapComponents[i] * factor;
         }
     }
 
@@ -167,7 +167,7 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     @Override
     public void reset() {
         super.reset();
-        Arrays.fill(probabilityComponents, 1f);
+        Arrays.fill(gapComponents, 1f);
         Arrays.fill(directionalAttribution, 0.0);
         // foldedAttribution deliberately NOT cleared — it accumulates across trees
     }

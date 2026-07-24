@@ -211,12 +211,12 @@ public class VectorSupportBench {
 
     @Benchmark
     public double gapAttributionProb_A_vector(Data s) {
-        return VectorSupport.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, null);
+        return VectorSupport.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, null, null);
     }
 
     @Benchmark
     public double gapAttributionProb_B_scalar(Data s) {
-        return VectorSupportLegacy.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, null);
+        return VectorSupportLegacy.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, null, null);
     }
 
     @Benchmark
@@ -228,12 +228,13 @@ public class VectorSupportBench {
 
     @Benchmark
     public double gapAttributionFill_A_vector(Data s) {
-        return VectorSupport.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, s.contrib);
+        return VectorSupport.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, s.contrib, null);
     }
 
     @Benchmark
     public double gapAttributionFill_B_scalar(Data s) {
-        return VectorSupportLegacy.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, s.contrib);
+        return VectorSupportLegacy.gapAttribution(s.values, 0, s.dimensions, s.rangeSum, s.newValues, 0, s.contrib,
+                null);
     }
 
     // ---- addSlice ------------------------------------------------------------

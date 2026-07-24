@@ -163,8 +163,8 @@ public class ArrayBoxScoringBench {
         float[] cB = new float[slice];
         double worst = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            double pa = boxes[j].probabilityOfCut(point, cA);
-            double pb = VectorSupport.gapAttribution(buffer, offsets[j], dim, rangeSums[j], expanded, 0, cB);
+            double pa = boxes[j].probabilityOfCut(point, cA, null);
+            double pb = VectorSupport.gapAttribution(buffer, offsets[j], dim, rangeSums[j], expanded, 0, cB, null);
             worst = Math.max(worst, Math.abs(pa - pb) / Math.max(1e-12, Math.abs(pa)));
             for (int k = 0; k < slice; k++) {
                 worst = Math.max(worst, Math.abs(cA[k] - cB[k]));
@@ -185,7 +185,7 @@ public class ArrayBoxScoringBench {
         final float[] p = point;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += b[j].probabilityOfCut(p, null);
+            checksum += b[j].probabilityOfCut(p, null, null);
         }
         return checksum;
     }
@@ -200,7 +200,7 @@ public class ArrayBoxScoringBench {
         final int d = dim;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, null);
+            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, null, null);
         }
         return checksum;
     }
@@ -215,7 +215,7 @@ public class ArrayBoxScoringBench {
         final float[] c = contrib;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += b[j].probabilityOfCut(p, c);
+            checksum += b[j].probabilityOfCut(p, c, null);
             bh.consume(c); // keep the fill alive (c escapes -> stores retained)
         }
         return checksum;
@@ -232,7 +232,7 @@ public class ArrayBoxScoringBench {
         final int d = dim;
         double checksum = 0.0;
         for (int j = 0; j < NBOXES; j++) {
-            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, c);
+            checksum += VectorSupport.gapAttribution(buf, offs[j], d, rs[j], ex, 0, c, null);
             bh.consume(c);
         }
         return checksum;

@@ -44,11 +44,8 @@ import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.Random;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -79,6 +76,7 @@ import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 import org.streamingalgorithms.randomcutforest.store.PointStore;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
+import org.streamingalgorithms.randomcutforest.testutils.NormalMixtureTestData;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
@@ -138,7 +136,7 @@ public class RandomCutForestTest {
         }
         updateCoordinator = spy(
                 new PointStoreCoordinator<>(new PointStore.Builder().dimensions(2).capacity(1).build()));
-        traversalExecutor = spy(new SequentialForestTraversalExecutor(components));
+        traversalExecutor = spy(new SequentialForestTraversalExecutor(components, 2, 1));
         updateExecutor = spy(new SequentialForestUpdateExecutor<>(updateCoordinator, components));
 
         RandomCutForest.Builder<?> builder = RandomCutForest.builder().dimensions(dimensions)
@@ -1165,5 +1163,80 @@ public class RandomCutForestTest {
 
         double u = trainedForest.traverseForest(p, test, Collectors.reducing(0.0, Double::sum));
         assertEquals(u, score * trainedForest.numberOfTrees, 1e-6);
+    }
+
+
+    /** Runs `threads` concurrent scorers on a shared forest; returns the mismatch list. */
+    private List<String> runConcurrentScoring(RandomCutForest forest, float[][] queries, double[] expected,
+                                              int repeats) throws Exception {
+        List<String> failures = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int t = 0; t < queries.length; t++) {
+                final int id = t;
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    for (int r = 0; r < repeats; r++) {
+                        double got = forest.getAnomalyScore(queries[id]);
+                        if (Math.abs(got - expected[id]) > 1e-9 * Math.max(1.0, Math.abs(expected[id]))) {
+                            failures.add("thread " + id + " rep " + r + ": expected " + expected[id] + " got " + got);
+                            return null;
+                        }
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> f : futures) {
+                f.get();
+            }
+        }
+        return failures;
+    }
+
+    /*
+     * the following test is a skeleton that should be refined to clarify the
+     * thread safety of the forest under multiple reads.
+     */
+    @Test
+    public void concurrentScoringSharedForest() throws Exception {
+        int dimensions = 30, sampleSize = 256, threads = 10, repeats = 200;
+
+        RandomCutForest forest = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
+                .dimensions(dimensions).randomSeed(179)
+                .boundingBoxCacheFraction(0.5)          // the "no side effects" configuration
+                .build();
+        RandomCutForest forestZero = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
+                .dimensions(dimensions).randomSeed(179)
+                .boundingBoxCacheFraction(0.0)          // the "no side effects" configuration
+                .build();
+        RandomCutForest forestOne = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
+                .dimensions(dimensions).randomSeed(179)
+                .boundingBoxCacheFraction(1.0)          // the "no side effects" configuration
+                .build();
+
+        NormalMixtureTestData generator = new NormalMixtureTestData();
+        double[][] data = generator.generateTestData(4000, dimensions, 100);
+        for (double[] point : data) {
+            forest.update(point);
+            forestOne.update(point);
+            forestZero.update(point);
+        }
+
+        // distinct query per thread; expected values computed single-threaded
+        float[][] queries = new float[threads][];
+        double[] expected = new double[threads];
+        for (int t = 0; t < threads; t++) {
+            queries[t] = new float[dimensions];
+            for (int j = 0; j < dimensions; j++) {
+                queries[t][j] = (float) data[t][j];
+            }
+            queries[t][t % dimensions] += 5.0f;          // push them apart
+            expected[t] = forest.getAnomalyScore(queries[t]);
+        }
+
+        assertThrows(ExecutionException.class,()->runConcurrentScoring(forest,queries,expected,repeats));
+        assertThrows(ExecutionException.class,()->runConcurrentScoring(forestZero,queries,expected,repeats));
     }
 }

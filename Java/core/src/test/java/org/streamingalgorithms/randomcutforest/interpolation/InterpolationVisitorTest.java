@@ -99,7 +99,7 @@ public class InterpolationVisitorTest {
         when(leafNode.getLeafPoint()).thenReturn(point);
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);
-
+        when(leafNode.expanded()).thenReturn(new float[] { 1.0f, 2.0f, 3.0f, -1.0f, -2.0f, -3.0f });
         int sampleSize = 21;
         InterpolationVisitor visitor = newVisitor(point, sampleSize);
         visitor.acceptLeaf(leafNode, 100);
@@ -127,6 +127,7 @@ public class InterpolationVisitorTest {
 
         INodeView leafNode = mock(NodeView.class);
         when(leafNode.getLeafPoint()).thenReturn(anotherPoint);
+        when(leafNode.expanded()).thenReturn(new float[] { 1, 9, 4.0f, -1, -9, -4.0f });
         when(leafNode.getMass()).thenReturn(4);
         int sampleSize = 99;
 
@@ -218,7 +219,9 @@ public class InterpolationVisitorTest {
         for (INodeView p : new INodeView[] { pNew, pOld }) {
             when(p.getMass()).thenReturn(3);
             when(p.getBoundingBox()).thenReturn(new ArrayBox(leafPoint, siblingPoint));
-            when(p.getSiblingBoundingBox(any())).thenReturn(new ArrayBox(siblingPoint, siblingPoint));
+            when(p.expanded()).thenReturn(new float[4]);
+            when(p.getSiblingBoundingBox()).thenReturn(new ArrayBox(siblingPoint, siblingPoint)); // new path
+            when(p.getSiblingBoundingBox(any())).thenReturn(new ArrayBox(siblingPoint, siblingPoint)); // old
         }
         newVisitor.accept(pNew, 1);
         oldVisitor.accept(pOld, 1);
@@ -235,6 +238,7 @@ public class InterpolationVisitorTest {
     private static void runLeaf(InterpolationVisitor visitor, float[] leafPoint, int mass, int depth) {
         INodeView leaf = mock(NodeView.class);
         when(leaf.getLeafPoint()).thenReturn(leafPoint);
+        when(leaf.expanded()).thenReturn(new float[4]);
         when(leaf.getMass()).thenReturn(mass);
         visitor.acceptLeaf(leaf, depth);
     }
@@ -251,6 +255,7 @@ public class InterpolationVisitorTest {
             int depth) {
         INodeView node = mock(NodeView.class);
         when(node.getMass()).thenReturn(mass);
+        when(node.expanded()).thenReturn(new float[4]);
         when(node.getBoundingBox()).thenReturn(new ArrayBox(boxA, boxB));
         if (sibling != null) {
             when(node.getSiblingBoundingBox(any())).thenReturn(new ArrayBox(sibling, sibling));

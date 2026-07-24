@@ -22,7 +22,6 @@ import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
 import org.streamingalgorithms.randomcutforest.RFVisitor;
 import org.streamingalgorithms.randomcutforest.tree.ArrayBox;
 import org.streamingalgorithms.randomcutforest.tree.INodeView;
-import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
  * Shared traversal scaffolding for the scalar and attribution scoring visitors.
@@ -35,8 +34,8 @@ import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
  * attribution visitor. This is the single {@code probabilityOfCut(point, null)}
  * vs {@code probabilityOfCut(point, vector)} seam; both take the identical
  * arithmetic path in {@code ArrayBox.gapAttribution}.</li>
- * <li>{@link #updateFromNode(double, int, int)} — the accumulator update, and
- * on the shadow path the {@code prob <= 0} convergence. Scalar keeps one scalar
+ * <li>{ updateFromNode(double, int, int)} — the accumulator update, and on the
+ * shadow path the {@code prob <= 0} convergence. Scalar keeps one scalar
  * accumulator; attribution keeps a scalar total (savedScore) and a directional
  * vector, which is why its update looks like the removed scalar "double
  * compute" but is not — the two writes hit different accumulators.</li>
@@ -50,6 +49,7 @@ import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
  */
 public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
 
+    protected int dimension;
     protected boolean ignoreLeaf;
     protected int ignoreLeafMassThreshold;
 
@@ -66,21 +66,20 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
      * keeps climbing with the shadow box.
      */
     protected boolean hitDuplicates;
+    protected final double[] ranges = new double[2]; // [0]=S, [1]=R
+    protected float[] gaps; // valid only inside updateFromNode
 
     protected AbstractScoringVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
-        System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
     }
 
     // reusable path only: allocates pointToScore directly (no copy).
     // prepare(tree, point) fills mass + projection before the first read.
     protected AbstractScoringVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
             ScoreFn scoreUnseenFn, DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
-        this.pointToScore = new float[dimension];
-        this.expandedPoint = new float[2 * dimension];
+        this.dimension = dimension;
         this.treeMass = treeMass;
         this.ignoreLeaf = ignoreLeafMassThreshold > DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
         this.ignoreLeafMassThreshold = ignoreLeafMassThreshold;
@@ -115,32 +114,33 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
      * On the non-shadow path {@code prob <= 0} is already handled by
      * {@link #accept}.
      */
-    protected abstract void updateFromNode(double probabilityOfSeparation, int depth, int mass);
+    protected abstract void updateFromNode(double probabilityOfSeparation, int depth, int mass, float[] gaps);
 
     @Override
     public final void accept(INodeView node, int depthOfNode) {
-        if (pointInsideBox) {
+        if (pointInsideBox)
             return;
-        }
 
-        double probabilityOfSeparation;
+        double prob;
         if (!(hitDuplicates || ignoreLeaf)) {
-            probabilityOfSeparation = node.probabilityOfSeparation(expandedPoint, contributionTarget());
-            if (probabilityOfSeparation <= 0) {
-                // point inside this node's box: nothing above can change the result
+            if (contributionTarget() != null) {
+                gaps = node.separation(ranges); // raw gaps, S and R
+                double S = ranges[0], R = ranges[1];
+                prob = (S == 0.0) ? 0.0 : (R == 0.0 ? 1.0 : S / (S + R));
+            } else {
+                prob = node.probabilityAndSeparation((float[]) null);
+            }
+            if (prob <= 0) {
                 pointInsideBox = true;
                 return;
             }
         } else {
-            // counterfactual "what if the point and its near neighbor were absent"
-            probabilityOfSeparation = acceptShadowBox(node);
+            ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox();
+            gaps = contributionTarget();
+            ArrayBox box = growShadow(sib);
+            prob = box.probabilityOfCut(node.expanded(), gaps, ranges);
         }
-
-        updateFromNode(probabilityOfSeparation, depthOfNode, node.getMass());
+        updateFromNode(prob, depthOfNode, node.getMass(), gaps);
     }
 
-    protected final double acceptShadowBox(INodeView node) {
-        ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox(pointToScore);
-        return growShadow(sib).probabilityOfCut(expandedPoint, contributionTarget());
-    }
 }

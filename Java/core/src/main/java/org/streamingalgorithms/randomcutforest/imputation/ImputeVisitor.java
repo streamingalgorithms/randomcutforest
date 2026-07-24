@@ -122,7 +122,7 @@ public class ImputeVisitor implements IRFMultiVisitor<ConditionalTreeSample> {
 
     public void accept(final INodeView node, final int depthOfNode) {
         // note querypoint now has values filled -- either expand or we do not use simd
-        double p = ((ArrayBox) node.getBoundingBox()).probabilityOfCut(expandedPoint, null);
+        double p = ((ArrayBox) node.getBoundingBox()).probabilityOfCut(expandedPoint, null, null);
         converged = (p == 0);
         if (p <= 0)
             return;

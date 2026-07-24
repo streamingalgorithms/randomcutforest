@@ -157,11 +157,12 @@ public final class VectorSupport {
      * returns the probability.
      */
     public static double gapAttribution(float[] values, int offset, int dimensions, double rangeSum, float[] newValues,
-            int nvOffset, float[] contrib) {
+            int nvOffset, float[] contrib, double[] out) {
         return simd(2 * dimensions)
-                ? VectorSupportSIMD.gapAttribution(values, offset, dimensions, rangeSum, newValues, nvOffset, contrib)
-                : VectorSupportLegacy.gapAttribution(values, offset, dimensions, rangeSum, newValues, nvOffset,
-                        contrib);
+                ? VectorSupportSIMD.gapAttribution(values, offset, dimensions, rangeSum, newValues, nvOffset, contrib,
+                        out)
+                : VectorSupportLegacy.gapAttribution(values, offset, dimensions, rangeSum, newValues, nvOffset, contrib,
+                        out);
     }
 
     // ---- box U= box (returns the new rangeSum) -----------------------------

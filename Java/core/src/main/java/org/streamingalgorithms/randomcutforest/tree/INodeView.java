@@ -19,6 +19,8 @@ import java.util.HashMap;
 
 public interface INodeView {
 
+    float[] expanded();
+
     boolean isLeaf();
 
     int getMass();
@@ -26,6 +28,9 @@ public interface INodeView {
     IBoundingBoxView getBoundingBox();
 
     IBoundingBoxView getSiblingBoundingBox(float[] point);
+
+    // current sibling
+    IBoundingBoxView getSiblingBoundingBox();
 
     int getCutDimension();
 
@@ -48,7 +53,13 @@ public interface INodeView {
     // fills it with the components over the 2*dimension half-dimensions
     // the first half correspond to the max values and the second half for min
     // values
-    double probabilityOfSeparation(float[] point, float[] components);
+    double probabilityAndSeparation(float[] point, float[] components);
+
+    double probabilityAndSeparation(float[] components);
+
+    double probabilityAndSeparation(ArrayBox box, float[] components);
+
+    float[] separation(double[] ranges);
 
     /**
      * for a leaf node, return the index in the point store for the leaf point. If

@@ -42,15 +42,19 @@ import org.streamingalgorithms.randomcutforest.tree.NodeView;
 
 public class SequentialForestTraversalExecutor extends AbstractForestTraversalExecutor {
 
-    public SequentialForestTraversalExecutor(ComponentList<?, ?> components) {
+    private final NodeView resusableView;
+
+    public SequentialForestTraversalExecutor(ComponentList<?, ?> components, int dimensions, int sampleSize) {
         super(components);
+        resusableView = new NodeView(dimensions, sampleSize);
     }
 
     private <R, S> S foldForest(float[] point, IVisitorFactory<R> vf, ConvergingAccumulator<R> conv,
             Function<R, S> finisher) {
         /// slotFor(vf, point) can be used someday.
         IRFVisitor<R> slot = vf.newReusableVisitor(point);
-        NodeView viewTower = null;
+        NodeView viewTower = resusableView;
+        resusableView.set(point);
         if (conv == null) { // EXACT-foldable spine
             for (ITraversable c : components) {
                 viewTower = c.reusableTraverse(point, slot, viewTower);
@@ -81,7 +85,8 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         }
 
         IRFVisitor<R> slot = visitorFactory.newReusableVisitor(point);
-        NodeView viewTower = null;
+        NodeView viewTower = resusableView;
+        resusableView.set(point);
         R acc = null;
         for (ITraversable c : components) {
             viewTower = c.reusableTraverse(point, slot, viewTower);
@@ -103,7 +108,8 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         IRFVisitor<R> slot = vf.newReusableVisitor(point);
         A container = collector.supplier().get();
         BiConsumer<A, R> acc = collector.accumulator();
-        NodeView viewTower = null;
+        NodeView viewTower = resusableView;
+        resusableView.set(point);
         for (ITraversable c : components) {
             viewTower = c.reusableTraverse(point, slot, viewTower); // threads the view; no foldOut
             acc.accept(container, vf.liftResult(null, slot.getResult())); // getResult() MUST be detached per tree

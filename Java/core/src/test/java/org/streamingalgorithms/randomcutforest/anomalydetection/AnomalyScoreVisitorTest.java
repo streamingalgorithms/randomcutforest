@@ -70,7 +70,7 @@ public class AnomalyScoreVisitorTest {
         INodeView leafNode = mock(NodeView.class);
         when(leafNode.getLeafPoint()).thenReturn(point);
         when(leafNode.getBoundingBox()).thenReturn(new BoundingBox(point, point));
-
+        when(leafNode.expanded()).thenReturn(new float[] { 1.0f, 2.0f, 3.0f, -1, -2, -3 });
         int leafDepth = 100;
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);
@@ -108,7 +108,7 @@ public class AnomalyScoreVisitorTest {
         INodeView leafNode = mock(NodeView.class);
         when(leafNode.getLeafPoint()).thenReturn(anotherPoint);
         when(leafNode.getBoundingBox()).thenReturn(new BoundingBox(anotherPoint, anotherPoint));
-
+        when(leafNode.expanded()).thenReturn(new float[] { 1.0f, 2.0f, 3.0f, -1, -2, -3 });
         int leafDepth = 100;
 
         ScoreVisitor visitor = new ScoreVisitor(point, 2);
@@ -140,7 +140,7 @@ public class AnomalyScoreVisitorTest {
         INodeView node = mock(NodeView.class);
         when(node.getLeafPoint()).thenReturn(point);
         when(node.getBoundingBox()).thenReturn(new BoundingBox(point, point));
-
+        when(node.expanded()).thenReturn(new float[4]);
         int depth = 2;
         visitor.acceptLeaf(node, depth);
         double expectedScore = CommonUtils.defaultDampFunction(node.getMass(), sampleSize)

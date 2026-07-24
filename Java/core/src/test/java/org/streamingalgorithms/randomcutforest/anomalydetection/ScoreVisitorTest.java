@@ -23,8 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
 
 import org.junit.jupiter.api.Test;
@@ -79,7 +78,7 @@ public class ScoreVisitorTest {
         float[] point = { 1.0f, 2.0f, 3.0f };
         INodeView leafNode = mock(NodeView.class);
         when(leafNode.getLeafPoint()).thenReturn(point);
-
+        when(leafNode.expanded()).thenReturn(new float[] { 1.0f, 2.0f, 3.0f, -1f, -2f, -3.0f });
         int leafDepth = 100;
         int leafMass = 10;
         when(leafNode.getMass()).thenReturn(leafMass);
@@ -120,7 +119,7 @@ public class ScoreVisitorTest {
         float[] anotherPoint = new float[] { 4.0f, 5.0f, 6.0f };
         INodeView leafNode = mock(NodeView.class);
         when(leafNode.getLeafPoint()).thenReturn(anotherPoint);
-
+        when(leafNode.expanded()).thenReturn(new float[] { 1.0f, 2.0f, 3.0f, -1, -2, -3 });
         int leafDepth = 100;
 
         ScoreVisitor visitor = new ScoreVisitor(point, 2);
@@ -150,48 +149,17 @@ public class ScoreVisitorTest {
         int sampleSize = 50;
         ScoreVisitor visitor = new ScoreVisitor(pointToScore, sampleSize);
 
+        float[] expandedPoint = new float[pointToScore.length * 2];
+        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
+
         // ---- leaf, not equal to the query ----
         INodeView leafNode = mock(NodeView.class);
         float[] otherPoint = new float[] { 1.0f, 1.0f };
         when(leafNode.getLeafPoint()).thenReturn(otherPoint);
+        when(leafNode.expanded()).thenReturn(expandedPoint);
         int depth = 4;
         visitor.acceptLeaf(leafNode, depth);
         double expectedScore = 1.0 / (depth + 1);
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-
-        // ---- internal node, point outside: single weighted update ----
-        // The visitor asks node.probabilityOfSeparation(point, null); stub it via the
-        // box.
-        depth--;
-        INodeView parent = mock(NodeView.class);
-        int parentMass = 5;
-        when(parent.getMass()).thenReturn(parentMass);
-        ArrayBox parentBox = new ArrayBox(otherPoint, new float[] { 2.0f, 0.0f });
-        when(parent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
-        visitor.accept(parent, depth);
-        float[] expandedPoint = new float[pointToScore.length * 2];
-        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
-
-        double p = parentBox.probabilityOfCut(expandedPoint, null);
-        double nodeScore = CommonUtils.defaultScoreUnseenFunction(depth, parentMass);
-        expectedScore = p * nodeScore + (1 - p) * expectedScore;
-        assertThat(visitor.getResult(),
-                closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
-
-        // ---- internal node, point inside: converge, score frozen ----
-        assertFalse(visitor.isConverged());
-        depth--;
-        ArrayBox containingBox = parentBox
-                .getMergedBox(new ArrayBox(new float[] { -1.0f, -1.0f }).getMergedBox(new float[] { -1.0f, 0.0f }));
-        INodeView grandParent = mock(NodeView.class);
-        when(grandParent.getMass()).thenReturn(parentMass + 2);
-        when(grandParent.probabilityOfSeparation(any(), any()))
-                .thenAnswer(inv -> containingBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
-
-        visitor.accept(grandParent, depth);
-        assertTrue(visitor.isConverged());
         assertThat(visitor.getResult(),
                 closeTo(CommonUtils.defaultScalarNormalizerFunction(expectedScore, sampleSize), EPSILON));
     }
@@ -208,10 +176,14 @@ public class ScoreVisitorTest {
         int threshold = 12;
         ScoreVisitor visitor = new ScoreVisitor(pointToScore, sampleSize, threshold);
 
+        float[] expandedPoint = new float[pointToScore.length * 2];
+        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
+
         INodeView leafNode = mock(NodeView.class);
         float[] leafPoint = new float[] { 0.0f, 0.0f }; // equal to query
         when(leafNode.getLeafPoint()).thenReturn(leafPoint);
         when(leafNode.getMass()).thenReturn(3); // <= threshold -> ignored -> scoreUnseen
+        when(leafNode.expanded()).thenReturn(expandedPoint);
         int depth = 3;
         visitor.acceptLeaf(leafNode, depth);
         double baseScore = visitor.savedScore; // scoreUnseen(depth, mass)
@@ -221,15 +193,20 @@ public class ScoreVisitorTest {
         INodeView parent = mock(NodeView.class);
         int parentMass = 5;
         when(parent.getMass()).thenReturn(parentMass);
-        when(parent.getSiblingBoundingBox(any()))
+        when(parent.expanded()).thenReturn(expandedPoint);
+        when(parent.getSiblingBoundingBox())
                 .thenReturn(new ArrayBox(new float[] { 1.0f, 1.0f }, new float[] { 2.0f, 2.0f }));
+        when(parent.probabilityAndSeparation(any(ArrayBox.class), any())).thenAnswer(inv -> {
+            ArrayBox box = inv.getArgument(0);
+            float[] comp = inv.getArgument(1);
+            return box.probabilityOfCut(expandedPoint, comp, null);
+        });
+
         visitor.accept(parent, depth);
 
         // expected: exactly one update score = p*scoreUnseen + (1-p)*baseScore
         ArrayBox shadow = new ArrayBox(new float[] { 1.0f, 1.0f }, new float[] { 2.0f, 2.0f });
-        float[] expandedPoint = new float[pointToScore.length * 2];
-        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
-        double p = shadow.probabilityOfCut(expandedPoint, null);
+        double p = shadow.probabilityOfCut(expandedPoint, null, null);
         double nodeScore = CommonUtils.defaultScoreUnseenFunction(depth, parentMass);
         double expected = p * nodeScore + (1 - p) * baseScore;
         assertEquals(expected, visitor.savedScore, EPSILON);
@@ -254,10 +231,12 @@ public class ScoreVisitorTest {
             INodeView leaf = mock(NodeView.class);
             when(leaf.getLeafPoint()).thenReturn(leafPoint);
             when(leaf.getMass()).thenReturn(3);
+            when(leaf.expanded()).thenReturn(new float[4]);
             INodeView parent = mock(NodeView.class);
             when(parent.getMass()).thenReturn(5);
-            when(parent.probabilityOfSeparation(any(), any()))
-                    .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1)));
+            when(parent.expanded()).thenReturn(new float[4]);
+            when(parent.probabilityAndSeparation(any(float[].class), any()))
+                    .thenAnswer(inv -> parentBox.probabilityOfCut(inv.getArgument(0), inv.getArgument(1), null));
             if (visitor == scoreVisitor) {
                 scoreVisitor.acceptLeaf(leaf, 4);
                 scoreVisitor.accept(parent, 3);

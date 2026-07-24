@@ -76,7 +76,7 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
     }
 
     @Override
-    protected void updateFromNode(double prob, int depth, int mass) {
+    protected void updateFromNode(double prob, int depth, int mass, float[] gaps) {
         savedScore = prob * scoreUnseenFn.of(depth, mass) + (1 - prob) * savedScore;
     }
 
@@ -85,7 +85,7 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
 
     @Override
     public void acceptLeaf(INodeView leafNode, int depthOfNode) {
-        if (Arrays.equals(leafNode.getLeafPoint(), pointToScore)
+        if (Arrays.equals(leafNode.getLeafPoint(), 0, dimension, leafNode.expanded(), 0, dimension)
                 && (!ignoreLeaf || (leafNode.getMass() > ignoreLeafMassThreshold))) {
             pointInsideBox = true;
             savedScore = dampFn.of(leafNode.getMass(), treeMass) * scoreSeenFn.of(depthOfNode, leafNode.getMass());

@@ -76,8 +76,6 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         this.centerOfMass = centerOfMass;
         this.dim = dimension;
         this.len = 2 * dimension;
-        this.pointToScore = new float[dimension];
-        this.expandedPoint = new float[len];
         this.measure = new double[len];
         this.distances = new double[len];
         this.probMass = new double[len];
@@ -91,8 +89,6 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
     public InterpolationVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass) {
         this(pointToScore.length, pointMass, centerOfMass);
-        System.arraycopy(pointToScore, 0, this.pointToScore, 0, pointToScore.length);
-        VectorSupport.expandInto(this.pointToScore, 0, this.expandedPoint, 0, pointToScore.length);
         this.treeMass = treeMass;
     }
 
@@ -117,9 +113,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
      * One gapInto over the small box. Sets sumOfDifferenceInRange (S),
      * sumOfNewRange; returns S.
      */
-    private double computeGap(ArrayBox small, ArrayBox large, boolean pointMode) {
-        float[] nv = pointMode ? expandedPoint : large.values;
-        int nvOff = pointMode ? 0 : large.offset;
+    private double computeGap(ArrayBox small, float[] nv, int nvOff) {
         double S = VectorSupport.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
         sumOfDifferenceInRange = S;
         sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
@@ -146,25 +140,26 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         ArrayBox small, large;
         boolean pointMode;
 
+        double S;
+
         if (pointEqualsLeaf) {
-            small = growShadow((ArrayBox) node.getSiblingBoundingBox(pointToScore));
+            small = growShadow((ArrayBox) node.getSiblingBoundingBox());
             large = (ArrayBox) node.getBoundingBox();
-            pointMode = false;
+            S = computeGap(small, large.values, large.offset);
         } else {
             small = (ArrayBox) node.getBoundingBox();
-            large = null;
-            pointMode = true;
+            S = computeGap(small, node.expanded(), 0);
         }
 
-        double S = computeGap(small, large, pointMode);
         double probOfCut = (sumOfNewRange == 0.0) ? 0.0 : S / sumOfNewRange;
         if (probOfCut <= 0) {
             pointInsideBox = true;
             return;
         }
 
-        double fieldVal = fieldExt(node, centerOfMass, savedMass, pointToScore);
-        double influenceVal = influenceExt(node, centerOfMass, savedMass, pointToScore);
+        // note field and influence are uniform at this moment
+        double fieldVal = fieldExt(node, centerOfMass, savedMass, null);
+        double influenceVal = influenceExt(node, centerOfMass, savedMass, null);
         double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
         VectorSupport.probAndDistInto(gap, distComp, small.values, small.offset, dim, invSumNew);
         recur(fieldVal, influenceVal, 1.0 - probOfCut);
@@ -175,9 +170,8 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     @Override
     public void acceptLeaf(INodeView leafNode, int depthOfNode) {
 
-        // InterpolationVisitor.acceptLeaf — leafBox field and fromPoint call both
-        // DELETED:
         float[] leaf = leafNode.getLeafPoint();
+        float[] expandedPoint = leafNode.expanded();
         double S = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
                 + VectorSupport.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
         sumOfDifferenceInRange = S;
@@ -192,8 +186,8 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             savedScore = selfF * 2 * dim;
         } else {
             savedMass = pointMass;
-            double fieldVal = fieldPoint(leafNode, savedMass, pointToScore);
-            double influenceVal = influencePoint(leafNode, savedMass, pointToScore);
+            double fieldVal = fieldPoint(leafNode, savedMass, null);
+            double influenceVal = influencePoint(leafNode, savedMass, null);
             double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
             VectorSupport.probOnlyInto(gap, distComp, len, invSumNew);
             recur(fieldVal, influenceVal, 0.0); // sumOfNewRange == S here
@@ -221,8 +215,6 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     }
 
     public void resetAcrossQueries(float[] point) { // note: takes the new point
-        System.arraycopy(point, 0, pointToScore, 0, point.length);
-        VectorSupport.expandInto(pointToScore, 0, expandedPoint, 0, pointToScore.length);
         reset(); // clears measure/distances/probMass + flags
     }
 

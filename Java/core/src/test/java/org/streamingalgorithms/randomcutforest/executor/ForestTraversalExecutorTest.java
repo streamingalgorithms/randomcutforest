@@ -78,7 +78,7 @@ public class ForestTraversalExecutorTest {
             }
 
             SequentialForestTraversalExecutor sequentialExecutor = new SequentialForestTraversalExecutor(
-                    sequentialExecutors);
+                    sequentialExecutors, 2, 5);
 
             ParallelForestTraversalExecutor parallelExecutor = new ParallelForestTraversalExecutor(parallelExecutors,
                     threadPoolSize);
@@ -222,7 +222,8 @@ public class ForestTraversalExecutorTest {
     @Test
     public void testException() {
         ParallelForestTraversalExecutor executor = new ParallelForestTraversalExecutor(new ComponentList<>(0), 2);
-        SequentialForestTraversalExecutor executor1 = new SequentialForestTraversalExecutor(new ComponentList<>(0));
+        SequentialForestTraversalExecutor executor1 = new SequentialForestTraversalExecutor(new ComponentList<>(0), 1,
+                1);
         IVisitorFactory<Double> visitorFactory = (tree, x) -> new ScoreVisitor(tree.projectToTree(x), tree.getMass());
         assertThrows(IllegalStateException.class,
                 () -> executor.traverseForest(new float[1], visitorFactory, Double::sum, x -> x));

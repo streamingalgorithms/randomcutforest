@@ -81,6 +81,11 @@ public class ImputeVisitorTest {
             throw new UnsupportedOperationException();
         }
 
+        @Override
+        public IBoundingBoxView getSiblingBoundingBox() {
+            return null;
+        }
+
         public int getCutDimension() {
             return cutDimension;
         }
@@ -101,6 +106,11 @@ public class ImputeVisitorTest {
             return leafPointIndex;
         }
 
+        @Override
+        public float[] expanded() {
+            return new float[0];
+        }
+
         public boolean isLeaf() {
             throw new UnsupportedOperationException();
         }
@@ -109,11 +119,21 @@ public class ImputeVisitorTest {
             throw new UnsupportedOperationException();
         }
 
-        public double probabilityOfSeparation(float[] point) {
+        public double probabilityAndSeparation(float[] point) {
             throw new UnsupportedOperationException();
         }
 
-        public double probabilityOfSeparation(float[] point, float[] components) {
+        @Override
+        public double probabilityAndSeparation(ArrayBox box, float[] components) {
+            return 0;
+        }
+
+        @Override
+        public float[] separation(double[] ranges) {
+            return new float[0];
+        }
+
+        public double probabilityAndSeparation(float[] point, float[] components) {
             throw new UnsupportedOperationException();
         }
 
@@ -223,7 +243,7 @@ public class ImputeVisitorTest {
         float[] lo = new float[] { -10, -10, -100 };
         float[] hi = new float[] { 10, 10, 100 };
         ArrayBox box = new ArrayBox(lo, hi);
-        double p = box.probabilityOfCut(visitor.expandedPoint, null);
+        double p = box.probabilityOfCut(visitor.expandedPoint, null, null);
         assertEquals(0.0, p, EPS); // precondition: this box gives p==0
 
         FakeNode node = new FakeNode();
@@ -244,7 +264,7 @@ public class ImputeVisitorTest {
         float[] lo = new float[] { 500, 500, 500 };
         float[] hi = new float[] { 600, 600, 600 };
         ArrayBox box = new ArrayBox(lo, hi);
-        double p = box.probabilityOfCut(visitor.expandedPoint, null);
+        double p = box.probabilityOfCut(visitor.expandedPoint, null, null);
         assertTrue(p > 0); // precondition
 
         FakeNode node = new FakeNode();

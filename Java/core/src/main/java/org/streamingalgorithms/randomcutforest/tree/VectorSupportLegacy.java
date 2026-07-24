@@ -18,8 +18,6 @@ package org.streamingalgorithms.randomcutforest.tree;
 import static java.lang.Math.fma;
 import static java.lang.Math.max;
 
-import java.util.Arrays;
-
 /**
  * The scalar implementation of every {@link VectorSupport} kernel. Plain Java,
  * no {@code --add-modules}, no incubator module.
@@ -89,7 +87,7 @@ public final class VectorSupportLegacy {
 
     /** @see VectorSupport#gapAttribution */
     public static double gapAttribution(float[] values, int offset, int dimensions, double rangeSum, float[] newValues,
-            int nvOffset, float[] contrib) {
+            int nvOffset, float[] contrib, double[] out) {
         final int n = 2 * dimensions;
         // NOTE: '>= n', not '== n'. Every element of [0,n) is unconditionally written
         // on the fill path, so a pooled buffer LARGER than n is perfectly safe. The
@@ -97,18 +95,11 @@ public final class VectorSupportLegacy {
         final boolean fill = contrib != null && contrib.length >= n;
 
         final double S = gapRange(newValues, nvOffset, values, offset, fill ? contrib : null, 0, 0, n);
-
-        final double probability = (S == 0.0) ? 0.0 : (rangeSum == 0.0 ? 1.0 : S / (S + rangeSum));
-
-        if (fill) {
-            final double denom = rangeSum + S;
-            if (denom == 0.0 || S == 0.0) {
-                Arrays.fill(contrib, 0, n, 0f); // range fill, so pooling stays legal
-            } else {
-                scaleRange(contrib, (float) (1.0 / denom), 0, n);
-            }
+        if (out != null) {
+            out[0] = S;
+            out[1] = rangeSum;
         }
-        return probability;
+        return (S == 0.0) ? 0.0 : (rangeSum == 0.0 ? 1.0 : S / (S + rangeSum));
     }
 
     /** @see VectorSupport#addSlice */

@@ -304,7 +304,7 @@ public class RandomCutForest {
             traversalExecutor = new ParallelForestTraversalExecutor(components, threadPoolSize);
             updateExecutor = new ParallelForestUpdateExecutor<>(updateCoordinator, components, threadPoolSize);
         } else {
-            traversalExecutor = new SequentialForestTraversalExecutor(components);
+            traversalExecutor = new SequentialForestTraversalExecutor(components, dimensions, sampleSize);
             updateExecutor = new SequentialForestUpdateExecutor<>(updateCoordinator, components);
         }
     }

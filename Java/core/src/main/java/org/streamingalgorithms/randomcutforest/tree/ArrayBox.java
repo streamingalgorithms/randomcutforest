@@ -221,9 +221,9 @@ public class ArrayBox implements IBoundingBoxView {
         this.dimensions = dimensions;
     }
 
-    //
-    public double probabilityOfCut(float[] expandedPoint, float[] components) {
-        return VectorSupport.gapAttribution(values, offset, dimensions, rangeSum, expandedPoint, 0, components);
+    // the array out contains out[0]=sum of gaps, out[1] = rangesum
+    public double probabilityOfCut(float[] expandedPoint, float[] components, double[] out) {
+        return VectorSupport.gapAttribution(values, offset, dimensions, rangeSum, expandedPoint, 0, components, out);
     }
 
 }

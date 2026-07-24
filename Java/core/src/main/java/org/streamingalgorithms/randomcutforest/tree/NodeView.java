@@ -15,6 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 
 import java.util.Arrays;
@@ -34,27 +35,40 @@ public class NodeView implements INodeView {
     private final ArrayBox reusableBox;
     private final ArrayBox pathBox;
     protected int[] nodeScratch;
-    private float[] expanded, gapBuf; // armed at rearm, visitor-owned
-    private final double[] fuseOut = new double[1];
+    private float[] expanded;
+    private float[] gapBuf; // armed at rearm, visitor-owned
+    private final double[] fuseOut = new double[2];
     private int fusedNode = -1;
     private double fusedS, fusedRange;
+    private boolean needsGap;
 
-    public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root, float[] point) {
-        this.currentNodeOffset = root;
-        this.tree = tree;
-        int dimensions = pointStoreView.getDimensions();
+    public NodeView(int dimensions, int sampleSize) {
         leafPoint = new float[dimensions];
         reusableBox = new ArrayBox(dimensions);
         pathBox = new ArrayBox(dimensions);
-        int numberOfLeaves = (tree != null) ? tree.numberOfLeaves : 256;
-        nodeScratch = new int[numberOfLeaves];
+        nodeScratch = new int[sampleSize];
         expanded = new float[2 * dimensions];
         gapBuf = new float[2 * dimensions];
-        VectorSupport.expandInto(point, 0, expanded, 0, dimensions);
+    }
+
+    public NodeView(RandomCutTree tree, IPointStoreView<float[]> pointStoreView, int root, float[] point) {
+        this(pointStoreView.getDimensions(), (tree != null) ? tree.numberOfLeaves : 256);
+        this.currentNodeOffset = root;
+        this.tree = tree;
+        set(point);
+    }
+
+    public void set(float[] point) {
+        checkArgument(point != null && point.length == expanded.length / 2, "incorrect set in nodeview");
+        VectorSupport.expandInto(point, 0, expanded, 0, expanded.length / 2);
+    }
+
+    public float[] expanded() {
+        return expanded;
     }
 
     // NodeView
-    protected void rearm(RandomCutTree tree, int root) {
+    protected void rearm(RandomCutTree tree, int root, boolean needsGap) {
         this.tree = tree;
         this.currentNodeOffset = root;
         this.currentBox = null;
@@ -66,6 +80,7 @@ public class NodeView implements INodeView {
         fusedS = 0;
         Arrays.fill(fuseOut, 0);
         Arrays.fill(gapBuf, 0);
+        this.needsGap = needsGap;
         // deactivate; pathBox array retained, re-primed by setCurrentNode
     }
 
@@ -78,6 +93,10 @@ public class NodeView implements INodeView {
             return currentBox;
         tree.fillArrayBox(currentNodeOffset, reusableBox); // fills reusableBox in place, no alloc
         return reusableBox;
+    }
+
+    public IBoundingBoxView getSiblingBoundingBox() {
+        return getSiblingBoundingBox(leafPoint);
     }
 
     public IBoundingBoxView getSiblingBoundingBox(float[] point) {
@@ -113,17 +132,37 @@ public class NodeView implements INodeView {
 
     // probability of cut which is in 2*d half dimensions
     @Override
-    public double probabilityOfSeparation(float[] expandedPoint, float[] components) {
+    public double probabilityAndSeparation(float[] expandedInputPoint, float[] components) {
+        return tree.probabilityOfCutExpanded(currentNodeOffset, expandedInputPoint, currentBox, components, reusableBox,
+                null);
+    }
+
+    @Override
+    public double probabilityAndSeparation(ArrayBox box, float[] components) {
+        return tree.probabilityOfCutExpanded(currentNodeOffset, expanded, box, components, reusableBox, null);
+    }
+
+    @Override
+    public double probabilityAndSeparation(float[] components) {
         if (fusedNode == currentNodeOffset && fusedNode != -1) {
             if (components != null) {
-                double denom = fusedRange + fusedS;
-                float inv = (denom == 0.0) ? 0f : (float) (1.0 / denom);
-                for (int i = 0; i < gapBuf.length; i++)
-                    components[i] = gapBuf[i] * inv;
+                checkArgument(components.length == gapBuf.length && needsGap, "incorrect call");
+                System.arraycopy(gapBuf, 0, components, 0, gapBuf.length);
             }
             return (fusedS == 0.0) ? 0.0 : (fusedRange == 0.0 ? 1.0 : fusedS / (fusedS + fusedRange));
         }
-        return tree.probabilityOfCutExpanded(currentNodeOffset, expandedPoint, currentBox, components, reusableBox);
+        return probabilityAndSeparation(expanded, components);
+    }
+
+    @Override
+    public float[] separation(double[] ranges) {
+        if (fusedNode == currentNodeOffset && fusedNode != -1) {
+            ranges[0] = fusedS;
+            ranges[1] = fusedRange;
+            return gapBuf;
+        }
+        tree.probabilityOfCutExpanded(currentNodeOffset, expanded, currentBox, gapBuf, reusableBox, ranges);
+        return gapBuf;
     }
 
     @Override
@@ -154,7 +193,7 @@ public class NodeView implements INodeView {
         if (updateBox && tree.boundingBoxCacheFraction == 0) {
             int numLeaves = tree.addLeafPoints(nodeScratch, currentSibling, 0);
             fusedS = tree.pointStoreView.addToSliceWithGap(currentBox.values, currentBox.offset, nodeScratch, 0,
-                    numLeaves, expanded, 0, gapBuf, 0, fuseOut);
+                    numLeaves, expanded, 0, (needsGap) ? gapBuf : null, 0, fuseOut);
             fusedRange = fuseOut[0];
             currentBox.rangeSum = fusedRange;
             fusedNode = parent;

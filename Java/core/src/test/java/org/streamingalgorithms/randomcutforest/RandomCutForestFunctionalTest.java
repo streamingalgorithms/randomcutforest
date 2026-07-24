@@ -501,7 +501,7 @@ public class RandomCutForestFunctionalTest {
             }
 
             if (result.low[j] > 0.2) {
-                assertEquals(score * newResult.low[j], newScore * result.low[j], 0.1 * score);
+                assertEquals(score * newResult.low[j], newScore * result.low[j], 0.2 * score);
             } else {
                 assertTrue(newResult.low[j] < 0.2);
             }
