@@ -175,11 +175,18 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     // following is for testing
     protected DiVector observeResult() {
         double factor = idempotentRefactor();
-        double[] out = Arrays.copyOf(directionalAttribution, directionalAttribution.length);
-        for (int i = 0; i < out.length; i++) {
-            out[i] *= factor;
+        int d = directionalAttribution.length / 2;
+        DiVector out = new DiVector(d);
+        for (int i = 0; i < d; i++) {
+            out.high[i] = directionalAttribution[i] * factor;
+            out.low[i] = directionalAttribution[i + d] * factor;
         }
-        return new DiVector(out);
+        return out;
+    }
+
+    @Override
+    public void resetAcrossQueries(float[] point) {
+        Arrays.fill(foldedAttribution, 0.0);
     }
 
     // after each tree: scale this tree's result, add into the running sum
@@ -188,13 +195,23 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         VectorSupport.axpyInto(foldedAttribution, directionalAttribution, factor);
     }
 
-    public static IVisitorFactory<DiVector> reusableFactory(int ignoreLeafMassThreshold,
+    public static final IVisitorFactory<DiVector> DEFAULT_ATTRIBUTION_FACTORY = reusableFactory(true,
+            DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
+            DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
+            DefaultScoreFunctions.DEFAULT_NORMALIZER);
+
+    public static IVisitorFactory<DiVector> reusableFactory(boolean acrossQueries, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
             DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
         return new IVisitorFactory<DiVector>() {
             @Override
             public boolean isReusable() {
                 return true;
+            }
+
+            @Override
+            public boolean isReusableAcrossQueries() {
+                return acrossQueries;
             }
 
             @Override

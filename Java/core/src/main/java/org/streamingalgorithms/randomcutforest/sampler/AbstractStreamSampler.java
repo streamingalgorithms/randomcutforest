@@ -19,6 +19,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_INITIAL_ACCEPT_FRACTION;
 import static org.streamingalgorithms.randomcutforest.RandomCutForest.DEFAULT_SAMPLE_SIZE;
+import static org.streamingalgorithms.randomcutforest.tree.RandomCutTree.GOLDEN_GAMMA;
+import static org.streamingalgorithms.randomcutforest.tree.RandomCutTree.mix64;
 
 import java.util.Random;
 
@@ -251,9 +253,8 @@ public abstract class AbstractStreamSampler<P> implements IStreamSampler<P> {
             if (testRandom != null) {
                 return testRandom.nextDouble();
             }
-            Random newRandom = new Random(randomSeed);
-            randomSeed = newRandom.nextLong();
-            return newRandom.nextDouble();
+            randomSeed = mix64(randomSeed + GOLDEN_GAMMA);
+            return (randomSeed >>> 11) * 0x1.0p-53;
         }
     }
 

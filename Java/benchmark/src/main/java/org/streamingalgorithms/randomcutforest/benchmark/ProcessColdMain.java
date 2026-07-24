@@ -65,7 +65,7 @@ public final class ProcessColdMain {
                     // timing brackets to enclose Models.prepare)
                     Models.Prepared p = Models.prepare(kind, dataset, cache, SEED);
                     final Object model = p.model;
-                    final double[][] s = p.stream;
+                    final float[][] s = p.stream;
                     long clock = p.clock0;
 
                     double checksum = 0.0;

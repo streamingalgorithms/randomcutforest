@@ -79,7 +79,7 @@ public class ProcessBenchmark {
 
     private Models.Kind kind;
     private Object modelObj;
-    private double[][] stream;
+    private float[][] stream;
     private long clock;
 
     @Setup(Level.Trial)
@@ -96,7 +96,7 @@ public class ProcessBenchmark {
     public double process() {
         final Models.Kind k = kind;
         final Object m = modelObj;
-        final double[][] s = stream;
+        final float[][] s = stream;
         long c = clock;
         double checksum = 0.0;
         for (int i = 0; i < Datasets.SCORED; i++) {

@@ -174,6 +174,24 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     }
 
     /**
+     * SplitMix64 with the JDK's golden gamma -- bit-identical to
+     * java.util.SplittableRandom(seed), which we cannot use directly because it
+     * does not expose its internal state for serialization. See
+     * RandomCutTreeRngTest#matchesSplittableRandom.
+     *
+     * It is possible to use more powerful RNG, however testability (reproducing
+     * will be a challenge). If reproducibility is no longer an issue -- switch this
+     * out
+     */
+    public static final long GOLDEN_GAMMA = 0x9E3779B97F4A7C15L;
+
+    public static long mix64(long z) {
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
+    }
+
+    /**
      * Return a new {@link Cut}, which is chosen uniformly over the space of
      * possible cuts for a bounding box. Either the bounding box is non-trivial (not
      * a single point) or its union with a point has to be non-trivial -- otherwise
@@ -350,16 +368,20 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
         int savedIdx = leafIdx, savedDim = Integer.MAX_VALUE;
         float savedCutValue = 0f;
-        Random rng;
-        if (testRandom == null) {
-            rng = new Random(randomSeed);
-            randomSeed = rng.nextLong();
-        } else
-            rng = testRandom;
 
+        long cursor = randomSeed;
+        if (testRandom == null) {
+            randomSeed = mix64(cursor += GOLDEN_GAMMA); // was: randomSeed = rng.nextLong()
+        }
+        /*
+         * Random rng; if (testRandom == null) { rng = new Random(randomSeed);
+         * randomSeed = rng.nextLong(); } else rng = testRandom;
+         */
         int i = leafIdx;
         while (true) {
-            double factor = rng.nextDouble();
+            double factor = (testRandom != null) ? testRandom.nextDouble()
+                    : (mix64(cursor += GOLDEN_GAMMA) >>> 11) * 0x1.0p-53;
+            // double factor = rng.nextDouble();
             randomCut(factor, point, helper.boxScratch, null, true, helper.cutScratch);
             int dim = helper.cutScratch.getDimension();
             float value = (float) helper.cutScratch.getValue();

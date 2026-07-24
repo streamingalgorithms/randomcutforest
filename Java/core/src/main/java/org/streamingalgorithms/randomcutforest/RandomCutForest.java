@@ -21,6 +21,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
+import static org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY;
+import static org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor.DEFAULT_SCORE_FACTORY;
 import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.DEFAULT_SEPARATION_RATIO_FOR_MERGE;
 
@@ -255,6 +257,7 @@ public class RandomCutForest {
      * An implementation of forest update algorithms.
      */
     protected AbstractForestUpdateExecutor<?, float[]> updateExecutor;
+    private IVisitorFactory<InterpolationMeasure> densityFactory;
 
     public <P> RandomCutForest(Builder<?> builder, IStateCoordinator<P, float[]> stateCoordinator,
             ComponentList<P, float[]> components, Random random) {
@@ -295,6 +298,7 @@ public class RandomCutForest {
         }
         this.stateCoordinator = stateCoordinator;
         this.components = components;
+        this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
         initExecutors(stateCoordinator, components);
     }
 
@@ -836,16 +840,15 @@ public class RandomCutForest {
      * @return an anomaly score for the given point.
      */
     public double getAnomalyScore(float[] point) {
-        return scoreWith(point, 0, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+        return scoreWith(point, DEFAULT_SCORE_FACTORY);
     }
 
-    private double scoreWith(float[] point, int ignoreLeafMassThreshold, ScoreFn seen, ScoreFn unseen, DampFn damp,
-            Normalizer normalizer) {
+    private Double scoreWith(float[] point, IVisitorFactory<Double> vf) {
         if (!isOutputReady())
             return 0.0;
-        return traverseForest(transformToShingledPoint(point),
-                ScoreVisitor.reusableFactory(ignoreLeafMassThreshold, seen, unseen, damp, normalizer), Double::sum,
-                sum -> sum / numberOfTrees);
+        final Function<Double, Double> finisher = x -> x / numberOfTrees;
+
+        return traverseForest(transformToShingledPoint(point), vf, Double::sum, finisher);
     }
 
     /**
@@ -883,17 +886,14 @@ public class RandomCutForest {
      * @return an anomaly score for the given point.
      */
     public DiVector getAnomalyAttribution(float[] point) {
-        return attributionWith(point, 0, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+        return attributionWith(point, DEFAULT_ATTRIBUTION_FACTORY);
     }
 
-    private DiVector attributionWith(float[] point, int ignoreLeafMassThreshold, ScoreFn seen, ScoreFn unseen,
-            DampFn damp, Normalizer normalizer) {
+    private DiVector attributionWith(float[] point, IVisitorFactory<DiVector> vf) {
         if (!isOutputReady())
             return new DiVector(dimensions);
-        Function<DiVector, DiVector> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
-        return traverseForest(transformToShingledPoint(point),
-                AttributionVisitor.reusableFactory(ignoreLeafMassThreshold, seen, unseen, damp, normalizer),
-                DiVector::addToLeft, finisher);
+        final Function<DiVector, DiVector> attributionFinisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
+        return traverseForest(transformToShingledPoint(point), vf, DiVector::addToLeft, attributionFinisher);
     }
 
     /**
@@ -926,6 +926,7 @@ public class RandomCutForest {
      * @param point The point where the density estimate is made.
      * @return A density estimate.
      */
+
     public DensityOutput getSimpleDensity(float[] point) {
         if (!isOutputReady()) {
             return new DensityOutput(dimensions, sampleSize);
@@ -933,9 +934,8 @@ public class RandomCutForest {
 
         Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
 
-        return new DensityOutput(traverseForest(transformToShingledPoint(point),
-                InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled), InterpolationMeasure::addToLeft,
-                finisher));
+        return new DensityOutput(traverseForest(transformToShingledPoint(point), densityFactory,
+                InterpolationMeasure::addToLeft, finisher));
     }
 
     /**
@@ -1500,8 +1500,9 @@ public class RandomCutForest {
     public double getDynamicScore(float[] point, int ignoreLeafMassThreshold, BiFunction<Double, Double, Double> seen,
             BiFunction<Double, Double, Double> unseen, BiFunction<Double, Double, Double> damp) {
         checkArgument(ignoreLeafMassThreshold >= 0, "...");
-        return scoreWith(point, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
-                DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp), NO_NORMALIZER);
+        return scoreWith(point,
+                ScoreVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp), NO_NORMALIZER));
     }
 
     /**
@@ -1594,8 +1595,9 @@ public class RandomCutForest {
             BiFunction<Double, Double, Double> seen, BiFunction<Double, Double, Double> unseen,
             BiFunction<Double, Double, Double> newDamp) {
         checkArgument(ignoreLeafMassThreshold >= 0, "incorrect threshold");
-        return attributionWith(point, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
-                DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), NO_NORMALIZER);
+        return attributionWith(point,
+                AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), NO_NORMALIZER));
     }
 
     /**
@@ -1633,8 +1635,8 @@ public class RandomCutForest {
             return 0.0;
         }
 
-        IVisitorFactory<Double> visitorFactory = ScoreVisitor.reusableFactory(ignoreLeafMassThreshold, seen, unseen,
-                damp, normalizer);
+        IVisitorFactory<Double> visitorFactory = ScoreVisitor.reusableFactory(false, ignoreLeafMassThreshold, seen,
+                unseen, damp, normalizer);
 
         ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(HIGH, precision,
                 DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
@@ -1651,8 +1653,8 @@ public class RandomCutForest {
             return new DiVector(dimensions);
         }
 
-        IVisitorFactory<DiVector> visitorFactory = AttributionVisitor.reusableFactory(ignoreLeafMassThreshold, seen,
-                unseen, damp, normalizer);
+        IVisitorFactory<DiVector> visitorFactory = AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold,
+                seen, unseen, damp, normalizer);
 
         ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions, HIGH,
                 precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);

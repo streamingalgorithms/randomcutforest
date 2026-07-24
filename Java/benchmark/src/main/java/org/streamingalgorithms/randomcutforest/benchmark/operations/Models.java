@@ -15,6 +15,9 @@
 
 package org.streamingalgorithms.randomcutforest.benchmark.operations;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
+
 import java.util.EnumMap;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
@@ -69,11 +72,11 @@ public final class Models {
     public static final class Prepared {
         public final Kind kind;
         public final Object model; // trained + saturated
-        public final double[][] stream; // SCORED-row hold-out to drive the measured pass
+        public final float[][] stream; // SCORED-row hold-out to drive the measured pass
         public final long clock0; // next timestamp after saturation
         public final int dims;
 
-        Prepared(Kind kind, Object model, double[][] stream, long clock0, int dims) {
+        Prepared(Kind kind, Object model, float[][] stream, long clock0, int dims) {
             this.kind = kind;
             this.model = model;
             this.stream = stream;
@@ -149,9 +152,9 @@ public final class Models {
         // timestamp axis before the measured pass.)
         saturate(kind, model, data, saturation);
 
-        double[][] stream = new double[Datasets.SCORED][];
+        float[][] stream = new float[Datasets.SCORED][];
         for (int i = 0; i < Datasets.SCORED; i++) {
-            stream[i] = data[saturation + i];
+            stream[i] = toFloatArray(data[saturation + i]);
         }
         return new Prepared(kind, model, stream, saturation, dimensions); // clock0 = saturation
     }
@@ -160,7 +163,7 @@ public final class Models {
      * One streaming tuple -> one comparable scalar. RCF ignores the timestamp;
      * TRCF/Caster use it.
      */
-    public static double processOne(Kind kind, Object model, double[] point, long ts) {
+    public static double processOne(Kind kind, Object model, float[] point, long ts) {
         switch (kind) {
         case RCF: {
             RandomCutForest f = (RandomCutForest) model;
@@ -170,9 +173,9 @@ public final class Models {
             return s;
         }
         case TRCF:
-            return ((ThresholdedRandomCutForest) model).process(point, ts).getRCFScore();
+            return ((ThresholdedRandomCutForest) model).process(toDoubleArray(point), ts).getRCFScore();
         case CASTER:
-            return ((RCFCaster) model).process(point, ts).getRCFScore();
+            return ((RCFCaster) model).process(toDoubleArray(point), ts).getRCFScore();
         default:
             throw new IllegalStateException("unknown model " + kind);
         }

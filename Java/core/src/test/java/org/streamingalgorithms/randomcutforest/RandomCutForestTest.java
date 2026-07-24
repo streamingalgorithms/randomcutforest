@@ -42,6 +42,8 @@ import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.*;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.TestUtils.EPSILON;
+import static org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY;
+import static org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor.DEFAULT_SCORE_FACTORY;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -52,7 +54,6 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor;
 import org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
@@ -379,8 +380,7 @@ public class RandomCutForestTest {
         double fold = forest.getAnomalyScore(q);
 
         // collector path: same ScoreVisitor, non-reuse traverse, sum + average
-        IVisitorFactory<Double> factory = ScoreVisitor.reusableFactory(0, DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN,
-                DEFAULT_DAMP, DEFAULT_NORMALIZER);
+        IVisitorFactory<Double> factory = DEFAULT_SCORE_FACTORY;
         double collected = forest.getComponents().stream().map(c -> ((SamplerPlusTree<Integer, float[]>) c).getTree())
                 .mapToDouble(t -> t.traverse(shingled, factory)) // newVisitor + getResult() per tree
                 .sum() / forest.getNumberOfTrees();
@@ -445,8 +445,7 @@ public class RandomCutForestTest {
         DiVector fold = forest.getAnomalyAttribution(q);
 
         // COLLECTOR path: same AttributionVisitor, non-reuse traverse + sum + average
-        IVisitorFactory<DiVector> factory = AttributionVisitor.reusableFactory(0, DEFAULT_SCORE_SEEN,
-                DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+        IVisitorFactory<DiVector> factory = DEFAULT_ATTRIBUTION_FACTORY;
 
         DiVector collected = new DiVector(dims);
         DiVector finalCollected = collected;

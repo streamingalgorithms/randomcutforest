@@ -33,11 +33,10 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.validateInternalState;
 import static org.streamingalgorithms.randomcutforest.tree.NodeStore.Null;
+import static org.streamingalgorithms.randomcutforest.tree.RandomCutTree.GOLDEN_GAMMA;
+import static org.streamingalgorithms.randomcutforest.tree.RandomCutTree.mix64;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -721,10 +720,10 @@ public class RandomCutTreeTest {
         assertThrows(IllegalArgumentException.class, () -> tree.traverse(null, null));
         assertThrows(IllegalArgumentException.class, () -> tree.traverseMulti(null, null));
         tree.addPoint(index, 0, helper);
-        double unseen = tree.traverse(new float[2], ScoreVisitor.reusableFactory(0, (x, y) -> 1, (x, y) -> 2,
+        double unseen = tree.traverse(new float[2], ScoreVisitor.reusableFactory(false, 0, (x, y) -> 1, (x, y) -> 2,
                 (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY));
         assertEquals(unseen, 2.0);
-        double seen = tree.traverse(p, ScoreVisitor.reusableFactory(0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3,
+        double seen = tree.traverse(p, ScoreVisitor.reusableFactory(false, 0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3,
                 DefaultScoreFunctions.Normalizer.IDENTITY));
         assertEquals(seen, 3.75); // damp*seen
     }
@@ -743,6 +742,21 @@ public class RandomCutTreeTest {
 
         assertThrows(IllegalArgumentException.class, () -> tree.growArrayBox(null, pointStoreFloat, 187));
         assertThrows(IllegalArgumentException.class, () -> tree.getArrayBox(187));
+    }
+
+    /**
+     * the following test matches JDK SplittableRandom -- we had to use the code
+     * directly to get at the randomseed
+     */
+    @Test
+    void matchesSplittableRandom() {
+        for (long seed : new long[] { 0L, 1L, -1L, 42L, Long.MIN_VALUE, Long.MAX_VALUE }) {
+            SplittableRandom ref = new SplittableRandom(seed);
+            long cursor = seed;
+            for (int i = 0; i < 10_000; i++) {
+                assertEquals(ref.nextLong(), mix64(cursor += GOLDEN_GAMMA));
+            }
+        }
     }
 
 }

@@ -63,7 +63,7 @@ public class ConditionalFieldTest {
         Random prg = new Random(0);
         NormalMixtureTestData generator = new NormalMixtureTestData(baseMu, baseSigma, anomalyMu, anomalySigma,
                 transitionToAnomalyProbability, transitionToBaseProbability);
-        double[][] data = generator.generateTestData(dataSize, newDimensions, 100);
+        double[][] data = generator.generateTestData(dataSize, newDimensions, 200);
 
         for (int i = 0; i < 2000; i++) {
             // shrink, shift at random

@@ -84,7 +84,7 @@ public class SerializationFidelityTest {
 
     private static final Map<Models.Kind, Object> STATE = new EnumMap<>(Models.Kind.class);
     private static final Map<Models.Kind, double[]> REF = new EnumMap<>(Models.Kind.class);
-    private static final Map<Models.Kind, double[][]> STREAM = new EnumMap<>(Models.Kind.class);
+    private static final Map<Models.Kind, float[][]> STREAM = new EnumMap<>(Models.Kind.class);
     private static final Map<Models.Kind, Long> CLOCK0 = new EnumMap<>(Models.Kind.class);
 
     @BeforeAll
@@ -136,7 +136,7 @@ public class SerializationFidelityTest {
 
         Object state = STATE.get(model);
         double[] ref = REF.get(model);
-        double[][] stream = STREAM.get(model);
+        float[][] stream = STREAM.get(model);
 
         Object rebuilt;
         try {

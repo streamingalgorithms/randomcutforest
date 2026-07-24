@@ -214,8 +214,13 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         return toMeasure(foldedMeasure, foldedDistances, foldedProbMass, foldedSampleSize);
     }
 
-    public void resetAcrossQueries(float[] point) { // note: takes the new point
-        reset(); // clears measure/distances/probMass + flags
+    public void resetAcrossQueries(float[] point) {
+        reset();
+        Arrays.fill(foldedMeasure, 0.0);
+        Arrays.fill(foldedDistances, 0.0);
+        Arrays.fill(foldedProbMass, 0.0);
+        foldedSampleSize = 0;
+        foldedScore = 0.0;
     }
 
     private InterpolationMeasure toMeasure(double[] m, double[] d, double[] p, int ss) {
@@ -254,6 +259,11 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         return new IVisitorFactory<InterpolationMeasure>() {
             @Override
             public boolean isReusable() {
+                return true;
+            }
+
+            @Override
+            public boolean isReusableAcrossQueries() {
                 return true;
             }
 

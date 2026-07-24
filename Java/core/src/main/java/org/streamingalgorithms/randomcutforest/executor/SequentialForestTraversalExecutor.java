@@ -31,6 +31,8 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+
 import java.util.function.BiConsumer;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
@@ -43,16 +45,21 @@ import org.streamingalgorithms.randomcutforest.tree.NodeView;
 public class SequentialForestTraversalExecutor extends AbstractForestTraversalExecutor {
 
     private final NodeView resusableView;
+    private boolean multiRead;
+    private final int dimensions; // ctor already takes it; just retain it
+    private final IVisitorFactory<?>[] slotKey = new IVisitorFactory<?>[4];
+    private final IRFVisitor<?>[] slotVal = new IRFVisitor<?>[4];
 
     public SequentialForestTraversalExecutor(ComponentList<?, ?> components, int dimensions, int sampleSize) {
         super(components);
+        this.dimensions = dimensions;
         resusableView = new NodeView(dimensions, sampleSize);
     }
 
     private <R, S> S foldForest(float[] point, IVisitorFactory<R> vf, ConvergingAccumulator<R> conv,
             Function<R, S> finisher) {
-        /// slotFor(vf, point) can be used someday.
-        IRFVisitor<R> slot = vf.newReusableVisitor(point);
+        /// slotFor(vf, point) can be used someday. TODAY!!
+        IRFVisitor<R> slot = slotFor(vf, point); // vf.newReusableVisitor(point);
         NodeView viewTower = resusableView;
         resusableView.set(point);
         if (conv == null) { // EXACT-foldable spine
@@ -84,7 +91,8 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
             return foldForest(point, visitorFactory, null, finisher); // unified fold spine
         }
 
-        IRFVisitor<R> slot = visitorFactory.newReusableVisitor(point);
+        IRFVisitor<R> slot = slotFor(visitorFactory, point);
+        // IRFVisitor<R> slot = visitorFactory.newReusableVisitor(point);
         NodeView viewTower = resusableView;
         resusableView.set(point);
         R acc = null;
@@ -105,7 +113,7 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
     }
 
     private <R, A, S> S collectReusable(float[] point, IVisitorFactory<R> vf, Collector<R, A, S> collector) {
-        IRFVisitor<R> slot = vf.newReusableVisitor(point);
+        IRFVisitor<R> slot = slotFor(vf, point); // vf.newReusableVisitor(point);
         A container = collector.supplier().get();
         BiConsumer<A, R> acc = collector.accumulator();
         NodeView viewTower = resusableView;
@@ -167,5 +175,29 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
             acc.accept(container, slot.getResult()); // detached per-tree sample; no lift, no sink
         }
         return collector.finisher().apply(container);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <R> IRFVisitor<R> slotFor(IVisitorFactory<R> vf, float[] point) {
+        if (multiRead || !vf.isReusableAcrossQueries()) {
+            return vf.newReusableVisitor(point);
+        }
+        checkArgument(point.length == dimensions, "unexpected point length");
+
+        for (int i = 0; i < slotKey.length; i++) {
+            if (slotKey[i] == vf) {
+                IRFVisitor<R> v = (IRFVisitor<R>) slotVal[i];
+                v.resetAcrossQueries(point);
+                return v;
+            }
+            if (slotKey[i] == null) {
+                slotKey[i] = vf;
+                IRFVisitor<R> v = vf.newReusableVisitor(point);
+                v.resetAcrossQueries(point); // redundant on a fresh visitor — deliberately
+                slotVal[i] = v;
+                return v;
+            }
+        }
+        return vf.newReusableVisitor(point);
     }
 }

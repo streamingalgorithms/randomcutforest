@@ -123,8 +123,18 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
         return savedScore * normalizer.scale(treeMass);
     }
 
-    public static IVisitorFactory<Double> reusableFactory(int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
-            ScoreFn scoreUnseenFn, DampFn dampFn, Normalizer normalizer) {
+    @Override
+    public void resetAcrossQueries(float[] point) {
+        foldedScore = 0;
+    }
+
+    public static final IVisitorFactory<Double> DEFAULT_SCORE_FACTORY = reusableFactory(true,
+            DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
+            DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
+            DefaultScoreFunctions.DEFAULT_NORMALIZER);
+
+    public static IVisitorFactory<Double> reusableFactory(boolean acrossQueries, int ignoreLeafMassThreshold,
+            ScoreFn scoreSeenFn, ScoreFn scoreUnseenFn, DampFn dampFn, Normalizer normalizer) {
         return new IVisitorFactory<Double>() {
             @Override
             public boolean isReusable() {
@@ -134,6 +144,11 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
             @Override
             public boolean isFoldable() {
                 return true;
+            }
+
+            @Override
+            public boolean isReusableAcrossQueries() {
+                return acrossQueries;
             }
 
             // sizes from the (projected) point; mass + copy come from prepare(tree, point)
