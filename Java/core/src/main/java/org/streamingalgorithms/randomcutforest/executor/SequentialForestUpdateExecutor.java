@@ -16,7 +16,6 @@
 package org.streamingalgorithms.randomcutforest.executor;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.tree.UpdateHelper;
@@ -32,15 +31,24 @@ public class SequentialForestUpdateExecutor<PointReference, Point>
 
     protected final UpdateHelper<PointReference> updateHelper;
 
+    private final java.util.ArrayList<UpdateResult<PointReference>> resultScratch;
+
     public SequentialForestUpdateExecutor(IStateCoordinator<PointReference, Point> updateCoordinator,
             ComponentList<PointReference, Point> components) {
         super(updateCoordinator, components);
         updateHelper = new UpdateHelper<>(updateCoordinator.getStore().getDimensions());
+        resultScratch = new java.util.ArrayList<>(components.size());
     }
 
     @Override
     protected List<UpdateResult<PointReference>> updateInternal(PointReference point, long seqNum) {
-        return components.stream().map(t -> t.update(point, seqNum, updateHelper)).filter(UpdateResult::isStateChange)
-                .collect(Collectors.toList());
+        resultScratch.clear(); // retains capacity; grow() fires only during warmup
+        for (int i = 0, n = components.size(); i < n; i++) {
+            UpdateResult<PointReference> r = components.get(i).update(point, seqNum, updateHelper);
+            if (r.isStateChange()) {
+                resultScratch.add(r);
+            }
+        }
+        return resultScratch;
     }
 }

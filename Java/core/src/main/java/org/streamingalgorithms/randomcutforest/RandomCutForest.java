@@ -53,16 +53,7 @@ import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSumma
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
-import org.streamingalgorithms.randomcutforest.returntypes.ConditionalTreeSample;
-import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
-import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
-import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
-import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
-import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
-import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDiVectorAccumulator;
-import org.streamingalgorithms.randomcutforest.returntypes.OneSidedConvergingDoubleAccumulator;
-import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
-import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.returntypes.*;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
 import org.streamingalgorithms.randomcutforest.store.IPointStore;
@@ -566,13 +557,13 @@ public class RandomCutForest {
      * @param updateShingleOnly only update the shingle (true for internal
      *                          shingling)
      */
-
     public void update(float[] point, boolean updateShingleOnly) {
         checkNotNull(point, "point must not be null");
-        checkArgument(internalShinglingEnabled || point.length == dimensions,
-                String.format("point.length must equal %d", dimensions));
-        checkArgument(!internalShinglingEnabled || point.length == inputDimensions,
-                String.format("point.length must equal %d for internal shingling", inputDimensions));
+        if (!internalShinglingEnabled && point.length != dimensions)
+            throw new IllegalArgumentException("point.length must equal " + dimensions);
+        if (internalShinglingEnabled && point.length != inputDimensions)
+            throw new IllegalArgumentException(
+                    "point.length must equal " + inputDimensions + " for internal shingling");
         checkArgument(!updateShingleOnly || internalShinglingEnabled,
                 "update shingle setting is only valid for internal shingling");
 
@@ -913,8 +904,7 @@ public class RandomCutForest {
             return getAnomalyAttribution(point);
         }
         return approximateAttribution(point, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_PRECISION,
-                DEFAULT_APPROXIMATE_ANOMALY_SCORE_HIGH_IS_CRITICAL, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD,
-                DEFAULT_SCORE_SEEN, DEFAULT_SCORE_UNSEEN, DEFAULT_DAMP, DEFAULT_NORMALIZER);
+                DEFAULT_APPROXIMATE_ANOMALY_SCORE_HIGH_IS_CRITICAL, DEFAULT_ATTRIBUTION_FACTORY);
     }
 
     /**
@@ -1623,9 +1613,9 @@ public class RandomCutForest {
         if (parallelExecutionEnabled) {
             return getDynamicAttribution(point, ignoreLeafMassThreshold, seen, unseen, newDamp);
         }
-        return approximateAttribution(point, precision, highIsCritical, ignoreLeafMassThreshold,
-                DefaultScoreFunctions.score(seen), DefaultScoreFunctions.score(unseen),
-                DefaultScoreFunctions.damp(newDamp), Normalizer.IDENTITY);
+        return approximateAttribution(point, precision, highIsCritical,
+                AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), Normalizer.IDENTITY));
     }
 
     private double approximateScore(float[] point, double precision, boolean highIsCritical,
@@ -1647,21 +1637,22 @@ public class RandomCutForest {
     }
 
     private DiVector approximateAttribution(float[] point, double precision, boolean highIsCritical,
-            int ignoreLeafMassThreshold, ScoreFn seen, ScoreFn unseen, DampFn damp, Normalizer normalizer) {
+            IVisitorFactory<DiVector> vf) {
 
         if (!isOutputReady()) {
             return new DiVector(dimensions);
         }
 
-        IVisitorFactory<DiVector> visitorFactory = AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold,
-                seen, unseen, damp, normalizer);
-
-        ConvergingAccumulator<DiVector> accumulator = new OneSidedConvergingDiVectorAccumulator(dimensions, HIGH,
-                precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
+        ConvergingAccumulator<DiVector> accumulator = new PrimitiveConvergingAccumulator<>(HIGH, precision,
+                DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
+        // ConvergingAccumulator<DiVector> accumulator = new
+        // OneSidedConvergingDiVectorAccumulator(dimensions, HIGH,
+        // precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED,
+        // numberOfTrees);
 
         Function<DiVector, DiVector> finisher = vector -> vector.scaleInPlace(1.0 / accumulator.getValuesAccepted());
 
-        return traverseForest(transformToShingledPoint(point), visitorFactory, accumulator, finisher);
+        return traverseForest(transformToShingledPoint(point), vf, accumulator, finisher);
     }
 
 }

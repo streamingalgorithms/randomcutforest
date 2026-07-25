@@ -31,11 +31,15 @@ import lombok.Builder;
 @Builder
 public class UpdateResult<PointReference> {
 
-    private static final UpdateResult<Object> NOOP = builder().build();
+    private static final UpdateResult<Object> NOOP = new UpdateResult<>(null, null);
 
     private final PointReference addedPoint;
-
     private final PointReference deletedPoint;
+
+    UpdateResult(PointReference addedPoint, PointReference deletedPoint) {
+        this.addedPoint = addedPoint;
+        this.deletedPoint = deletedPoint;
+    }
 
     /**
      * Return an {@code UpdateResult} value a no-op (an operation that did not
@@ -84,5 +88,13 @@ public class UpdateResult<PointReference> {
      */
     public boolean isStateChange() {
         return addedPoint != null || deletedPoint != null;
+    }
+
+    public PointReference addedPointOrNull() {
+        return addedPoint;
+    }
+
+    public PointReference deletedPointOrNull() {
+        return deletedPoint;
     }
 }

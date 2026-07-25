@@ -46,6 +46,22 @@ public class PointStoreCoordinator<Point> extends AbstractUpdateCoordinator<Inte
     @Override
     public void completeUpdate(List<UpdateResult<Integer>> updateResults, Integer updateInput) {
         if (updateInput != null) { // can be null for initial shingling
+            for (int i = 0, n = updateResults.size(); i < n; i++) {
+                UpdateResult<Integer> result = updateResults.get(i);
+                Integer added = result.addedPointOrNull();
+                if (added != null)
+                    store.incrementRefCount(added);
+                Integer deleted = result.deletedPointOrNull();
+                if (deleted != null)
+                    store.decrementRefCount(deleted);
+            }
+            store.decrementRefCount(updateInput);
+        }
+        totalUpdates++;
+    }
+
+    public void completeUpdateA(List<UpdateResult<Integer>> updateResults, Integer updateInput) {
+        if (updateInput != null) { // can be null for initial shingling
             updateResults.forEach(result -> {
                 result.getAddedPoint().ifPresent(store::incrementRefCount);
                 result.getDeletedPoint().ifPresent(store::decrementRefCount);

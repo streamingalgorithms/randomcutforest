@@ -50,9 +50,7 @@ import org.streamingalgorithms.randomcutforest.*;
 import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.store.IPointStoreView;
 
-import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import lombok.Getter;
 
 /**
@@ -96,8 +94,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected HashMap<Integer, List<Long>> sequenceMap;
     protected int basicCache;
     protected int limit;
-    protected Int2IntOpenHashMap smallMap;
-    protected Int2IntOpenHashMap spareMap; // double buffer; dRV set once at construction
 
     public static int MAX_BASIC_CACHE = Long.SIZE;
 
@@ -230,8 +226,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             }
         }
 
-        checkArgument(range > 0, () -> " the union is a single point " + Arrays.toString(point)
-                + "or the box is inappropriate, box" + box.toString() + "factor =" + factor);
+        checkArgument(range > 0, " the union is a single point or the box is inappropriate, box");
 
         double breakPoint = factor * range;
 
@@ -648,8 +643,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
         int leafNode = current;
         int leafPointIndex = getPointIndex(leafNode);
-        checkArgument(leafPointIndex == pointIndex,
-                () -> " deleting wrong node " + leafPointIndex + " instead of " + pointIndex);
+        if (leafPointIndex != pointIndex)
+            throw new IllegalArgumentException(" deleting wrong node " + leafPointIndex + " instead of " + pointIndex);
 
         // ---- point of no return: validation passed, begin mutating ----
         removeLeaf(leafPointIndex, sequenceIndex);
@@ -782,24 +777,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     /////// Bounding box
 
     public void resizeCache(double fraction) {
-        basicCache = min((int) (2 * log(numberOfLeaves) / log(2.0)), MAX_BASIC_CACHE);
-        limit = min(basicCache + (int) Math.floor(fraction * (numberOfLeaves - 1)), numberOfLeaves - 1);
+        basicCache = min((int) (log(numberOfLeaves) / log(2.0)), MAX_BASIC_CACHE);
+        limit = min(2 * basicCache + (int) Math.floor(fraction * (numberOfLeaves - 1)), numberOfLeaves - 1);
         if (limit == numberOfLeaves - 1 || fraction == 0) {
             // fracion is a hard signal
             basicCache = 0;
-            smallMap = null;
-            spareMap = null;
+            nodeAt = null;
         } else {
-            if (smallMap == null) {
-                smallMap = new Int2IntOpenHashMap(basicCache);
-                smallMap.defaultReturnValue(Integer.MAX_VALUE);
+            if (nodeAt == null) {
+                nodeAt = new int[basicCache];
+                mapSize = 0;
             }
-            if (spareMap == null) {
-                spareMap = new Int2IntOpenHashMap(basicCache);
-                spareMap.defaultReturnValue(Integer.MAX_VALUE);
-            }
-            smallMap.clear();
-            spareMap.clear();
         }
         if (fraction > 0) {
             rangeSumData = new double[limit];
@@ -815,78 +803,60 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected int translate(int index) {
         if (rangeSumData == null)
             return Integer.MAX_VALUE;
-        if (basicCache + index < limit) {
-            // should be the case for fraction = 1
-            return basicCache + index;
-        }
-        if (smallMap != null) {
-            int v = smallMap.get(index);
-            return v;
-        }
-        return Integer.MAX_VALUE;
+        if (basicCache + index < limit)
+            return basicCache + index; // fraction = 1 case
+        int slot = slotOf(index);
+        return slot >= 0 ? slot : Integer.MAX_VALUE;
+    }
+
+    private int[] nodeAt; // slot -> node, length basicCache; replaces smallMap + spareMap
+    private int mapSize; // dense: live slots are 0..mapSize-1
+
+    private int slotOf(int node) {
+        for (int s = 0; s < mapSize; s++)
+            if (nodeAt[s] == node)
+                return s;
+        return -1;
     }
 
     void installCache(int[] nodeScratch, int count, int depth) {
-        if (smallMap == null)
+        if (nodeAt == null)
             return;
+        final int n = count + depth;
+        long claimed = 0L; // this is why MAX_BASIC_CACHE is Long.SIZE
 
-        Int2IntOpenHashMap temp = spareMap;
-        long hash = 0L; // this is why MAX_BASIC_CACHE is Long.SIZE
-
-        for (int i = 0; i < count + depth; i++) {
+        // phase 1: carry live entries, allocate fresh slots
+        for (int i = 0; i < n; i++) {
             int node = (i < count) ? nodeScratch[i] : nodeScratch[numberOfLeaves - 1 - i + count];
             if (node + basicCache < limit)
                 continue;
-            int slot = smallMap.get(node);
-            if (slot != Integer.MAX_VALUE) {
-                temp.put(node, slot);
-                // carry valid box at its slot
-                // maybe covered elsewhere but does not matter
-            } else if (smallMap.size() < basicCache) {
-                int fresh = smallMap.size(); // dense invariant => next free slot
+            int slot = slotOf(node);
+            if (slot >= 0) {
+                claimed |= 1L << slot; // carry valid box at its slot
+            } else if (mapSize < basicCache) {
+                int fresh = mapSize++; // dense invariant => next free slot
+                nodeAt[fresh] = node;
                 rangeSumData[fresh] = 0.0; // invalidate -> rebuild on first read
-                smallMap.put(node, fresh); // advance size() AND mark handled for B
-                temp.put(node, fresh);
+                claimed |= 1L << fresh;
             }
         }
 
-        ObjectIterator<Int2IntMap.Entry> it = smallMap.int2IntEntrySet().fastIterator();
-
-        for (int i = 0; i < count + depth; i++) {
+        // phase 2: reclaim stale slots for whatever is left
+        int scan = 0;
+        for (int i = 0; i < n; i++) {
             int node = (i < count) ? nodeScratch[i] : nodeScratch[numberOfLeaves - 1 - i + count];
-            if (temp.containsKey(node) || node + basicCache < limit) {
-                continue; // already carried or fresh in phase 1
-            }
-            int slot = Integer.MAX_VALUE;
-            while (it.hasNext()) {
-                Int2IntMap.Entry e = it.next();
-                int key = e.getIntKey();
-                if (!temp.containsKey(key)) { // stale entry -> reclaim its slot
-                    slot = e.getIntValue();
-                    hash |= 1L << slot; // remember: victim's slot was taken
-                    rangeSumData[slot] = 0.0;
-                    temp.put(node, slot);
-                    break;
-                }
-            }
-            if (slot == Integer.MAX_VALUE) {
-                break; // smallMap exhausted of stale entries: working set exceeds capacity
-            }
+            if (node + basicCache < limit || slotOf(node) >= 0)
+                continue;
+            while (scan < mapSize && (claimed & (1L << scan)) != 0)
+                scan++;
+            if (scan == mapSize)
+                break; // no stale slots: working set exceeds capacity
+            nodeAt[scan] = node;
+            rangeSumData[scan] = 0.0;
+            claimed |= 1L << scan;
         }
-
-        it = smallMap.int2IntEntrySet().fastIterator();
-        while (it.hasNext()) {
-            Int2IntMap.Entry e = it.next();
-            int key = e.getIntKey();
-            boolean covered = (hash & (1L << e.getIntValue())) != 0;
-            if (!temp.containsKey(key) && !covered && temp.size() < basicCache) {
-                temp.put(key, e.getIntValue()); // valid box, carry as-is (backfills density)
-            }
-        }
-
-        smallMap.clear();
-        spareMap = smallMap;
-        smallMap = temp;
+        // phase 3 implicit: unclaimed slots still hold their own node, untouched and
+        // valid
     }
 
     int addLeafPoints(int[] leafArray, int node, int firstEmpty) {
@@ -912,7 +882,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             psv.setAsSlice(getPointIndex(index), data, base);
             return 0;
         }
-        checkArgument(isInternal(index), () -> " incomplete state " + index);
         int idx = translate(index);
         if (idx == Integer.MAX_VALUE) {
             return buildInto(data, base, index, psv); // uncached: straight into destination
@@ -941,7 +910,6 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         if (isLeaf(sibling)) {
             return psv.addToSlice(getPointIndex(sibling), data, base);
         }
-        checkArgument(isInternal(sibling), () -> " incomplete state " + sibling);
         int sidx = translate(sibling);
         if (sidx != Integer.MAX_VALUE) {
             int slot = 2 * sidx * dimension;

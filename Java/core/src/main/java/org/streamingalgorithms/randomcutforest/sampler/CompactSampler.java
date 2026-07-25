@@ -151,23 +151,55 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
             float weight = computeWeight(sequenceIndex, samplingWeight);
             boolean initial = (size < capacity && random.nextDouble() < initialAcceptProbability(size));
             if (initial || (weight < this.weight[0])) {
-                acceptPointState = new AcceptPointState(sequenceIndex, weight);
-                if (!initial) {
+                acceptSequenceIndex = sequenceIndex;
+                acceptWeight = weight;
+                hasAcceptState = true;
+                if (!initial)
                     evictMax();
-                }
                 return true;
             }
         } // 0 weight implies ignore sample
         return false;
     }
 
+    protected static final class MutableSampled implements ISampled<Integer> {
+        private int value;
+        private float weight;
+        private long sequenceIndex;
+
+        void set(int value, float weight, long sequenceIndex) {
+            this.value = value;
+            this.weight = weight;
+            this.sequenceIndex = sequenceIndex;
+        }
+
+        @Override
+        public Integer getValue() {
+            return value;
+        } // one box, forced by ISampled<Integer>
+
+        @Override
+        public long getSequenceIndex() {
+            return sequenceIndex;
+        }
+
+        public float getWeight() {
+            return weight;
+        }
+
+    }
+
+    private final MutableSampled evictHolder = new MutableSampled();
+
     /**
      * evicts the maximum weight point from the sampler. can be used repeatedly to
      * change the size of the sampler and associated tree
      */
+
     public void evictMax() {
         long evictedIndex = storeSequenceIndexesEnabled ? this.sequenceIndex[0] : 0L;
-        evictedPoint = new Weighted<>(this.pointIndex[0], this.weight[0], evictedIndex);
+        evictHolder.set(this.pointIndex[0], this.weight[0], evictedIndex);
+        evictedPoint = evictHolder;
         --size;
         this.weight[0] = this.weight[size];
         this.pointIndex[0] = this.pointIndex[size];
@@ -220,22 +252,24 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
     }
 
     public void addPoint(Integer pointIndex, float weight, long sequenceIndex) {
-        checkArgument(acceptPointState == null && size < capacity && pointIndex != null, " operation not permitted");
-        acceptPointState = new AcceptPointState(sequenceIndex, weight);
+        checkArgument(!hasAcceptState && size < capacity && pointIndex != null, " operation not permitted");
+        acceptSequenceIndex = sequenceIndex;
+        acceptWeight = weight;
+        hasAcceptState = true;
         addPoint(pointIndex);
     }
 
     @Override
     public void addPoint(Integer pointIndex) {
         if (pointIndex != null) {
-            checkState(size < capacity, "sampler full");
-            checkState(acceptPointState != null,
+            checkState(hasAcceptState,
                     "this method should only be called after a successful call to acceptSample(long)");
-            this.weight[size] = acceptPointState.getWeight();
+            this.weight[size] = acceptWeight;
             this.pointIndex[size] = pointIndex;
             if (storeSequenceIndexesEnabled) {
-                this.sequenceIndex[size] = acceptPointState.getSequenceIndex();
+                this.sequenceIndex[size] = acceptSequenceIndex;
             }
+
             int current = size++;
             while (current > 0) {
                 int tmp = (current - 1) / 2;
@@ -245,7 +279,7 @@ public class CompactSampler extends AbstractStreamSampler<Integer> {
                 } else
                     break;
             }
-            acceptPointState = null;
+            hasAcceptState = false;
         }
     }
 

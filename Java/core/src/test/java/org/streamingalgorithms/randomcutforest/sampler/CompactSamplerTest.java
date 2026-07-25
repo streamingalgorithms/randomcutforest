@@ -12,7 +12,6 @@
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
-
 package org.streamingalgorithms.randomcutforest.sampler;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -191,18 +190,19 @@ public class CompactSamplerTest {
                 .thenReturn(0.99);
 
         sampler.acceptPoint(10L);
-        double weight1 = sampler.acceptPointState.getWeight();
+        double weight1 = sampler.acceptWeight;
         sampler.addPoint(1);
         sampler.acceptPoint(11L);
-        double weight2 = sampler.acceptPointState.getWeight();
-        // acceptstate is non-null
+        double weight2 = sampler.acceptWeight;
+        // accept state is live (hasAcceptState == true) before the paired addPoint
         assertThrows(IllegalArgumentException.class, () -> sampler.addPoint(12, 2.0f, 0L));
         sampler.addPoint(12);
         assertThrows(IllegalArgumentException.class, () -> sampler.acceptPoint(12L, -1f));
+        // zero-weight accept must not arm the handoff state
         sampler.acceptPoint(12L, 0f);
-        assertNull(sampler.acceptPointState);
+        assertFalse(sampler.hasAcceptState);
         sampler.acceptPoint(12L);
-        double weight3 = sampler.acceptPointState.getWeight();
+        double weight3 = sampler.acceptWeight;
         sampler.addPoint(123);
 
         assertEquals(3, sampler.size());
@@ -234,7 +234,7 @@ public class CompactSamplerTest {
         // The sampler should accept all samples until initial fraction
         for (int i = 0; i < sampleSize * sampler.initialAcceptFraction; i++) {
             assertTrue(sampler.acceptPoint(i));
-            assertNotNull(sampler.acceptPointState);
+            assertTrue(sampler.hasAcceptState);
             sampler.addPoint(i);
         }
         assertTrue(sampler.initialAcceptProbability(sampler.size) < 1.0);
@@ -259,9 +259,13 @@ public class CompactSamplerTest {
             if (sampler.acceptPoint(i)) {
                 numAccepted++;
                 assertTrue(sampler.getEvictedPoint().isPresent());
-                assertNotNull(sampler.acceptPointState);
-                Weighted<Integer> evictedPoint = (Weighted<Integer>) sampler.getEvictedPoint().get();
-                assertTrue(sampler.acceptPointState.getWeight() < evictedPoint.getWeight());
+                assertTrue(sampler.hasAcceptState);
+                // evicted point is the reused mutable holder, not a Weighted; read weight off
+                // it.
+                // NOTE: if your holder type is named differently, change the cast target below.
+                CompactSampler.MutableSampled evictedPoint = (CompactSampler.MutableSampled) sampler.getEvictedPoint()
+                        .get();
+                assertTrue(sampler.acceptWeight < evictedPoint.getWeight());
                 sampler.addPoint(i);
             }
         }

@@ -91,7 +91,7 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
             // whose value is equal to `point`
             P addedPoint = tree.addPoint(point, sequenceIndex, helper);
             sampler.addPoint(addedPoint);
-            return UpdateResult.<P>builder().addedPoint(addedPoint).deletedPoint(deleteRef).build();
+            return new UpdateResult<>(addedPoint, deleteRef);
         }
         return UpdateResult.noop();
     }

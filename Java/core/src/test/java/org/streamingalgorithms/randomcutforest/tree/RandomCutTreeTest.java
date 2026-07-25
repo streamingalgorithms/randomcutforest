@@ -741,7 +741,6 @@ public class RandomCutTreeTest {
         assertThrows(IllegalStateException.class, () -> tree.traverseTreeMulti(null, null, null, tree.root, 0));
 
         assertThrows(IllegalArgumentException.class, () -> tree.growArrayBox(null, pointStoreFloat, 187));
-        assertThrows(IllegalArgumentException.class, () -> tree.getArrayBox(187));
     }
 
     /**

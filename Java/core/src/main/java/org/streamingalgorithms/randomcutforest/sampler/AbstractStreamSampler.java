@@ -107,7 +107,10 @@ public abstract class AbstractStreamSampler<P> implements IStreamSampler<P> {
      *
      * Visible for testing.
      */
-    protected AcceptPointState acceptPointState;
+    // protected AcceptPointState acceptPointState;
+    protected long acceptSequenceIndex;
+    protected float acceptWeight;
+    protected boolean hasAcceptState;
 
     public boolean acceptPoint(long sequenceIndex) {
         return acceptPoint(sequenceIndex, 1.0f);
