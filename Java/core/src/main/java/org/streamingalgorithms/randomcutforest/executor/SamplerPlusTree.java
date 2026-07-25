@@ -118,7 +118,7 @@ public class SamplerPlusTree<P, Q> implements IComponentModel<P, Q> {
 
     @Override
     public <T> void setConfig(String name, T value, Class<T> clazz) {
-        if (Config.BOUNDING_BOX_CACHE_FRACTION.equals(name)) {
+        if (Config.BOUNDING_BOX_CACHE_FRACTION.equals(name) || Config.MULTI_READ.equals(name)) {
             tree.setConfig(name, value, clazz);
         } else if (Config.TIME_DECAY.equals(name)) {
             sampler.setConfig(name, value, clazz);

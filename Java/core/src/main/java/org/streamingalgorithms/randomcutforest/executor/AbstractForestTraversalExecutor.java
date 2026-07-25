@@ -153,4 +153,5 @@ public abstract class AbstractForestTraversalExecutor {
     public abstract <R, S> S traverseForestMulti(float[] point, IMultiVisitorFactory<R> visitorFactory,
             Collector<R, ?, S> collector);
 
+    public abstract void setMultiRead(boolean multiRead);
 }

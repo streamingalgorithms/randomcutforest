@@ -18,4 +18,5 @@ package org.streamingalgorithms.randomcutforest.config;
 public class Config {
     public static final String BOUNDING_BOX_CACHE_FRACTION = "bounding_box_cache_fraction";
     public static final String TIME_DECAY = "time_decay";
+    public static final String MULTI_READ = "multi_read";
 }

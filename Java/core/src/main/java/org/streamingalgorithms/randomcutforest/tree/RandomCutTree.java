@@ -94,7 +94,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     protected HashMap<Integer, List<Long>> sequenceMap;
     protected int basicCache;
     protected int limit;
-
+    protected boolean multiRead;
     public static int MAX_BASIC_CACHE = Long.SIZE;
 
     // the following is a separation oracle that takes a bounding box and generates
@@ -133,9 +133,11 @@ public class RandomCutTree implements ITree<Integer, float[]> {
     @Override
     public <T> void setConfig(String name, T value, Class<T> clazz) {
         if (Config.BOUNDING_BOX_CACHE_FRACTION.equals(name)) {
-            checkArgument(Double.class.isAssignableFrom(clazz),
-                    () -> String.format("Setting '%s' must be a double value", name));
+            checkArgument(Double.class.isAssignableFrom(clazz), () -> "Setting " + name + " must be a double value");
             setBoundingBoxCacheFraction((Double) value);
+        } else if (Config.MULTI_READ.equals(name)) {
+            checkArgument(Boolean.class.isAssignableFrom(clazz), () -> "Setting " + name + " must be a boolean value");
+            multiRead = (Boolean) value;
         } else {
             throw new IllegalArgumentException("Unsupported configuration setting: " + name);
         }
@@ -330,6 +332,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      *         the point being duplicated.
      */
     public Integer addPoint(Integer pointIndex, long sequenceIndex, UpdateHelper<Integer> helper) {
+        checkState(!multiRead, "cannot update a tree while multiRead is enabled; disable multiRead before mutating");
         if (helper == null) {
             helper = new UpdateHelper<Integer>(dimension, numberOfLeaves);
         } else {
@@ -626,6 +629,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     public Integer deletePoint(Integer pointIndex, long sequenceIndex, UpdateHelper helper) {
         checkArgument(root != Null, " deleting from an empty tree");
+        checkState(!multiRead, "cannot update a tree while multiRead is enabled; disable multiRead before mutating");
         if (helper == null) {
             helper = new UpdateHelper(dimension, numberOfLeaves);
         } else {
@@ -819,8 +823,9 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         return -1;
     }
 
+    // caching will be bypassed for multiread
     void installCache(int[] nodeScratch, int count, int depth) {
-        if (nodeAt == null)
+        if (nodeAt == null || multiRead)
             return;
         final int n = count + depth;
         long claimed = 0L; // this is why MAX_BASIC_CACHE is Long.SIZE
@@ -884,10 +889,15 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
         int idx = translate(index);
         if (idx == Integer.MAX_VALUE) {
-            return buildInto(data, base, index, psv); // uncached: straight into destination
+            return buildInto(data, base, index, psv); // uncached, write-free
         }
         int slot = 2 * idx * dimension;
         if (rangeSumData[idx] == 0) {
+            if (multiRead) {
+                // cold slot under concurrent read: compute fresh into caller scratch, do NOT
+                // fill the shared slot
+                return buildInto(data, base, index, psv);
+            }
             rangeSumData[idx] = buildInto(boundingBoxData, slot, index, psv);
         }
         if (data != boundingBoxData || base != slot) {
@@ -907,13 +917,17 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     /** Union sibling's box into data[base..). Returns updated rangeSum. */
     double growInto(float[] data, int base, int sibling, IPointStoreView<float[]> psv) {
-        if (isLeaf(sibling)) {
+        if (isLeaf(sibling))
             return psv.addToSlice(getPointIndex(sibling), data, base);
-        }
         int sidx = translate(sibling);
         if (sidx != Integer.MAX_VALUE) {
             int slot = 2 * sidx * dimension;
             if (rangeSumData[sidx] == 0) {
+                if (multiRead) {
+                    // cold: recurse into children write-free, union into caller data
+                    growInto(data, base, nodeStore.getLeftIndex(sibling), psv);
+                    return growInto(data, base, nodeStore.getRightIndex(sibling), psv);
+                }
                 rangeSumData[sidx] = buildInto(boundingBoxData, slot, sibling, psv);
             }
             return VectorSupport.addSlice(data, base, dimension, boundingBoxData, slot);

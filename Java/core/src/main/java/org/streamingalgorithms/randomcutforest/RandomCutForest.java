@@ -624,6 +624,11 @@ public class RandomCutForest {
         updateExecutor.getComponents().forEach(c -> c.setConfig(Config.TIME_DECAY, timeDecay));
     }
 
+    public void setMultiRead(boolean multiRead) {
+        traversalExecutor.setMultiRead(multiRead);
+        updateExecutor.setMultiRead(multiRead);
+    }
+
     /**
      * Visit each of the trees in the forest and combine the individual results into
      * an aggregate result. A visitor is constructed for each tree using the visitor

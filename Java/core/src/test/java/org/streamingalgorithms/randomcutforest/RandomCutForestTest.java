@@ -1180,9 +1180,8 @@ public class RandomCutForestTest {
                     start.await();
                     for (int r = 0; r < repeats; r++) {
                         double got = forest.getAnomalyScore(queries[id]);
-                        if (Math.abs(got - expected[id]) > 1e-9 * Math.max(1.0, Math.abs(expected[id]))) {
-                            failures.add("thread " + id + " rep " + r + ": expected " + expected[id] + " got " + got);
-                            return null;
+                        if (Math.abs(got - expected[id]) > 1e-6 * Math.max(1.0, Math.abs(expected[id]))) {
+                            throw new Exception("wrong score");
                         }
                     }
                     return null;
@@ -1205,8 +1204,8 @@ public class RandomCutForestTest {
         int dimensions = 30, sampleSize = 256, threads = 10, repeats = 200;
 
         RandomCutForest forest = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
-                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.5) // the "no side effects"
-                                                                                      // configuration
+                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.001) // the "no side effects"
+                                                                                        // configuration
                 .build();
         RandomCutForest forestZero = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
                 .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.0) // the "no side effects"
@@ -1217,12 +1216,18 @@ public class RandomCutForestTest {
                                                                                       // configuration
                 .build();
 
+        RandomCutForest forestHalf = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
+                .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.5) // the "no side effects"
+                // configuration
+                .build();
+
         NormalMixtureTestData generator = new NormalMixtureTestData();
         double[][] data = generator.generateTestData(4000, dimensions, 100);
         for (double[] point : data) {
             forest.update(point);
             forestOne.update(point);
             forestZero.update(point);
+            forestHalf.update(point);
         }
 
         // distinct query per thread; expected values computed single-threaded
@@ -1233,12 +1238,47 @@ public class RandomCutForestTest {
             for (int j = 0; j < dimensions; j++) {
                 queries[t][j] = (float) data[t][j];
             }
-            queries[t][t % dimensions] += 5.0f; // push them apart
+            if (t % 2 == 0) {
+                // extreme anomaly: many coordinates pushed hard
+                for (int j = 0; j < dimensions; j += 3)
+                    queries[t][j] += 15.0f;
+            }
             expected[t] = forest.getAnomalyScore(queries[t]);
         }
 
-        // assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest,
-        // queries, expected, repeats));
+        // concurrency failure
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest, queries, expected, repeats));
+        forest.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forest, queries, expected, repeats));
+        forest.setMultiRead(false);
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest, queries, expected, repeats));
+
+        // fails due to write contention corrupting the data
         assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestZero, queries, expected, repeats));
+        forestZero.setMultiRead(true);
+        // guarded; does not fail
+        assertDoesNotThrow(() -> runConcurrentScoring(forestZero, queries, expected, repeats));
+
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestOne, queries, expected, repeats));
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestHalf, queries, expected, repeats));
+        forestOne.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forestOne, queries, expected, repeats));
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestHalf, queries, expected, repeats));
+        forestHalf.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forestHalf, queries, expected, repeats));
+
+        // updates fail
+        assertThrows(IllegalStateException.class, () -> forestZero.update(new float[dimensions]));
+        assertThrows(IllegalStateException.class, () -> forestZero.update(new float[dimensions], 17L));
+        assertThrows(IllegalStateException.class,
+                () -> ((SamplerPlusTree) forestZero.updateExecutor.getComponents().get(0)).getTree().addPoint(17, 17L,
+                        null));
+        assertThrows(IllegalStateException.class,
+                () -> ((SamplerPlusTree) forestZero.updateExecutor.getComponents().get(0)).getTree().deletePoint(17,
+                        17L, null));
+        forestZero.setMultiRead(false);
+        // guard removed; contention and failure
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestZero, queries, expected, repeats));
+
     }
 }

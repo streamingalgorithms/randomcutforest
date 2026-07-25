@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 import org.streamingalgorithms.randomcutforest.ComponentList;
 import org.streamingalgorithms.randomcutforest.IMultiVisitorFactory;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
+import org.streamingalgorithms.randomcutforest.config.Config;
 import org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator;
 
 /**
@@ -94,6 +95,11 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
 
         return submitAndJoin(
                 () -> components.parallelStream().map(c -> c.traverseMulti(point, visitorFactory)).collect(collector));
+    }
+
+    @Override
+    public void setMultiRead(boolean multiRead) {
+        components.forEach(x -> x.setConfig(Config.MULTI_READ, multiRead));
     }
 
     <T> T submitAndJoin(Callable<T> callable) {

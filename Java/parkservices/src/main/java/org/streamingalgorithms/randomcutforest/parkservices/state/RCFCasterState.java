@@ -20,7 +20,9 @@ import static org.streamingalgorithms.randomcutforest.state.Version.V3_8;
 import org.streamingalgorithms.randomcutforest.parkservices.state.errorhandler.ErrorHandlerState;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
 public class RCFCasterState extends ThresholdedRandomCutForestState {
     private static final long serialVersionUID = 1L;

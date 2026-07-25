@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.executor;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -37,6 +39,9 @@ public abstract class AbstractForestUpdateExecutor<PointReference, Point> {
     protected final IStateCoordinator<PointReference, Point> updateCoordinator;
     protected final ComponentList<PointReference, Point> components;
     protected boolean currentlySampling = true;
+    // this flag will also be checked in trees but by then the
+    // pointstore would have been mutated which is inappropriate
+    protected boolean multiRead = false;
 
     /**
      * Create a new AbstractForestUpdateExecutor.
@@ -64,6 +69,7 @@ public abstract class AbstractForestUpdateExecutor<PointReference, Point> {
     }
 
     public void update(Point point, boolean updateShingleOnly) {
+        checkState(!multiRead, " multi read cannot be set during updates");
         long internalSequenceNumber = updateCoordinator.getTotalUpdates();
         IPointStore<?, ?> store = updateCoordinator.getStore();
         if (store != null && store.isInternalShinglingEnabled()) {
@@ -77,6 +83,7 @@ public abstract class AbstractForestUpdateExecutor<PointReference, Point> {
     }
 
     public void update(Point point, long sequenceNumber, boolean updateShingleOnly) {
+        checkState(!multiRead, " multi read cannot be set during updates");
         PointReference updateInput = updateCoordinator.initUpdate(point, sequenceNumber, updateShingleOnly);
         boolean propagate = (updateInput != null) && currentlySampling;
         List<UpdateResult<PointReference>> results = (!propagate) ? Collections.emptyList()
@@ -98,6 +105,10 @@ public abstract class AbstractForestUpdateExecutor<PointReference, Point> {
 
     public void setCurrentlySampling(boolean value) {
         currentlySampling = value;
+    }
+
+    public void setMultiRead(boolean value) {
+        this.multiRead = value;
     }
 
 }
