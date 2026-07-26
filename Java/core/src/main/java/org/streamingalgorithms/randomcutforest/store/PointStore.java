@@ -944,7 +944,7 @@ public class PointStore implements IPointStore<Integer, float[]> {
 
     void resizeStore() {
         int maxCapacity = (rotationEnabled) ? 2 * capacity : capacity;
-        int newCapacity = (int) Math.floor(min(1.1 * currentStoreCapacity, maxCapacity));
+        int newCapacity = (int) Math.floor(min(1.1 * currentStoreCapacity + 1, maxCapacity));
         if (newCapacity > currentStoreCapacity) {
             float[] newStore = new float[newCapacity * dimensions];
             System.arraycopy(store, 0, newStore, 0, currentStoreCapacity * dimensions);

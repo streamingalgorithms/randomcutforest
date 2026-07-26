@@ -1195,25 +1195,22 @@ public class RandomCutForestTest {
         return failures;
     }
 
-    /*
-     * the following test is a skeleton that should be refined to clarify the thread
-     * safety of the forest under multiple reads.
-     */
     @Test
     public void concurrentScoringSharedForest() throws Exception {
+
         int dimensions = 30, sampleSize = 256, threads = 10, repeats = 200;
 
         RandomCutForest forest = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
                 .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.001) // the "no side effects"
-                                                                                        // configuration
+                // configuration
                 .build();
         RandomCutForest forestZero = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
                 .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(0.0) // the "no side effects"
-                                                                                      // configuration
+                // configuration
                 .build();
         RandomCutForest forestOne = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
                 .dimensions(dimensions).randomSeed(179).boundingBoxCacheFraction(1.0) // the "no side effects"
-                                                                                      // configuration
+                // configuration
                 .build();
 
         RandomCutForest forestHalf = RandomCutForest.builder().numberOfTrees(50).sampleSize(sampleSize)
@@ -1246,28 +1243,22 @@ public class RandomCutForestTest {
             expected[t] = forest.getAnomalyScore(queries[t]);
         }
 
+        RandomCutForestMapper mapper = new RandomCutForestMapper();
+        mapper.setSaveTreeStateEnabled(true);
+        mapper.setSaveExecutorContextEnabled(true);
+        var test1 = mapper.toModel(mapper.toState(forest)); // make a copy
+
         // concurrency failure
-        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest, queries, expected, repeats));
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(test1, queries, expected, repeats));
         forest.setMultiRead(true);
         assertDoesNotThrow(() -> runConcurrentScoring(forest, queries, expected, repeats));
         forest.setMultiRead(false);
         assertThrows(ExecutionException.class, () -> runConcurrentScoring(forest, queries, expected, repeats));
+        // forest is likely corrupt at this point
 
-        // fails due to write contention corrupting the data
-        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestZero, queries, expected, repeats));
+        var test2 = mapper.toModel(mapper.toState(forestZero)); // make a copy
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(test2, queries, expected, repeats));
         forestZero.setMultiRead(true);
-        // guarded; does not fail
-        assertDoesNotThrow(() -> runConcurrentScoring(forestZero, queries, expected, repeats));
-
-        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestOne, queries, expected, repeats));
-        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestHalf, queries, expected, repeats));
-        forestOne.setMultiRead(true);
-        assertDoesNotThrow(() -> runConcurrentScoring(forestOne, queries, expected, repeats));
-        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestHalf, queries, expected, repeats));
-        forestHalf.setMultiRead(true);
-        assertDoesNotThrow(() -> runConcurrentScoring(forestHalf, queries, expected, repeats));
-
-        // updates fail
         assertThrows(IllegalStateException.class, () -> forestZero.update(new float[dimensions]));
         assertThrows(IllegalStateException.class, () -> forestZero.update(new float[dimensions], 17L));
         assertThrows(IllegalStateException.class,
@@ -1276,9 +1267,28 @@ public class RandomCutForestTest {
         assertThrows(IllegalStateException.class,
                 () -> ((SamplerPlusTree) forestZero.updateExecutor.getComponents().get(0)).getTree().deletePoint(17,
                         17L, null));
+        // guarded; does not fail
+        assertDoesNotThrow(() -> runConcurrentScoring(forestZero, queries, expected, repeats));
         forestZero.setMultiRead(false);
         // guard removed; contention and failure
         assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestZero, queries, expected, repeats));
+        // forestZero is no longer testable
+
+        forestOne.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forestOne, queries, expected, repeats));
+        forestOne.setMultiRead(false);
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestOne, queries, expected, repeats));
+        // forestOne is testable because cache was not toughed
+        forestOne.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forestOne, queries, expected, repeats));
+        forestOne.setMultiRead(false);
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestOne, queries, expected, repeats));
+
+        forestHalf.setMultiRead(true);
+        assertDoesNotThrow(() -> runConcurrentScoring(forestHalf, queries, expected, repeats));
+        forestHalf.setMultiRead(false);
+        assertThrows(ExecutionException.class, () -> runConcurrentScoring(forestHalf, queries, expected, repeats));
+        // forestHalf is no longer testable
 
     }
 }
