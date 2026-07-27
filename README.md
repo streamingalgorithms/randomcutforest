@@ -29,34 +29,34 @@ segments of the original input (corresponding to vertical yellow and grey stripe
 is tessalated and the algorithm stops predicting if the occluded gap exceeds the horizon. Note that a separate step to impute the missing data will lead to reconciliation issues with the drift. 
 
 <p align="center">
-  <img src="docs/images/gapped_rcf_cast.gif" alt="GappedRCFCaster producing a calibrated forecast over a stream with segments of missing data" width="820">
+  <img src="docs/images/gapped_rcf_cast.gif" alt="GappedRCFCastExample producing a calibrated forecast over a stream with segments of missing data" width="820">
 </p>
 <p align="center">
-  <em> Figure 2. <code>GappedRCFCaster</code> The stream imputes the missing data segments (vertical stripes) on the fly.  <br>
+  <em> Figure 2. <code>GappedRCFCastExample</code> The stream imputes the missing data segments (vertical stripes) on the fly.  <br>
   Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/GappedRCFCastExample.java">GappedRCFCastExample</a></em>
 </p>
 
-Note that RCFs are naturally multidimensional, and while the examples above plot 1 dimension even though the predictions were 
+RCFs are naturally multidimensional. The examples above plot 1 dimension even though the predictions were 
 performed in the code for both. Multidimensional forecasting is fascinating in its connection to 
-<a href=https://en.wikipedia.org/wiki/Granger_causality>Grainger Causality</a> -- but note that a streaming algorithm typically does not make 
+<a href=https://en.wikipedia.org/wiki/Granger_causality>Granger Causality</a> -- but note that a streaming algorithm typically does not make 
 any assumptions about stationarity and hence the algorithm can adapt.
 
-One can have dynamic multidimensional inference such as (multi-centroid) clustering such as in Figure 3, using the same machinary. 
+One can have dynamic multidimensional inference such as (multi-centroid) clustering such as in Figure 3. 
 
 <p align="center">
   <img src="docs/images/dynamic_summarization.gif" alt="Dynamic multicentroid clustering over a stream" width="400">
 </p>
 <p align="center">
-  <em> Figure 3. <code>DynamicSummarization</code> The time decay is set high to expire the previously input points. <br>
+  <em> Figure 3. <code>Summarization</code> The time decay is set high to expire the previously input points. <br>
   Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/summarization/Summarization.java">Summarization</a></em>
 </p>
 
 
 ## The connection to random forests
 
-Historically decisions trees employed complicated partitioning rule in <a href=https://en.wikipedia.org/wiki/Decision_tree_learning>Classification and Regression Trees (CART)</a>, chosen to
+Historically decision trees employed complicated partitioning rule in <a href=https://en.wikipedia.org/wiki/Decision_tree_learning>Classification and Regression Trees (CART)</a>, chosen to
 separate the training data optimally with a simpler inference rule. There has been
-continued effort in determination of partitioning rules, icluding small space projections as in <a href=https://en.wikipedia.org/wiki/Random_forest>Random Forests</a> and continued to <a href=https://en.wikipedia.org/wiki/Isolation_forest>Isolation Forests</a>. Randomization has been 
+continued effort in determination of partitioning rules, including small space projections as in <a href=https://en.wikipedia.org/wiki/Random_forest>Random Forests</a> and continued to <a href=https://en.wikipedia.org/wiki/Isolation_forest>Isolation Forests</a>. Randomization has been 
 seen as a vehicle for generalization and stochastic (batch) discrimination. But most such analysis would require the trees 
 to be rebuilt or have a deliberate discrepancy between stated construction and use. The latter is a common failure mode. 
 
@@ -83,7 +83,7 @@ Anomaly detection is usually the *beginning* of an
 investigation, not the end. A single bit saying "anomalous" is rarely actionable.
 The interesting follow-ups — *which dimensions mattered? what should the value
 have been? did the local density move?* — are all questions about the normal, and
-a structure that vends scores of unusuality should be able to describe usual (though 
+a structure that quantifies unusuality should be able to describe usual (though 
 not necessarily by the same action or algorithm). 
 
 
@@ -106,21 +106,23 @@ Requires **JDK 21 or later**.
 <dependency>
   <groupId>org.streamingalgorithms</groupId>
   <artifactId>randomcutforest-parkservices</artifactId>
-  <version>5.0.0</version>
+  <version>5.1.0</version>
 </dependency>
 ```
 
 ```groovy
-implementation 'org.streamingalgorithms:randomcutforest-parkservices:5.0.0'
+implementation 'org.streamingalgorithms:randomcutforest-parkservices:5.1.0'
 ```
 
 `parkservices` pulls in `randomcutforest-core` transitively. Take
 `randomcutforest-core` alone if you want raw scores and intend to do your own
 thresholding.
 
-> **Vector API.** The core uses the incubating `jdk.incubator.vector` module.
-> Add `--add-modules jdk.incubator.vector` to your JVM arguments, or the runtime
-> will refuse to load the module. This is an incubator module and may move
+> **Vector API.** The core uses the incubating jdk.incubator.vector module for SIMD.
+> Add --add-modules jdk.incubator.vector to your JVM arguments. Without it the library
+> still runs and produces identical results, but falls back to a scalar path and gives
+> up most of the throughput in the 5.1.0 numbers. VectorSupport.isVectorized() reports 
+> which path you are on. This is an incubator module and may move
 > between JDK releases.
 
 ### Detect anomalies
@@ -151,7 +153,7 @@ for (double[] point : stream) {
 ```
 
 Note alongside the grade, one gets the *expected* value, the relative
-attribution across dimensions, and the start of the deviation began. Note that it may be impossible to detect expectation immediately -- suppose a shop has either a low volume week or a high volume week. If we see a high monday sales and a low tuesday sales -- we detected an anomalous pattern. But was monday the issue or tuesday? These pieces of information such as relative start time, expected values, etc., allow 
+attribution across dimensions, and the start of the deviation. Note that it may be impossible to detect expectation immediately -- suppose a shop has either a low volume week or a high volume week. If we see a high monday sales and a low tuesday sales -- we detected an anomalous pattern. But was monday the issue or tuesday? These pieces of information such as relative start time, expected values, etc., allow 
 one to initiate a root-cause process — it comes from the same trees that made the judgement about anomaly/otherwise. It is possible that a powerful algorithm/agent reverse engineers an algorithm and explains it, but would
 it not be easier if the algorithm willingly provided information: "here is what the decision was based on"? In fact such information immediately makes it feasible to use decades old 
 predictor-corrector paradigms. Existing ThresholdedRandomCutForest employs such a predictor-corrector paradigm and more than 
@@ -202,6 +204,98 @@ continually keep compressing the points.
 Full parameter reference, `timeDecay` guidance, CLI runners, and benchmarks:
 **[Java/README.md](Java/README.md)**.
 
+
+## Memory, speed, concurrency and serialization
+
+These knobs do not change what the model concludes. They change what it costs to
+ask, and they are the answer to several complaints that would otherwise look
+like limitations of the approach.
+
+### Bounding box cache
+
+Every tree memoises the bounding boxes of its internal nodes. The cache is a
+memo of a deterministic function of the tree, so the scores are the same either
+way — only the time and space to obtain them differ.
+
+```java
+RandomCutForest.builder()
+        .boundingBoxCacheFraction(0.0)   // default is 1.0
+        .build();
+```
+
+`1.0` caches everything and is fastest. `0.0` caches nothing and gives the
+smallest model. Intermediate values cache approximately that fraction, so this
+is a continuous dial rather than a switch, and it can be moved on a live model:
+
+```java
+forest.setBoundingBoxCacheFraction(0.0);   // shed memory under pressure
+```
+
+The knob exists because model size, not accuracy, is usually what stops a forest
+being deployed — a few hundred forests on one host, or one forest on a device
+with a fixed budget. Trading throughput for footprint at inference time is
+usually the right trade, and it is reversible. Note that
+`ThresholdedRandomCutForest.process` transiently raises a zero cache to a small
+non-zero value for the duration of a single call and restores it afterwards,
+because a completely cold tree makes the corrector's several traversals
+needlessly expensive.
+
+### Concurrent readers
+
+A built forest can serve many threads at once:
+
+```java
+forest.setMultiRead(true);
+// ... N threads calling getAnomalyScore / getNearNeighborsInSample / imputeMissingValues
+forest.setMultiRead(false);
+```
+
+While `multiRead` is on, a traversal that reaches a cold cache slot computes the
+box into caller-local scratch instead of filling the shared slot, so readers
+never write to shared state and need no lock. Moreover, sequential traversal reuses visitors 
+and the tree view — a deliberate choice for low GC pressure — and both are corrupted 
+by simultaneous scoring. Updates are rejected outright
+while it is set — `update` throws rather than corrupting the tree — which makes
+the intended pattern explicit: build the model, freeze it, fan out inference (if desired, 
+but multiple threads will create more resource use),
+unfreeze to resume consuming the stream.
+
+Independently of the above, one can set a parallelExecutionEnabled(true) flag -- as in the
+prior versions to enable parallel scoring within a forest, which uses independent
+visitors and therefore the visitors are not corrupted at cacheFraction = 0. But
+update (which is a write operation) is not thread safe for concurrent accesses.
+However, the performance of this option in 5.1.0 is subpar compared to sequential
+executors. The parallelExecutionEnabled flag will be repurposed and improved in coming releases.
+We recommend developing the discipline of using multiRead() for concurrent access. Finally,
+note that one can always copy the exact state of forest (and have per thread copies).
+
+```java
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
+import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
+
+RandomCutForestMapper mapper = new RandomCutForestMapper(); 
+mapper.setSaveTreeStateEnabled(true); 
+mapper.setSaveExecutorContextEnabled(true);
+
+RandomCutForestState state = mapper.toState(forest);
+RandomCutForest newForest = mapper.toModel(state);
+```
+
+The above primitive is doubly useful in serialization. The mapper and state classes are in core.
+This repo continues to provide support for legacy JSON models used in OpenSearch, unchanged from upstream. 
+However, we recommend
+using the POJO provided in RandomCutForestState directly using modern methods like Apache Fory
+which is straightforward to use and has been benchmarked in benchmark/.../SerializationBenchmark.java
+
+```java
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
+// import appropriate FORY version
+var fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+byte[] wire = fory.serialize(state);
+RandomCutForestState restored = (RandomCutForestState) fory.deserialize(wire);
+RandomCutForest deserialized = mapper.toModel(restored);
+```
 ---
 
 ## Reading that forecast
@@ -230,10 +324,107 @@ Reproduce it:
 cd Java
 mvn package -DexcludedGroups=functional
 java --add-modules jdk.incubator.vector \
-     -cp examples/target/randomcutforest-examples-5.0.0.jar \
-     org.streamingalgorithms.randomcutforest.examples.Main rcf_cast
+     -jar examples/target/randomcutforest-examples-*-jar-with-dependencies.jar rcf_cast
 ```
 
+---
+
+
+## Reading that detection
+
+<p align="center">
+  <img src="docs/images/thresholded_multi_dim.gif" alt="ThresholdedRandomCutForest detecting injected anomalies in a two dimensional periodic stream" width="820">
+</p>
+
+<p align="center">
+  <em>Figure 4. <code>ThresholdedRandomCutForest</code> on a two dimensional periodic stream, with autoAdjust=true<br>
+  Produced by <a href="Java/examples/src/main/java/org/streamingalgorithms/randomcutforest/examples/ThresholdedRCFMovie.java">ThresholdedRCFMovie</a>.</em>
+</p>
+
+The two input dimensions are cosines of the same period differing in phase and
+amplitude, so this is not a time series plot: it is the phase portrait, x
+against y. The underlying process is a closed ellipse, noise thickens it into an
+annulus, and the observation travels around it once per period. An anomaly is a
+radial excursion off the ring, which is a great deal easier to see than the same
+event buried in two stacked traces.
+
+| | |
+| --- | --- |
+| **Grey cloud** | every observation so far — the annulus the model is learning |
+| **Grey line** | the last revolution, so the direction of travel is visible |
+| **Black ring** | ground truth: where noise was actually replaced by an anomaly |
+| **Red** | `getAnomalyGrade() > 0`, drawn at the timestamp the model *blamed* |
+| **Green** | `getExpectedValuesList()[0]` — where the model says the point belonged |
+| **Dashed grey** | detection lag: from the timestamp that fired back to the one blamed |
+| **Coloured dots** | suppressed timestamps, one colour per `CorrectionMode` |
+
+Two things in that legend are worth dwelling on, because they are the parts of
+the API that reward attention.
+
+**The red marker is not where the alarm rang.** When `getRelativeIndex()` is
+negative the model is telling you that the responsible observation was several
+steps back, and that it has only now accumulated enough evidence to say so. By
+the time the alarm arrives the stream has usually returned to the ring, so
+plotting at the firing timestamp would put the marker on a perfectly ordinary
+point. The dashed leader is that lag drawn explicitly. This is not a defect to
+be tuned away; a streaming detector that never revised its attribution would
+simply be worse. Note also that a detection can arrive with no expected value at
+all, when the forest cannot produce a confident imputation — the example draws
+those hollow rather than pretending they were explained.
+
+**The green marker is a correction, not a score.** The forest returns the value
+it believed should have been there, which is what makes root cause work
+tractable: the arrow from red to green is the inferred change, and comparing it
+to the injected change tells you whether the model recovered the right
+dimension as well as the right timestamp.
+
+### Flags worth turning on
+
+The defaults are a compromise, and this example is a cheap way to find out
+whether the compromise suits your stream. Each of the following changes the
+picture visibly.
+
+```java
+ThresholdedRandomCutForest.builder()
+        .dimensions(baseDimensions * shingleSize)
+        .shingleSize(shingleSize)
+        .scoringStrategy(ScoringStrategy.MULTI_MODE)   // or MULTI_MODE_RECALL
+        .autoAdjust(true)
+        .alertOnce(true)
+        .build();
+```
+
+**`scoringStrategy`** — default `EXPECTED_INVERSE_DEPTH`, which is an attempted
+goldilocks setting and will not suit every stream. `MULTI_MODE` consults a
+distance based mode alongside the depth based one and trades recall for
+precision; `MULTI_MODE_RECALL` trades the other way, taking the distance verdict
+when the primary scorer has stayed quiet for longer than a shingle. `DISTANCE`
+uses the density mode alone. Streams whose "normal" is several distinct
+behaviours rather than one — see `multimodal_example` — are exactly where the
+default struggles and the multi-mode strategies earn their keep.
+
+**`autoAdjust`** — default false. With it on, the corrector learns level shifts
+and concept drift and stops raising the same alarm repeatedly; with it off, a
+level shift produces a sustained run of alerts, which is the correct behaviour
+if detecting the shift *is* the goal. Turning it on in this example visibly
+increases the number of `CONDITIONAL_FORECAST` suppressions, because the
+corrector gains a mechanism it did not previously have. Run it both ways.
+
+**`alertOnce`** — a blunter instrument for the same problem, suppressing repeats
+during drift. Do not use it for genuinely extended anomalies, which it will
+truncate.
+
+The `CorrectionMode` on every descriptor tells you which of these fired and why
+a candidate was suppressed, so the flags are inspectable rather than magic.
+
+Reproduce it:
+
+```bash
+cd Java
+mvn package -DexcludedGroups=functional
+java --add-modules jdk.incubator.vector \
+     -jar examples/target/randomcutforest-examples-*-jar-with-dependencies.jar Thresholded_RCF_movie
+```
 ---
 
 ## Examples
@@ -244,20 +435,21 @@ scenario; several plot as they go.
 
 ```bash
 java --add-modules jdk.incubator.vector \
-     -cp examples/target/randomcutforest-examples-5.0.0.jar \
-     org.streamingalgorithms.randomcutforest.examples.Main --help
+     -jar examples/target/randomcutforest-examples-*-jar-with-dependencies.jar --help
 ```
 
-| Command | What it shows |
-| --- | --- |
-| `rcf_cast` | Calibrated forecasting through a regime change. **The one to read first.** |
-| `gapped_rcf_cast` | Forecasting when the stream has holes in it |
-| `Thresholded_Predictive_example` | Predictive forecast across multiple correlated series |
-| `Conditional_predictive_example` | Imputation used as prediction |
-| `multimodal_example` | Streams whose "normal" is several distinct things at once |
-| `density` | Directional, dynamic density estimation |
-| `near_neighbor` | Dynamic nearest-neighbour queries against the sketch |
-| `summarize`, `multi_summarize`, `string_summarize` | Clustering and multi-centroid summarisation, including over strings |
+| Command                                                                      | What it shows                                                                                                                                                          |
+|------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rcf_cast`                                                                   | Calibrated forecasting through a regime change. **The one to read first.**                                                                                             |
+| `gapped_rcf_cast`                                                            | Forecasting when the stream has holes in it                                                                                                                            |
+| `Thresholded_Multi_Dim_example`                                              | Typical multiDimensional anomaly detection                                                                                                                             |
+| `Thresholded_Predictive_example`                                             | Predictive forecast across multiple correlated series                                                                                                                  |
+| `Conditional_Predictive_example`                                             | Imputation used as prediction                                                                                                                                          |
+| `multimodal_example`                                                         | Streams whose "normal" is several distinct things at once                                                                                                              |
+| `density`                                                                    | Directional, dynamic density estimation                                                                                                                                |
+| `near_neighbor`                                                              | Dynamic nearest-neighbour queries against the sketch                                                                                                                   |
+| `summarization`, `multi_summarize`, `string_summarize`, `centroid_summarize` | Clustering and multi-centroid summarisation, including over strings                                                                                                    |
+| `Thresholded_RCF_movie`                                                      | Anomaly detection as a phase portrait: blame, expected values, detection lag, and every suppression token. **Try it with `autoAdjust` and the multi-mode strategies.** |
 
 ---
 
@@ -265,10 +457,11 @@ java --add-modules jdk.incubator.vector \
 
 ```
 Java/                 the reference implementation
-  core/               RandomCutForest — trees, sampling, traversal, raw estimation
+  core/               RandomCutForest — trees, sampling, traversal, raw estimation, 
+                      model persistence (state and mappers)
   parkservices/       ThresholdedRandomCutForest, RCFCaster — the layer you
                       probably want: grades, calibration, transforms
-  serialization/      model persistence
+  serialization/      legacy JSON converters
   examples/           runnable scenarios and plots
   benchmark/          JMH microbenchmarks
   testutils/          internal test scaffolding
@@ -279,8 +472,8 @@ python_rcf_wrapper/   Python bindings
 The split between `core` and `parkservices` is deliberate and matters when you
 choose a dependency. `core` gives you an estimate — an anomaly score, an
 extrapolation. Turning estimations into decisions is hard, and anomaly 
-detection deployments fail because the `exciting` part does not 
-align with `non-exciting` part -- the notion of exciting is to the beholder.  The gestalt 
+detection deployments fail because the 'exciting' part does not 
+align with 'non-exciting' part -- the notion of exciting is to the beholder.  The gestalt 
 any algorithm corresponds to no single line of code being the weakest link. `parkservices` is where that work
 lives. Its defaults differ from `core`'s on purpose: `internalShinglingEnabled`
 is true there, for instance, because it is the natural choice in that context.
@@ -299,7 +492,7 @@ namespace. Jars are compiled, tested and signed by GitHub Actions runners — se
 [Java/RELEASING.md](Java/RELEASING.md) for the process and
 [`.github/workflows/`](.github/workflows/) for the workflows themselves.
 
-GitHub tags carry a `-java` or `-rust` suffix (`5.0.0-java`) because the two
+GitHub tags carry a `-java` or `-rust` suffix (`5.1.0-java`) because the two
 implementations release independently.
 
 ## Relationship to the upstream project
@@ -311,7 +504,7 @@ affiliated with or endorsed by Amazon or AWS**.
 
 The Maven coordinates changed accordingly. If you are migrating from the AWS
 artifacts, the package root moved from `com.amazon.randomcutforest` to
-`org.streamingalgorithms.randomcutforest`. See the 5.0.0 release notes for the
+`org.streamingalgorithms.randomcutforest`. See the [release notes](Java/RELEASE-NOTES.md) for the
 rest.
 
 ## Contributing

@@ -58,7 +58,15 @@
                             <mainClass>org.streamingalgorithms.randomcutforest.examples.Main</mainClass>
                         </manifest>
                     </archive>
+                    <attach>false</attach>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>make-runnable-jar</id>
+                        <phase>package</phase>
+                        <goals><goal>single</goal></goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

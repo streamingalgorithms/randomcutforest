@@ -59,7 +59,7 @@ throughput is likewise noisier than it was (±19% against ±2.7% in 5.0.1).
   that previously looked like limitations of the approach.
 - `README`: `ScoringStrategy` and `autoAdjust` are explained, with guidance on
   when the defaults are the wrong choice.
-- New example `Thresholded_Multi_Dim_movie`, rendering anomaly detection as a
+- New example `Thresholded_RCF_movie`, rendering anomaly detection as a
   phase portrait: blame attribution, expected values, detection lag, and every
   `CorrectionMode` suppression token.
 - This file.

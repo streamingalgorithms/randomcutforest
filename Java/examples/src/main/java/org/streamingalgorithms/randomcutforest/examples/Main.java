@@ -50,6 +50,7 @@ public class Main {
         add(new StringSummarization());
         add(new MultiModalExample());
         add(new ThresholdedMultiDimensionalExample());
+        add(new ThresholdedPredictiveExample());
         add(new ThresholdedRCFMovie());
     }
 
@@ -75,7 +76,7 @@ public class Main {
     }
 
     public void printUsage() {
-        System.out.printf("Usage: java -cp %s [example]%n", ARCHIVE_NAME);
+        System.out.printf("Usage: java --add-modules jdk.incubator.vector -jar %s [example]%n", ARCHIVE_NAME);
         System.out.println("Examples:");
         String formatString = String.format("\t %%%ds - %%s%%n", maxCommandLength);
         for (Example example : examples.values()) {

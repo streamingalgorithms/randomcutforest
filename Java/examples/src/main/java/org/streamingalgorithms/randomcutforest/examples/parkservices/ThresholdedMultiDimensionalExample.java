@@ -93,7 +93,7 @@ public class ThresholdedMultiDimensionalExample implements Example {
                 // stop repeated alarms. The reverse is also true -- to detect level shifts, set
                 // the following to false
                 // and test for continuous alarms
-                // .autoAdjust(true)
+                .autoAdjust(true)
                 // the following is a much coarser tool to eliminate repeated alarms
                 // the descriptor below 'result' will contain information about different
                 // correction/suppression modes

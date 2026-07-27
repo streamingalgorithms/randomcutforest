@@ -59,7 +59,7 @@ public class Summarization implements Example {
 
     @Override
     public String description() {
-        return "shows a potential use of dynamic clustering/summarization";
+        return "Dynamic clustering/summarization";
     }
 
     private static final Color[] PALETTE = { new Color(214, 39, 40), // red

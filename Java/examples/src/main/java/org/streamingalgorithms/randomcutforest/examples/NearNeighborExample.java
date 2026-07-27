@@ -47,7 +47,7 @@ public class NearNeighborExample implements Example {
 
     @Override
     public String description() {
-        return "example of dynamic near neighbor computation";
+        return "Example of dynamic near neighbor computation";
     }
 
     @Override

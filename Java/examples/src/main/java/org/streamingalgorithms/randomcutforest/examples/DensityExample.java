@@ -48,7 +48,7 @@ public class DensityExample implements Example {
 
     @Override
     public String description() {
-        return "directional dynamic density";
+        return "Directional dynamic density";
     }
 
     @Override

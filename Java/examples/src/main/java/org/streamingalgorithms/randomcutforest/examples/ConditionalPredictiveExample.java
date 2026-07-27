@@ -37,7 +37,7 @@ public class ConditionalPredictiveExample implements Example {
 
     @Override
     public String command() {
-        return "Conditional_predictive_example";
+        return "Conditional_Predictive_example";
     }
 
     @Override
