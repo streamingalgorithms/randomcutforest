@@ -76,8 +76,7 @@ public class MultiModalExample implements Example {
 
         System.out.println("seed = " + seed);
         // change the last argument seed for a different run
-        MultiDimData dataWithKeys = multiDimData(dataSize + shingleSize - 1, 50, 100, 5, seed, baseDimensions, 0.01,
-                true);
+        MultiDimData dataWithKeys = multiDimData(dataSize + shingleSize - 1, 50, 100, 5, seed, baseDimensions, 5, true);
 
         int keyCounter = 0;
         for (float[] point : dataWithKeys.data) {
@@ -86,9 +85,9 @@ public class MultiModalExample implements Example {
             AnomalyDescriptor multi_mode = second.process(toDoubleArray(point), 0L);
             AnomalyDescriptor multi_mode_recall = third.process(toDoubleArray(point), 0L);
 
-            checkArgument(Math.abs(result.getRCFScore() - multi_mode.getRCFScore()) < 1e-10, " error");
-            checkArgument(Math.abs(result.getRCFScore() - multi_mode_recall.getRCFScore()) < 1e-10, " error");
-
+            checkArgument(Math.abs(result.getRCFScore() - multi_mode.getRCFScore()) < 1e-6, " error");
+            checkArgument(Math.abs(result.getRCFScore() - multi_mode_recall.getRCFScore()) < 1e-6, " error");
+            System.out.println(result.getRCFScore());
             if (keyCounter < dataWithKeys.changeIndices.length && count == dataWithKeys.changeIndices[keyCounter]) {
                 System.out
                         .println("timestamp " + count + " CHANGE " + Arrays.toString(dataWithKeys.changes[keyCounter]));

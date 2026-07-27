@@ -55,7 +55,7 @@ public class ThresholdedMultiDimensionalExample implements Example {
 
         // change this to try different number of attributes,
         // this parameter is not expected to be larger than 5 for this example
-        int baseDimensions = 3;
+        int baseDimensions = 2;
 
         int dimensions = baseDimensions * shingleSize;
         ThresholdedRandomCutForest forest = ThresholdedRandomCutForest.builder()
@@ -93,14 +93,15 @@ public class ThresholdedMultiDimensionalExample implements Example {
                 // stop repeated alarms. The reverse is also true -- to detect level shifts, set
                 // the following to false
                 // and test for continuous alarms
-                .autoAdjust(true)
+                // .autoAdjust(true)
                 // the following is a much coarser tool to eliminate repeated alarms
                 // the descriptor below 'result' will contain information about different
                 // correction/suppression modes
                 // .alertOnce(true)
                 .build();
 
-        long seed = new Random().nextLong();
+        long seed = 3250289551382169795L;
+        new Random().nextLong();
         System.out.println("seed = " + seed);
 
         // basic amplitude of the waves -- the parameter will be randomly scaled up

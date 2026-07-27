@@ -50,6 +50,7 @@ public class Main {
         add(new StringSummarization());
         add(new MultiModalExample());
         add(new ThresholdedMultiDimensionalExample());
+        add(new ThresholdedRCFMovie());
     }
 
     private void add(Example example) {
