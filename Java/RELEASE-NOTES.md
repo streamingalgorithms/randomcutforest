@@ -8,7 +8,7 @@ tracker.
 
 ---
 
-## 5.1.0 (unreleased)
+## 5.1.0 (July 27, 2026)
 
 ### Performance
 
