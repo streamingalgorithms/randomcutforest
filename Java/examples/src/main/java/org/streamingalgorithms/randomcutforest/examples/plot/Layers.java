@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.examples.plot;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.FontMetrics;
@@ -182,6 +184,8 @@ public final class Layers {
     }
 
     public static Layer legend(String[] labels, Color[] colors, Swatch[] swatches) {
+        checkArgument(colors.length == labels.length && swatches.length == labels.length,
+                "legend labels, colors and swatches must be the same length");
         return (g, vp) -> {
             FontMetrics fm = g.getFontMetrics();
             int sw = 16; // swatch column width

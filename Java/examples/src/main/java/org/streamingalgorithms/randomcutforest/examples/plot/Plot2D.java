@@ -12,16 +12,19 @@
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
-
 package org.streamingalgorithms.randomcutforest.examples.plot;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.swing.AbstractAction;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 
 public final class Plot2D extends JPanel {
 
@@ -29,12 +32,27 @@ public final class Plot2D extends JPanel {
     private final int margin = 38;
     private volatile List<Layer> layers = new ArrayList<>();
 
+    /**
+     * Playback control.
+     *
+     * <p>
+     * The render loop runs on the caller's thread while key events arrive on the
+     * EDT, so this is a wait/notify rather than a flag the loop polls: a paused
+     * loop blocks in {@link #awaitResume()} and burns no CPU, and the EDT stays
+     * free to repaint — which is the entire point, since a frozen frame you cannot
+     * redraw is not much use.
+     */
+    private final Object playLock = new Object();
+    private boolean paused;
+    private int pendingSteps;
+
     private Plot2D(double xmin, double xmax, double ymin, double ymax) {
         this.xmin = xmin;
         this.xmax = xmax;
         this.ymin = ymin;
         this.ymax = ymax;
         setBackground(Color.WHITE);
+        installPlaybackKeys();
     }
 
     // ---- square (symmetric) constructors used by the rotating examples ----
@@ -74,6 +92,92 @@ public final class Plot2D extends JPanel {
         g2.dispose();
         return img;
     }
+
+    // ------------------------------------------------------------------
+    // playback
+    // ------------------------------------------------------------------
+
+    /**
+     * SPACE toggles pause, RIGHT advances a single frame while paused.
+     *
+     * <p>
+     * Deliberately InputMap/ActionMap rather than a KeyListener: a JPanel is not
+     * focusable by default, so a KeyListener attached here would never fire, and
+     * would fail silently rather than throwing. WHEN_IN_FOCUSED_WINDOW dispatches
+     * at the frame level and needs no focus handling at all.
+     *
+     * <p>
+     * The offscreen constructors install these too. That is harmless — the binding
+     * cannot fire without a window — and it means a headless run calling
+     * awaitResume() simply returns immediately.
+     */
+    private void installPlaybackKeys() {
+        bind(KeyEvent.VK_SPACE, "rcf.togglePause", this::togglePause);
+        bind(KeyEvent.VK_RIGHT, "rcf.stepOnce", this::stepOnce);
+    }
+
+    private void bind(int keyCode, String name, Runnable action) {
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), name);
+        getActionMap().put(name, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                action.run();
+            }
+        });
+    }
+
+    public void togglePause() {
+        synchronized (playLock) {
+            paused = !paused;
+            pendingSteps = 0;
+            playLock.notifyAll();
+        }
+        repaint();
+    }
+
+    /** Release exactly one frame while paused; ignored while running. */
+    public void stepOnce() {
+        synchronized (playLock) {
+            if (paused) {
+                pendingSteps++;
+                playLock.notifyAll();
+            }
+        }
+    }
+
+    public boolean isPaused() {
+        synchronized (playLock) {
+            return paused;
+        }
+    }
+
+    /**
+     * Blocks while paused. Call once per frame from the render loop, never from the
+     * EDT: blocking the EDT would freeze the repaint that makes pausing useful in
+     * the first place.
+     *
+     * <p>
+     * Where this sits relative to a GIF writer decides what gets recorded. After
+     * writeFrame, pausing leaves the recording continuous; before it, the GIF holds
+     * only the frames you watched.
+     */
+    public void awaitResume() {
+        synchronized (playLock) {
+            while (paused && pendingSteps == 0) {
+                try {
+                    playLock.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            if (paused && pendingSteps > 0) {
+                pendingSteps--;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
 
     public final class Viewport {
         private final int w, h;
@@ -149,6 +253,14 @@ public final class Plot2D extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        paintScene((Graphics2D) g, getWidth(), getHeight(), layers);
+        Graphics2D g2 = (Graphics2D) g;
+        paintScene(g2, getWidth(), getHeight(), layers);
+        if (isPaused()) {
+            // paintScene leaves the plot area clipped; the hint lives in the margin
+            g2.setClip(null);
+            g2.setColor(new Color(40, 40, 40, 200));
+            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+            g2.drawString("PAUSED   space = resume, right arrow = step", margin, margin - 12);
+        }
     }
 }

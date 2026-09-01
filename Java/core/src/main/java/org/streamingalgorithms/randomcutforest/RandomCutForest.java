@@ -52,6 +52,7 @@ import org.streamingalgorithms.randomcutforest.executor.SequentialForestUpdateEx
 import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSummarizer;
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
+import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicDisplacementVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.*;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
@@ -249,6 +250,7 @@ public class RandomCutForest {
      */
     protected AbstractForestUpdateExecutor<?, float[]> updateExecutor;
     private IVisitorFactory<InterpolationMeasure> densityFactory;
+    protected IVisitorFactory<InterpolationMeasure> anisotropicFactory;
 
     public <P> RandomCutForest(Builder<?> builder, IStateCoordinator<P, float[]> stateCoordinator,
             ComponentList<P, float[]> components, Random random) {
@@ -290,6 +292,7 @@ public class RandomCutForest {
         this.stateCoordinator = stateCoordinator;
         this.components = components;
         this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
+        this.anisotropicFactory = AnisotropicDisplacementVisitor.reusableFactory(1.0, centerOfMassEnabled);
         initExecutors(stateCoordinator, components);
     }
 
@@ -930,6 +933,15 @@ public class RandomCutForest {
         Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
 
         return new DensityOutput(traverseForest(transformToShingledPoint(point), densityFactory,
+                InterpolationMeasure::addToLeft, finisher));
+    }
+
+    public AnisotropicDensityOutput getAnisotropicDensity(float[] point) {
+        if (!isOutputReady()) {
+            return new AnisotropicDensityOutput(dimensions, sampleSize);
+        }
+        Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
+        return new AnisotropicDensityOutput(traverseForest(transformToShingledPoint(point), anisotropicFactory,
                 InterpolationMeasure::addToLeft, finisher));
     }
 
