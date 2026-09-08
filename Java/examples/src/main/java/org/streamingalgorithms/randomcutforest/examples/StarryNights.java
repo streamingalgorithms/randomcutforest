@@ -450,7 +450,7 @@ public class StarryNights implements Example {
             origins.add(c);
             boxes.add(out.passageBox());
             shade.add(Math.min(1.0, log2(out.getAnisotropy()) / 3.0));
-            fill.add( -1.0);
+            fill.add(-1.0);
             return true;
         }
 
