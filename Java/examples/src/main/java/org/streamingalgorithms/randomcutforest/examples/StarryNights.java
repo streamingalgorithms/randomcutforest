@@ -415,8 +415,6 @@ public class StarryNights implements Example {
             gif.close();
             System.out.println("wrote starry_nights.gif");
         }
-        System.out.println("\nThe wake is a tube around a curve, so the exponent should sit near 1.");
-        System.out.println("An exponent near 3 would mean the ambient dimension is being reported instead.");
     }
 
     /**
@@ -442,27 +440,17 @@ public class StarryNights implements Example {
             probes++;
             AnisotropicDensityOutput out = forest
                     .getAnisotropicDensity(new float[] { (float) c[0], (float) c[1], (float) c[2] });
-            massSum += out.getTotalMass();
+            massSum += out.getSampleSize();
             if (!out.isReliable()) {
                 flat++;
                 return false; // flat crossing or masked by duplicates; a box would lie
             }
             drawn++;
-            double a = out.getHolderExponent();
-            // A probe whose path had no leverage returns 0. Counting it in the mean
-            // divides by too many and drags the average toward zero -- the same failure
-            // that made a pooled exponent read 0.2 when it should have been near the
-            // ambient dimension. Track the fitted ones separately.
-            if (a > 0.0) {
-                fitted++;
-                alphaSum += a;
-                alphaMin = Math.min(alphaMin, a);
-                alphaMax = Math.max(alphaMax, a);
-            }
+
             origins.add(c);
-            boxes.add(out.getExtentBox());
+            boxes.add(out.passageBox());
             shade.add(Math.min(1.0, log2(out.getAnisotropy()) / 3.0));
-            fill.add((a > 0.0) ? (a - ALPHA_LO) / (ALPHA_HI - ALPHA_LO) : -1.0);
+            fill.add( -1.0);
             return true;
         }
 

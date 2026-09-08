@@ -32,6 +32,23 @@ import java.awt.geom.Path2D;
  * there.</li>
  * </ul>
  *
+ * 
+ * <p>
+ * <b>Direction convention.</b> The array is DiVector-ordered, high components
+ * first, and the two halves point in OPPOSITE directions from the query:
+ *
+ * <pre>
+ *   high_i  -&gt; extent in the MINUS i direction
+ *   low_i   -&gt; extent in the PLUS  i direction
+ * </pre>
+ *
+ * because high_i accumulates when the point overhangs the box ABOVE on axis i,
+ * which puts the box, and the mass, below it. DensityExample names the same
+ * thing directly: dir.high[0] is "toTheLeft" and dir.low[0] is "toTheRight".
+ * Getting this backwards draws the box on the far side of the query from the
+ * data, with the query at a corner -- invisible when the query sits inside the
+ * cloud and both faces are active, obvious the moment it sits outside.
+ *
  * <p>
  * The box is asymmetric by construction — the four half-lengths are independent
  * — so the rectangle is not centred on the query point. That offset is the
@@ -102,11 +119,12 @@ public class BoxLayer implements Layer {
             double[] o = origins[i];
             double[] b = boxes[i];
 
-            // py inverts, so the high-y corner maps to the smaller screen y
-            double x0 = vp.px(o[0] - b[2]);
-            double x1 = vp.px(o[0] + b[0]);
-            double y0 = vp.py(o[1] + b[1]);
-            double y1 = vp.py(o[1] - b[3]);
+            // high extends toward minus, low toward plus; py inverts, so the larger
+            // world y maps to the smaller screen y
+            double x0 = vp.px(o[0] - b[0]); // high_x
+            double x1 = vp.px(o[0] + b[2]); // low_x
+            double y0 = vp.py(o[1] + b[3]); // low_y
+            double y1 = vp.py(o[1] - b[1]); // high_y
 
             Path2D.Double rect = new Path2D.Double();
             rect.moveTo(x0, y0);

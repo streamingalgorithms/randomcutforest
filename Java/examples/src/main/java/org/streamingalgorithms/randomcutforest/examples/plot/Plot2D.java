@@ -12,6 +12,7 @@
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
+
 package org.streamingalgorithms.randomcutforest.examples.plot;
 
 import java.awt.*;
@@ -123,6 +124,18 @@ public final class Plot2D extends JPanel {
             public void actionPerformed(ActionEvent e) {
                 action.run();
             }
+        });
+    }
+
+    /**
+     * Register an extra key, for example-specific toggles. Repaints afterwards so a
+     * toggle takes effect while paused, when the render loop is blocked in
+     * awaitResume and will not rebuild the scene on its own.
+     */
+    public void bindKey(int keyCode, String name, Runnable action) {
+        bind(keyCode, name, () -> {
+            action.run();
+            repaint();
         });
     }
 

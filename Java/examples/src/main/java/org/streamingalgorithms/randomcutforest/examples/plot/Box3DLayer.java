@@ -28,6 +28,23 @@ import java.awt.geom.Path2D;
  * toward the eye, and which one is decided by the sign of eye[i] - centre[i].
  * Three quads and twelve edges then read unambiguously as a solid box.
  *
+ * 
+ * <p>
+ * <b>Direction convention.</b> The array is DiVector-ordered, high components
+ * first, and the two halves point in OPPOSITE directions from the query:
+ *
+ * <pre>
+ *   high_i  -&gt; extent in the MINUS i direction
+ *   low_i   -&gt; extent in the PLUS  i direction
+ * </pre>
+ *
+ * because high_i accumulates when the point overhangs the box ABOVE on axis i,
+ * which puts the box, and the mass, below it. DensityExample names the same
+ * thing directly: dir.high[0] is "toTheLeft" and dir.low[0] is "toTheRight".
+ * Getting this backwards draws the box on the far side of the query from the
+ * data, with the query at a corner -- invisible when the query sits inside the
+ * cloud and both faces are active, obvious the moment it sits outside.
+ *
  * <p>
  * The six half-lengths are independent, so the box is not centred on the query
  * point. In three dimensions that offset is a genuine direction in space rather
@@ -73,8 +90,10 @@ public class Box3DLayer implements Layer {
             double[] o = origins[i];
             double[] b = boxes[i];
 
-            double[] lo = { o[0] - b[3], o[1] - b[4], o[2] - b[5] };
-            double[] hi = { o[0] + b[0], o[1] + b[1], o[2] + b[2] };
+            // b[0..2] are the high faces and extend toward minus; b[3..5] are the low
+            // faces and extend toward plus
+            double[] lo = { o[0] - b[0], o[1] - b[1], o[2] - b[2] };
+            double[] hi = { o[0] + b[3], o[1] + b[4], o[2] + b[5] };
 
             // corner c has bit k set when it takes hi on axis k
             double[][] px = new double[8][];

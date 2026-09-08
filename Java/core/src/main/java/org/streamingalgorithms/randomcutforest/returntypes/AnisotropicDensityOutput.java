@@ -16,40 +16,14 @@
 package org.streamingalgorithms.randomcutforest.returntypes;
 
 /**
- * DensityOutput plus the local extent box.
- *
- * <p>
- * The scales travel inside the measure rather than beside it, so
- * InterpolationMeasure.addToLeft merges them along with everything else and the
- * parallel and fold paths need no special handling. Each tree contributes its
- * own crossing estimate in data units and the merge is a vector addition, so
- * the result is the ensemble mean of per-tree estimates -- the same thing
- * measure, distances and score are.
- *
- * <p>
- * <b>Two densities.</b> {@link #getDensity} is inherited: a
- * probability-weighted mixture of k-cubes whose edges are the <i>mean</i>
- * conditional lengths. Box ranges grow geometrically up the tree, so that mean
- * is dominated by rare early-separation events with enormous boxes.
- * {@link #getBoxDensity} uses the median crossing lengths and a genuine product
- * volume instead. With uniform weights and k = d, AM-GM gives V_mixture &gt;=
- * V_box with equality exactly when the neighbourhood is isotropic, so the ratio
- * of the two densities is itself an anisotropy measurement.
- *
- * <p>
- * <b>Read the validity fields.</b> A wide crossing means the neighbourhood has
- * no single scale and the box is an arbitrary representative of a flat region;
- * a large degenerate fraction means the point is masked by duplicates and has
- * no direction at all. Neither shows up as noise in the box itself.
+ * DensityOutput plus tree-averaged boxes recorded at local cut-probability or
+ * mass crossings.
  */
 public class AnisotropicDensityOutput extends DensityOutput {
 
-    /** Above this crossing width, in octaves, the box has no single scale. */
-    public static final double DEFAULT_CROSSING_TOLERANCE = 3.0;
-
     public AnisotropicDensityOutput(int dimensions, double sampleSize) {
         super(dimensions, (int) sampleSize);
-        this.scales = new DirectionalScales(dimensions);
+        this.scales = new FirstPassageScales(dimensions);
     }
 
     /**
@@ -61,12 +35,12 @@ public class AnisotropicDensityOutput extends DensityOutput {
         super(base);
         if (this.scales == null) {
             // no anisotropic visitor ran, or every tree converged immediately
-            this.scales = new DirectionalScales(getDimensions());
+            this.scales = new FirstPassageScales(getDimensions());
         }
     }
 
     @Override
-    public DirectionalScales getScales() {
+    public FirstPassageScales getScales() {
         return scales;
     }
 
@@ -74,37 +48,32 @@ public class AnisotropicDensityOutput extends DensityOutput {
     // the box
     // ------------------------------------------------------------------
 
-    /**
-     * The 2 * dimensions half-separation lengths in data units, laid out like a
-     * DiVector: high in [0, d), low in [d, 2d). This is the local gauge — the
-     * length that makes each coordinate dimensionless at this point.
-     *
-     * <p>
-     * All 2d values come from one level of each tree's path, the level at which the
-     * cumulative separation probability crosses one half, so the box is the
-     * enlarged bounding box of a real node rather than a per-face mixture that
-     * corresponds to no node at all.
-     */
-    public double[] getExtentBox() {
-        return scales.halfSeparationBox();
+    /** Query-relative extents, high followed by low, averaged across trees. */
+    public double[] cutBox() {
+        return scales.cutBox();
     }
 
-    /**
-     * The boxes at the bracketing quantiles. There is no arbitrary-lambda variant:
-     * lambda is fixed when the walk runs, since the crossing is scanned along the
-     * path rather than read back out of a stored distribution.
-     */
-    public double[] getLowExtentBox() {
-        return scales.lowBox();
+    public double[] passageBox() {
+        return scales.passageBox();
     }
 
-    public double[] getHighExtentBox() {
-        return scales.highBox();
+    public double[] stopBox() {
+        return scales.stopBox();
     }
 
     /** Full width along each axis: L_high + L_low. */
     public double[] getAxisExtents() {
-        double[] box = getExtentBox();
+        int d = getDimensions();
+        double[] box = cutBox();
+        double[] widths = new double[d];
+        for (int i = 0; i < d; i++) {
+            widths[i] = box[i] + box[i + d];
+        }
+        return widths;
+    }
+
+    public double[] passageAxis() {
+        double[] box = passageBox();
         int d = getDimensions();
         double[] widths = new double[d];
         for (int i = 0; i < d; i++) {
@@ -120,7 +89,7 @@ public class AnisotropicDensityOutput extends DensityOutput {
      * than merely that the axis is stretched.
      */
     public double[] getDrift() {
-        double[] box = getExtentBox();
+        double[] box = cutBox();
         int d = getDimensions();
         double[] drift = new double[d];
         for (int i = 0; i < d; i++) {
@@ -158,7 +127,7 @@ public class AnisotropicDensityOutput extends DensityOutput {
      * taken over the k most contracted axes, since those are the ones that actually
      * shrink along the path.
      */
-    public double getBoxDensity(double q, int manifoldDimension) {
+    public double getCutDensity(double q, int manifoldDimension) {
         double weight = getSampleWeight();
         if (!(weight > 0.0)) {
             return 0.0;
@@ -168,143 +137,123 @@ public class AnisotropicDensityOutput extends DensityOutput {
             return 0.0;
         }
 
-        double[] widths = getAxisExtents();
-        int k = Math.min(manifoldDimension, widths.length);
-        double[] sorted = widths.clone();
+        // Product of the selected axis widths of the averaged cut box.
+        double[] sorted = getAxisExtents();
         java.util.Arrays.sort(sorted);
-
         double volume = 1.0;
         int used = 0;
-        for (int i = 0; i < sorted.length && used < k; i++) {
-            if (sorted[i] > 0.0) {
-                volume *= sorted[i];
+        for (double width : sorted) {
+            if (used == manifoldDimension) {
+                break;
+            }
+            if (width > 0.0) {
+                volume *= width;
                 used++;
             }
         }
-        if (used < k) {
+        if (manifoldDimension <= 0 || used < manifoldDimension) {
+            return 0.0;
+        }
+
+        if (!(volume > 0)) {
             return 0.0;
         }
         return sumOfPts / (q * sumOfPts + volume);
     }
 
-    public double getBoxDensity() {
-        return getBoxDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR, getDimensions());
+    public double getCutDensity() {
+        return getCutDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR, getDimensions());
+    }
+
+    private double[] getDirectionalDensity(double q) {
+        int d = getDimensions();
+        double[] out = new double[2 * d];
+        double total = measure.getHighLowSum();
+        double scalar = passageDensity(q);
+        if (!(total > 0.0) || !(scalar > 0.0)) {
+            return out;
+        }
+        for (int i = 0; i < d; i++) {
+            out[i] = scalar * measure.high[i] / total;
+            out[i + d] = scalar * measure.low[i] / total;
+        }
+        return out;
+    }
+
+    private double[] directionalDensity() {
+        return getDirectionalDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
+    }
+
+    public double[] getDensityGradient() {
+        int d = getDimensions();
+        double[] c = directionalDensity();
+        double norm = 0;
+        for (double v : c) {
+            norm += v * v;
+        }
+        norm = Math.sqrt(norm);
+        double[] out = new double[d];
+        if (norm > 0) {
+            for (int i = 0; i < d; i++) {
+                out[i] = (c[i + d] - c[i]) / norm;
+            }
+        }
+        return out;
+    }
+
+    public double passageDensity(double q) {
+        double weight = getSampleWeight();
+        double volume = scales.meanVolume(false);
+        if (!(weight > 0.0) || !(volume > 0.0)) {
+            return 0.0;
+        }
+        double sumOfPts = measure.getHighLowSum() / weight;
+        return (sumOfPts > 0.0) ? sumOfPts / (q * sumOfPts + volume) : 0.0;
+    }
+
+    /** Density using the volume of the averaged recorded stopping box. */
+    public double getStoppingDensity(double q) {
+        double weight = getSampleWeight();
+        if (!(weight > 0.0)) {
+            return 0.0;
+        }
+        double sumOfPts = measure.getHighLowSum() / weight;
+        double volume = volumeOf(stopBox());
+        return (sumOfPts > 0.0 && volume > 0.0) ? sumOfPts / (q * sumOfPts + volume) : 0.0;
+    }
+
+    public double getStoppingDensity() {
+        return getStoppingDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
+    }
+
+    /** Volume of a DiVector-layout box: the product of its axis widths. */
+    private double volumeOf(double[] box) {
+        int d = getDimensions();
+        double v = 1.0;
+        for (int i = 0; i < d; i++) {
+            double w = box[i] + box[i + d];
+            if (!(w > 0)) {
+                return 0.0;
+            }
+            v *= w;
+        }
+        return v;
     }
 
     /**
-     * Ratio of the box density to the inherited mixture density. Bounded below by 1
-     * under uniform weights at k = d, and equal to 1 exactly when isotropic, so it
-     * reads as a scalar anisotropy index derived from volumes rather than from the
-     * frame directly.
+     * Ratio of cut-box density to the inherited mixture density; no fixed bound is
+     * assumed.
      */
     public double getVolumeAnisotropy() {
         double mixture = getDensity();
-        return (mixture > 0.0) ? getBoxDensity() / mixture : 1.0;
-    }
-
-    // ------------------------------------------------------------------
-    // calibration: measured exponent vs the exponent the density assumes
-    // ------------------------------------------------------------------
-
-    /**
-     * Local Holder exponent: the slope of log node mass against log length, fitted
-     * per tree along that tree's own path and then averaged.
-     *
-     * <p>
-     * There is no moment argument. The earlier binned form took one so that q could
-     * reweight which bins dominated; with the fit done directly on the path there
-     * are no bins to reweight. It is also no longer quantized -- a synthetic
-     * geometric walk of known dimension 1, 2, 3 now returns 1.0000, 2.0000, 3.0000,
-     * where the binned version gave 3.169 at d = 3.
-     *
-     * <p>
-     * A slope is invariant to any rescaling of either mass or length, so nothing
-     * needs normalizing, and it carries no intercept term of the kind that made a
-     * ratio estimator report d(1 + 1/k).
-     */
-    public double getHolderExponent() {
-        return scales.holderExponent();
+        return (mixture > 0.0) ? getCutDensity() / mixture : 1.0;
     }
 
     /**
-     * Fraction of trees whose path had enough spread on the length axis to fit an
-     * exponent at all. Low coverage means the exponent above rests on few trees;
-     * trees that cannot fit one contribute nothing rather than contributing a zero,
-     * since averaging in those zeros is what biased an earlier version toward 0.2
-     * when the answer was near the ambient dimension.
-     */
-    public double getExponentCoverage() {
-        return scales.exponentCoverage();
-    }
-
-    /**
-     * Agreement in [0, 1] between the measured exponent and the exponent the
-     * density formula assumes.
-     *
-     * <p>
-     * This is the calibration that matters. getDensity divides displaced mass by a
-     * volume built as length^k with k supplied by the caller. That is only a volume
-     * if the measure actually scales with exponent k here. The exponent is
-     * estimated independently -- from mass against length, never touching the
-     * density formula -- so |alpha - k| is a direct check on the power the density
-     * is being raised to, against a k that is known rather than fitted.
-     *
-     * <p>
-     * On a d-dimensional support with k = d it should sit near 1, and fall where
-     * the local measure is filamentary, since a stretched neighbourhood is closer
-     * to one-dimensional and alpha drops below k there. That is a spatial
-     * prediction, not just a number, so a plot of it is falsifiable at a glance.
-     */
-    public double getExponentAgreement(int manifoldDimension) {
-        double alpha = getHolderExponent();
-        if (!(alpha > 0.0) || manifoldDimension <= 0) {
-            return 0.0;
-        }
-        return Math.max(0.0, 1.0 - Math.abs(alpha - manifoldDimension) / manifoldDimension);
-    }
-
-    // ------------------------------------------------------------------
-    // validity
-    // ------------------------------------------------------------------
-
-    public double[] getCrossingWidths() {
-        return scales.crossingWidths();
-    }
-
-    public double getMaxCrossingWidth() {
-        double max = 0.0;
-        for (double w : getCrossingWidths()) {
-            max = Math.max(max, w);
-        }
-        return max;
-    }
-
-    /**
-     * Fraction of first-passage weight with no defined length, because the query
-     * point coincided with a leaf. Now a single scalar: the degenerate case has no
-     * direction by definition, so a per-face breakdown of it was reporting the same
-     * number 2d times.
-     */
-    public double getDegenerateFraction() {
-        return scales.degenerateFraction();
-    }
-
-    /**
-     * Whether the box means anything here. False when the crossing is flat
-     * (genuinely multi-scale neighbourhood, no single gauge) or when most of the
-     * weight sits on duplicates (no direction exists).
+     * Whether any traversal supplied box geometry; this is not a statistical
+     * validity test.
      */
     public boolean isReliable() {
-        return getMaxCrossingWidth() <= DEFAULT_CROSSING_TOLERANCE && getDegenerateFraction() < 0.5;
-    }
-
-    /**
-     * Mean first-passage weight per tree, which must be 1.0 to within rounding. It
-     * checks the survival product, the crossing scan, the degenerate routing and
-     * the fold in one number; 0 means no scales reached the result, and a tree
-     * count of 1 where many trees ran means the merge is not happening.
-     */
-    public double getTotalMass() {
-        return scales.totalMass();
+        return scales.getTreeCount() > 0;
     }
 }

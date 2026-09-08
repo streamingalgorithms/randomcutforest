@@ -40,16 +40,35 @@ import java.util.List;
  * estimator cannot see.
  *
  * <p>
- * <b>Probes expire.</b> A probe not covered by any arrival for a full decay
- * window is dropped, so the set tracks what the model still holds rather than
- * accumulating everywhere the data has ever been. Without it the comet would
- * leave a permanent trail of probes behind.
+ * <b>Probes expire, so the radius has to move both ways.</b> A probe not
+ * covered by any arrival for a full decay window is dropped, otherwise the
+ * comet would leave a permanent trail of probes behind. But the textbook
+ * doubling construction assumes an append-only stream, where the covering
+ * number only grows and a monotone radius is therefore correct. With expiry
+ * that assumption is false: the radius ratchets up during a crowded moment and
+ * has no way back down once the probes that caused the overflow have gone.
+ * Observed in the StarryNights example as 22 probes against a budget of 34 at R
+ * = 0.474, where the budget implies about 0.237 -- one doubling too coarse,
+ * coarse enough that a single probe swallowed a whole clump.
+ *
+ * <p>
+ * The radius therefore halves when the cover has thinned well below budget.
+ * Shrinking needs no merge pass: probes are at least R apart, so at R/2 they
+ * are at least 2(R/2) apart and remain a valid cover. Expect the radius to
+ * oscillate by one doubling around the true covering scale; it is only ever
+ * accurate to a factor of two, which is worth knowing before reading much into
+ * the value.
  *
  * <p>
  * The radius is also the natural glyph pitch: probes are at least R apart by
  * construction, so nothing needs to be inferred from pairwise distances.
  */
 public class ProbeNet {
+
+    /**
+     * Floor on the radius, so a momentarily empty cover cannot drive it to zero.
+     */
+    private static final double MIN_RADIUS = 1e-9;
 
     private final int budget;
     private final long ttl;
@@ -145,13 +164,42 @@ public class ProbeNet {
         lastHit.addAll(keptHits);
     }
 
-    /** Drop probes nothing has covered for a full window. Call once per frame. */
+    /**
+     * Drop probes nothing has covered for a full window, then let the radius fall
+     * if the cover has thinned. Call once per frame.
+     */
     public void expire() {
         for (int i = centres.size() - 1; i >= 0; i--) {
             if (clock - lastHit.get(i) > ttl) {
                 centres.remove(i);
                 sources.remove(i);
                 lastHit.remove(i);
+            }
+        }
+        shrink();
+    }
+
+    /**
+     * Halve the radius while the cover sits well under budget. No merge is needed:
+     * existing probes are at least R apart, hence at least 2(R/2) apart, so they
+     * stay a valid cover at the smaller radius and simply admit finer detail from
+     * the arrivals that follow.
+     *
+     * <p>
+     * The threshold is half the budget, because halving the radius roughly doubles
+     * the probe count on the filamentary structures this is used for: at 16 probes
+     * against a budget of 34, halving lands near 33 and stops. A stricter guard
+     * never fires at all -- a third of the budget leaves the radius pinned at the
+     * value that prompted this in the first place. A cover at R/2 could in
+     * principle need 2^dim times as many probes, so on genuinely space-filling data
+     * this will overshoot by one doubling and correct on the next frame.
+     */
+    private void shrink() {
+        while (radius > 0 && centres.size() * 2 < budget) {
+            radius /= 2;
+            if (radius < MIN_RADIUS) {
+                radius = MIN_RADIUS;
+                return;
             }
         }
     }

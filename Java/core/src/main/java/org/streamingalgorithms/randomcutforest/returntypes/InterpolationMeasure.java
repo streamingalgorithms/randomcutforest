@@ -99,14 +99,8 @@ public class InterpolationMeasure {
     /**
      * Optional per-face local scales, null unless the walk produced them.
      *
-     * <p>
-     * This lives on the base rather than on a subclass because traverseForest seeds
-     * its accumulator with a plain InterpolationMeasure. A virtual merge hook is
-     * therefore never reached on the left operand, and any subclass-owned payload
-     * is dropped during the fold — silently, since addToLeft has no way to notice.
-     * A nullable field on the seed's own type is the only version that survives.
      */
-    protected DirectionalScales scales;
+    protected FirstPassageScales scales;
 
     public InterpolationMeasure(int dimensions, double sampleSize) {
         checkArgument(dimensions > 0, "dimensions must be greater than 0");
@@ -225,11 +219,11 @@ public class InterpolationMeasure {
      * May be null; callers wanting an extent box should go through
      * AnisotropicDensityOutput.
      */
-    public DirectionalScales getScales() {
+    public FirstPassageScales getScales() {
         return scales;
     }
 
-    public void setScales(DirectionalScales scales) {
+    public void setScales(FirstPassageScales scales) {
         this.scales = scales;
     }
 
@@ -264,7 +258,7 @@ public class InterpolationMeasure {
             // holder can observe the subsequent in-place merges
             left.scales = right.scales;
         } else if (right.scales != null) {
-            DirectionalScales.addToLeft(left.scales, right.scales);
+            FirstPassageScales.addToLeft(left.scales, right.scales);
         }
         return left;
     }

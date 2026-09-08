@@ -82,6 +82,14 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     protected final int dim;
     protected final int len; // 2 * dim
 
+    /**
+     * Unweighted extents from the query to the growing node box, including the
+     * query. Layout follows DiVector: high (toward minus) then low (toward plus).
+     * Updated before deposit(), independent of probabilities and recurrence decay.
+     * Per-tree state: subclasses may read/copy it, but must not modify it.
+     */
+    protected final double[] growingBox;
+
     protected final DefaultScoreFunctions.ScoreFn scoreSeenFn;
     protected final DefaultScoreFunctions.ScoreFn scoreUnseenFn;
     protected final DefaultScoreFunctions.DampFn dampFn;
@@ -128,6 +136,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         this.centerOfMass = centerOfMass;
         this.dim = dimension;
         this.len = 2 * dimension;
+        this.growingBox = new double[len];
         this.scoreSeenFn = scoreSeenFn;
         this.scoreUnseenFn = scoreUnseenFn;
         this.dampFn = dampFn;
@@ -158,6 +167,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         Arrays.fill(measure, 0.0);
         Arrays.fill(distances, 0.0);
         Arrays.fill(probMass, 0.0);
+        Arrays.fill(growingBox, 0.0);
         // folded*, foldedScore, foldedHeight deliberately NOT cleared
     }
 
@@ -173,6 +183,18 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         double S = VectorSupport.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
         sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
         return S;
+    }
+
+    /**
+     * Snapshot of monotone node geometry in query-relative coordinates. ArrayBox
+     * stores [max, -min]; expandedPoint stores [query, -query]. Clamping includes
+     * the query in the box. No probability enters these extents.
+     */
+    private void updateGrowingBox(ArrayBox box, float[] expandedPoint) {
+        for (int i = 0; i < dim; i++) {
+            growingBox[i] = Math.max(0.0, (double) expandedPoint[i] + box.values[box.offset + dim + i]);
+            growingBox[dim + i] = Math.max(0.0, (double) box.values[box.offset + i] + expandedPoint[dim + i]);
+        }
     }
 
     /**
@@ -198,9 +220,11 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         if (pointEqualsLeaf) {
             small = growShadow((ArrayBox) node.getSiblingBoundingBox());
             ArrayBox large = (ArrayBox) node.getBoundingBox();
+            updateGrowingBox(large, node.expanded());
             S = computeGap(small, large.values, large.offset);
         } else {
             small = (ArrayBox) node.getBoundingBox();
+            updateGrowingBox(small, node.expanded());
             S = computeGap(small, node.expanded(), 0);
         }
 
@@ -228,6 +252,10 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
         float[] leaf = leafNode.getLeafPoint();
         float[] expandedPoint = leafNode.expanded();
+        for (int i = 0; i < dim; i++) {
+            growingBox[i] = Math.max(0.0, (double) expandedPoint[i] - leaf[i]);
+            growingBox[dim + i] = Math.max(0.0, (double) leaf[i] + expandedPoint[dim + i]);
+        }
         double S = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
                 + VectorSupport.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
         sumOfNewRange = S; // leaf rangeSum ≡ 0
@@ -306,9 +334,11 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     /**
      * Fired once per contributing node, after prob and distComp are filled and
      * before the recurrence consumes them. prob[j] is π_j, lenComp[j] is π_j·len_j
-     * (so the length is lenComp[j]/prob[j], with no box access needed), decay is 1
-     * - probOfCut and 0 at a leaf, and mass is the node mass separated from -- the
-     * quantity whose log-slope against log length is the local exponent.
+     * (the ratio recovers length only when prob[j] > 0). growingBox supplies the
+     * independent, unweighted geometric snapshot and must be copied if retained.
+     * Decay is 1 - probOfCut and 0 at a leaf, and mass is the node mass separated
+     * from -- the quantity whose log-slope against log length is the local
+     * exponent.
      */
     protected void deposit(float[] prob, float[] lenComp, double decay, double mass) {
     }
