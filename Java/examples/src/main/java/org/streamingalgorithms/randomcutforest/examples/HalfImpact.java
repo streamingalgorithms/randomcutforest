@@ -23,11 +23,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.examples.plot.Contour;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
 import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 public class HalfImpact implements Example {
 
@@ -54,6 +56,16 @@ public class HalfImpact implements Example {
     /** The naive baseline drawn alongside: a centred square of half-width nn. */
     private static final Color NN_BOX = new Color(90, 90, 105);
 
+    /**
+     * The leaves the forest's traversals actually reach from the probe. Violet so
+     * it collides with none of the three TRACK colours, since the track drawn on
+     * any given pass changes.
+     */
+    private static final Color LEAF_CLOUD = new Color(126, 68, 178, 95);
+    /** Radius floor and scale for the leaf cloud; area encodes the vote. */
+    private static final double LEAF_MIN_R = 1.4;
+    private static final double LEAF_SCALE_R = 4.0;
+
     /** Scalar density field: grid resolution, contour count, arrow lattice. */
     private static final int FIELD_GRID = 130;
     private static final int CONTOURS = 6;
@@ -67,6 +79,14 @@ public class HalfImpact implements Example {
      */
     private static final double CONTOUR_LO = 0.35;
     private static final double CONTOUR_HI = 0.97;
+    /**
+     * Levels for the isolines. Null derives them from this grid's own quantile band
+     * and prints them; paste those values back in here to compare two grids. A
+     * quantile is taken over whatever node set was sampled, so derived levels move
+     * with the resolution even when the field does not, and two grids deriving
+     * their own levels cannot be compared at all.
+     */
+    private static final double[] FIXED_LEVELS = null;
     private static final int ARROW_GRID = 15;
     private static final double ARROW_LENGTH = 0.13;
     private static final Color ISO = new Color(214, 148, 34);
@@ -114,7 +134,6 @@ public class HalfImpact implements Example {
 
         penetrationStudy(randomSeed);
 
-        java.util.Random random = new java.util.Random(randomSeed);
         float[][] ring = annulus(RING_THICKNESS, randomSeed);
 
         Plot2D plot = livePlot ? Plot2D.open("Half Impact - extent box along a ray", range, 860)
@@ -187,6 +206,30 @@ public class HalfImpact implements Example {
                     AnisotropicDensityOutput out = forest.getAnisotropicDensity(probe);
                     double[] box = out.isReliable() ? out.cutBox() : null;
 
+                    // The impact frontier. Every tree returns the leaf its own random cuts
+                    // routed the probe to, merged across trees by point with Neighbor.count
+                    // holding the number of trees that reached it. Drawn as a cloud, this is
+                    // which part of the wall the forest considers local to the probe, and it
+                    // is the thing the extent box summarises into four numbers.
+                    //
+                    // Unbounded overload on purpose. At t = -2.2 the probe stands more than
+                    // a radius clear of the ring, and a distance cap would return nothing
+                    // exactly where the frontier is most worth seeing.
+                    List<Neighbor> leaves = forest.getNearNeighborsInSample(probe);
+                    double[][] leafXy = new double[leaves.size()][2];
+                    double[] leafWeight = new double[leaves.size()];
+                    double leafMax = 1;
+                    for (Neighbor nb : leaves) {
+                        leafMax = Math.max(leafMax, nb.count);
+                    }
+                    for (int i = 0; i < leaves.size(); i++) {
+                        Neighbor nb = leaves.get(i);
+                        leafXy[i][0] = nb.point[0];
+                        leafXy[i][1] = nb.point[1];
+                        // Normalised, so the encoding does not shift with numberOfTrees.
+                        leafWeight[i] = nb.count / leafMax;
+                    }
+
                     // Exact nearest-neighbour distance, taken from the ring itself rather
                     // than from the forest's sample. It is the ground truth the forest's
                     // own near-neighbour query approximates, and using it here avoids the
@@ -224,6 +267,9 @@ public class HalfImpact implements Example {
                             new double[][] { { START_X * ux + b * nx, START_X * uy + b * ny },
                                     { END_X * ux + b * nx, END_X * uy + b * ny } },
                             color, 1.0f, new float[] { 4f, 5f }));
+                    // Under the box outlines, so the outlines stay legible where the cloud
+                    // is densest, which is exactly where they overlap.
+                    body.add(Layers.weightedDots(leafXy, leafWeight, LEAF_CLOUD, LEAF_MIN_R, LEAF_SCALE_R));
                     body.addAll(tracks);
                     body.add(Layers.dots(new float[][] { probe }, Color.BLACK, 4));
                     body.add(Layers.label(
@@ -235,10 +281,11 @@ public class HalfImpact implements Example {
                             new Color(60, 60, 60)));
                     body.add(Layers.legend(
                             new String[] { "ring (data)", "density isolines", "directional density",
-                                    "extent box (measured)", "nn-square (isotropic baseline)" },
-                            new Color[] { new Color(140, 140, 140), ISO, GRAD, color, NN_BOX },
+                                    "leaves reached (area = tree votes)", "extent box (measured)",
+                                    "nn-square (isotropic baseline)" },
+                            new Color[] { new Color(140, 140, 140), ISO, GRAD, LEAF_CLOUD, color, NN_BOX },
                             new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.LINE, Layers.Swatch.LINE,
-                                    Layers.Swatch.BOX, Layers.Swatch.BOX }));
+                                    Layers.Swatch.DOTS, Layers.Swatch.BOX, Layers.Swatch.BOX }));
 
                     List<Layer> scene = new ArrayList<>(field);
                     scene.addAll(body);
@@ -298,93 +345,46 @@ public class HalfImpact implements Example {
      * is a gradient direction and the isolines are level sets, so the arrows should
      * cross the contours at right angles. Anywhere they do not is a place where the
      * scalar and directional halves of the same measurement disagree.
+     *
+     * <p>
+     * The marching squares used to be inlined here and is now Contour's. Two things
+     * follow. The ambiguous-cell centre is measured with the SAME callable that
+     * filled the grid, where the inlined copy sampled those centres with
+     * getCutDensity while the grid held passageDensity -- two estimators deciding
+     * one contour's topology. And the levels are chosen in one place, so they can
+     * be pinned and a second resolution compared against them.
      */
     private static List<Layer> densityField(RandomCutForest forest, double range) {
         System.out.println("building the static density field...");
         double lo = -range * 0.95, span = 2 * range * 0.95;
-        double[][] rho = new double[FIELD_GRID][FIELD_GRID];
-        List<Double> vals = new ArrayList<>();
-        for (int i = 0; i < FIELD_GRID; i++) {
-            for (int j = 0; j < FIELD_GRID; j++) {
-                double x = lo + span * i / (FIELD_GRID - 1.0), y = lo + span * j / (FIELD_GRID - 1.0);
-                // passageDensity, not the inherited getDensity: this example is named for
-                // the half crossing and everything drawn on it should come from that one
-                // scale rule. Mixing contours from the all-levels mean with boxes from
-                // the crossing would put two different estimators in one picture.
-                rho[i][j] = forest.getAnisotropicDensity(new float[] { (float) x, (float) y }).passageDensity(0.001);
-                vals.add(rho[i][j]);
-            }
-        }
-        java.util.Collections.sort(vals);
 
-        List<Layer> out = new ArrayList<>();
-        int saddles = 0, disagree = 0;
+        // passageDensity, not the inherited getDensity: this example is named for
+        // the half crossing and everything drawn on it should come from that one
+        // scale rule. Mixing contours from the all-levels mean with boxes from
+        // the crossing would put two different estimators in one picture.
+        Contour.Field density = (x, y) -> forest.getAnisotropicDensity(new float[] { (float) x, (float) y })
+                .passageDensity(0.001);
+
+        double[][] rho = Contour.sample(density, lo, span, FIELD_GRID);
         // Levels at quantiles of the sampled field, not evenly spaced. The density
         // spans orders of magnitude between the hollow interior and the wall, so even
         // spacing would stack every contour on the wall.
-        for (int c = 1; c <= CONTOURS; c++) {
-            double level = vals
-                    .get((int) ((CONTOUR_LO + (CONTOUR_HI - CONTOUR_LO) * c / (CONTOURS + 1.0)) * (vals.size() - 1)));
-            List<double[]> segs = new ArrayList<>();
-            double h = span / (FIELD_GRID - 1.0);
-            for (int i = 0; i + 1 < FIELD_GRID; i++) {
-                for (int j = 0; j + 1 < FIELD_GRID; j++) {
-                    double x0 = lo + span * i / (FIELD_GRID - 1.0), y0 = lo + span * j / (FIELD_GRID - 1.0);
-                    double a = rho[i][j], b = rho[i + 1][j], cc = rho[i + 1][j + 1], d = rho[i][j + 1];
-                    List<double[]> hits = new ArrayList<>();
-                    if ((a > level) != (b > level)) {
-                        hits.add(new double[] { x0 + h * frac(a, b, level), y0 });
-                    }
-                    if ((b > level) != (cc > level)) {
-                        hits.add(new double[] { x0 + h, y0 + h * frac(b, cc, level) });
-                    }
-                    if ((d > level) != (cc > level)) {
-                        hits.add(new double[] { x0 + h * frac(d, cc, level), y0 + h });
-                    }
-                    if ((a > level) != (d > level)) {
-                        hits.add(new double[] { x0, y0 + h * frac(a, d, level) });
-                    }
-                    if (hits.size() == 2) {
-                        segs.add(new double[] { hits.get(0)[0], hits.get(0)[1], hits.get(1)[0], hits.get(1)[1] });
-                    } else if (hits.size() == 4) {
-                        // The saddle. Four crossings admit two pairings with DIFFERENT
-                        // topology: one separates the high corners, the other joins them.
-                        // Picking in collection order is arbitrary, and an arbitrary rule
-                        // applied consistently to a symmetric field yields symmetric
-                        // artefacts, so the resulting features cannot be told from real
-                        // structure by their symmetry alone.
-                        //
-                        // The textbook fix is the asymptotic decider, which takes the
-                        // BILINEAR value at the centre -- the mean of the corners -- and
-                        // asks which side of the level it falls on. That assumes the field
-                        // is bilinear inside the cell, which is the right assumption when
-                        // grid samples are all you have. They are not: this field comes
-                        // from axis-aligned boxes and L1 geometry, has no reason to be
-                        // bilinear below cell scale, and can be queried anywhere. So the
-                        // centre is MEASURED rather than interpolated. The count of cells
-                        // where the two disagree is reported at the end, and is a direct
-                        // statement about whether the grid resolves the field.
-                        double cx = x0 + h / 2, cy = y0 + h / 2;
-                        double centre = forest.getAnisotropicDensity(new float[] { (float) cx, (float) cy })
-                                .getCutDensity(0.001, 2);
-                        double bilinear = 0.25 * (a + b + cc + d);
-                        saddles++;
-                        if ((centre > level) != (bilinear > level)) {
-                            disagree++;
-                        }
-                        boolean joinsA = (centre > level) == (a > level);
-                        int[][] pairs = joinsA ? new int[][] { { 0, 1 }, { 2, 3 } }
-                                : new int[][] { { 0, 3 }, { 1, 2 } };
-                        for (int[] pr : pairs) {
-                            segs.add(new double[] { hits.get(pr[0])[0], hits.get(pr[0])[1], hits.get(pr[1])[0],
-                                    hits.get(pr[1])[1] });
-                        }
-                    }
-                }
-            }
-            out.add(segments(segs, new Color(ISO.getRed(), ISO.getGreen(), ISO.getBlue(), 55 + 130 * c / CONTOURS),
-                    1.1f));
+        double[] levels = (FIXED_LEVELS != null) ? FIXED_LEVELS
+                : Contour.quantileLevels(rho, CONTOURS, CONTOUR_LO, CONTOUR_HI);
+        if (FIXED_LEVELS == null) {
+            System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
         }
+
+        List<Layer> out = new ArrayList<>(Contour.isolines(density, rho, lo, span, levels, ISO));
+
+        // Same cells and levels the isolines walked. The saddle is the cell where four
+        // crossings admit two pairings with DIFFERENT topology: one separates the high
+        // corners, the other joins them. The textbook asymptotic decider takes the
+        // bilinear value at the centre, the mean of the corners, which assumes the
+        // field is bilinear inside the cell. It is not: this field comes from
+        // axis-aligned boxes and L1 geometry and can be queried anywhere, so Contour
+        // measures the centre instead. This counts how often that mattered.
+        int[] audit = Contour.saddleAudit(density, rho, lo, span, levels);
 
         List<double[]> origins = new ArrayList<>(), deltas = new ArrayList<>();
         for (int i = 0; i < ARROW_GRID; i++) {
@@ -406,27 +406,10 @@ public class HalfImpact implements Example {
         System.out.printf(
                 "ambiguous saddle cells %d, of which the measured centre disagrees with the "
                         + "bilinear guess in %d (%.1f%%)%n",
-                saddles, disagree, (saddles > 0) ? 100.0 * disagree / saddles : 0.0);
+                audit[0], audit[1], (audit[0] > 0) ? 100.0 * audit[1] / audit[0] : 0.0);
         System.out.println("a high disagreement rate means the grid does not resolve the field, and any");
         System.out.println("contour topology read off it -- including closed loops -- is unreliable.\n");
         return out;
-    }
-
-    private static double frac(double a, double b, double level) {
-        return (b == a) ? 0.5 : (level - a) / (b - a);
-    }
-
-    /** Many disconnected segments as one Layer; Layer is a functional interface. */
-    private static Layer segments(List<double[]> segs, Color color, float stroke) {
-        return (g, vp) -> {
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(color);
-            g.setStroke(new BasicStroke(stroke));
-            for (double[] sg : segs) {
-                g.drawLine((int) Math.round(vp.px(sg[0])), (int) Math.round(vp.py(sg[1])),
-                        (int) Math.round(vp.px(sg[2])), (int) Math.round(vp.py(sg[3])));
-            }
-        };
     }
 
     /**

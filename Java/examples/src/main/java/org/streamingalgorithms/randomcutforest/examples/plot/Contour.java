@@ -17,6 +17,7 @@ package org.streamingalgorithms.randomcutforest.examples.plot;
 
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -48,6 +49,17 @@ import java.util.List;
  * every contour on the densest region. The low end of the quantile band is the
  * risky one: where the field is flat, a small amount of estimator noise
  * displaces a contour a long way and can close it into a spurious loop.
+ *
+ * <p>
+ * <b>Quantile levels are not comparable across grids.</b> A quantile is taken
+ * over whatever node set was sampled, so changing the grid reweights the band
+ * and moves the levels even when the field is unchanged. Two runs at different
+ * resolutions therefore cannot be compared while both are deriving their own
+ * levels. Use {@link #sample} and {@link #quantileLevels} to capture the levels
+ * one run picks, then pass those fixed values to the explicit-level
+ * {@link #isolines(Field, double, double, int, double[], Color)} for every run
+ * being compared. Fixed levels also stop the band drifting frame to frame as a
+ * streaming estimator resamples underneath it.
  */
 public final class Contour {
 
@@ -59,22 +71,91 @@ public final class Contour {
     private Contour() {
     }
 
-    public static List<Layer> isolines(Field f, double lo, double span, int grid, int levelCount, double qLo,
-            double qHi, Color color) {
+    /**
+     * Evaluate the field on a grid by grid lattice spanning [lo, lo + span] in both
+     * axes. Node (i, j) is at (lo + h*i, lo + h*j) with h = span / (grid - 1), so
+     * the corners of the square are sampled and doubling the resolution as grid' =
+     * 2*grid - 1 makes the coarse nodes an exact subset of the fine ones.
+     *
+     * @param f    the field
+     * @param lo   lower bound on both axes
+     * @param span extent on both axes
+     * @param grid nodes per axis, at least 2
+     * @return the sampled values, indexed [i][j]
+     */
+    public static double[][] sample(Field f, double lo, double span, int grid) {
+        if (grid < 2) {
+            throw new IllegalArgumentException("grid must be at least 2");
+        }
         double[][] v = new double[grid][grid];
-        List<Double> vals = new ArrayList<>(grid * grid);
         double h = span / (grid - 1.0);
         for (int i = 0; i < grid; i++) {
             for (int j = 0; j < grid; j++) {
                 v[i][j] = f.at(lo + h * i, lo + h * j);
-                vals.add(v[i][j]);
             }
         }
+        return v;
+    }
+
+    /**
+     * The levels the quantile band selects for an already sampled grid. Returned
+     * ascending, one per contour. Non-finite nodes are left out of the order
+     * statistics: a field that returns NaN or an infinity off its support would
+     * otherwise place those nodes at the top of the sorted array and hand back
+     * levels no finite value can cross.
+     *
+     * @param v          sampled grid, as returned by {@link #sample}
+     * @param levelCount number of contours
+     * @param qLo        low end of the quantile band
+     * @param qHi        high end of the quantile band
+     * @return the level values, ascending; empty if no node was finite
+     */
+    public static double[] quantileLevels(double[][] v, int levelCount, double qLo, double qHi) {
+        List<Double> vals = new ArrayList<>(v.length * v.length);
+        for (double[] row : v) {
+            for (double x : row) {
+                if (Double.isFinite(x)) {
+                    vals.add(x);
+                }
+            }
+        }
+        if (vals.isEmpty()) {
+            return new double[0];
+        }
         Collections.sort(vals);
+        double[] levels = new double[levelCount];
+        for (int c = 1; c <= levelCount; c++) {
+            levels[c - 1] = vals.get((int) ((qLo + (qHi - qLo) * c / (levelCount + 1.0)) * (vals.size() - 1)));
+        }
+        return levels;
+    }
+
+    /**
+     * Isolines at explicit levels on an already sampled grid. The field is still
+     * needed: ambiguous cells are resolved by measuring the centre rather than
+     * averaging the corners. Levels are drawn darkest-highest regardless of the
+     * order given, so the caller's array is copied and sorted rather than mutated.
+     *
+     * @param f      the field, for centre samples in ambiguous cells
+     * @param v      sampled grid, as returned by {@link #sample}
+     * @param lo     lower bound on both axes, matching the sample call
+     * @param span   extent on both axes, matching the sample call
+     * @param levels the level values
+     * @param color  base colour; alpha ramps with the level
+     * @return one Layer per level
+     */
+    public static List<Layer> isolines(Field f, double[][] v, double lo, double span, double[] levels, Color color) {
+        int grid = v.length;
+        if (grid < 2) {
+            throw new IllegalArgumentException("grid must be at least 2");
+        }
+        double h = span / (grid - 1.0);
+        double[] sorted = Arrays.copyOf(levels, levels.length);
+        Arrays.sort(sorted);
 
         List<Layer> out = new ArrayList<>();
-        for (int c = 1; c <= levelCount; c++) {
-            double level = vals.get((int) ((qLo + (qHi - qLo) * c / (levelCount + 1.0)) * (vals.size() - 1)));
+        for (int c = 1; c <= sorted.length; c++) {
+            double level = sorted[c - 1];
             List<double[]> segs = new ArrayList<>();
             for (int i = 0; i + 1 < grid; i++) {
                 for (int j = 0; j + 1 < grid; j++) {
@@ -108,10 +189,83 @@ public final class Contour {
                     }
                 }
             }
-            int alpha = 55 + 130 * c / levelCount;
+            int alpha = 55 + 130 * c / sorted.length;
             out.add(segments(segs, new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha), 1.1f));
         }
         return out;
+    }
+
+    /**
+     * Counts the ambiguous cells and how often the measured centre disagrees with
+     * the bilinear guess, over the same cells and levels
+     * {@link #isolines(Field, double[][], double, double, double[], Color)} would
+     * walk. A high disagreement rate means the grid does not resolve the field, so
+     * contour topology read off it -- closed loops especially -- is unreliable.
+     *
+     * <p>
+     * This repeats the centre samples that isolines already takes, so it roughly
+     * doubles the cost of the ambiguous cells. Ambiguous cells are normally a small
+     * fraction of the grid, and a static field is built once.
+     *
+     * @return two counts: ambiguous cells, and of those the ones where measuring
+     *         the centre changed the pairing the bilinear guess would have chosen
+     */
+    public static int[] saddleAudit(Field f, double[][] v, double lo, double span, double[] levels) {
+        int grid = v.length;
+        if (grid < 2) {
+            throw new IllegalArgumentException("grid must be at least 2");
+        }
+        double h = span / (grid - 1.0);
+        int saddles = 0, disagree = 0;
+        for (double level : levels) {
+            for (int i = 0; i + 1 < grid; i++) {
+                for (int j = 0; j + 1 < grid; j++) {
+                    double a = v[i][j], b = v[i + 1][j], cc = v[i + 1][j + 1], d = v[i][j + 1];
+                    int crossings = 0;
+                    if ((a > level) != (b > level)) {
+                        crossings++;
+                    }
+                    if ((b > level) != (cc > level)) {
+                        crossings++;
+                    }
+                    if ((d > level) != (cc > level)) {
+                        crossings++;
+                    }
+                    if ((a > level) != (d > level)) {
+                        crossings++;
+                    }
+                    if (crossings == 4) {
+                        saddles++;
+                        double x0 = lo + h * i, y0 = lo + h * j;
+                        double centre = f.at(x0 + h / 2, y0 + h / 2);
+                        double bilinear = 0.25 * (a + b + cc + d);
+                        if ((centre > level) != (bilinear > level)) {
+                            disagree++;
+                        }
+                    }
+                }
+            }
+        }
+        return new int[] { saddles, disagree };
+    }
+
+    /**
+     * Isolines at explicit levels, sampling the grid internally. This is the
+     * overload to use when comparing two resolutions: pass the same levels to both.
+     */
+    public static List<Layer> isolines(Field f, double lo, double span, int grid, double[] levels, Color color) {
+        return isolines(f, sample(f, lo, span, grid), lo, span, levels, color);
+    }
+
+    /**
+     * Isolines with levels derived from the quantile band of this grid's own
+     * values. Convenient for a single run; see the class note on why the levels
+     * cannot be compared with those of a different grid.
+     */
+    public static List<Layer> isolines(Field f, double lo, double span, int grid, int levelCount, double qLo,
+            double qHi, Color color) {
+        double[][] v = sample(f, lo, span, grid);
+        return isolines(f, v, lo, span, quantileLevels(v, levelCount, qLo, qHi), color);
     }
 
     private static double[] seg(double[] p, double[] q) {

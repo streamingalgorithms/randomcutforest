@@ -37,6 +37,7 @@ import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
 import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
  * Dynamic near neighbour, with cut, passage and stop boxes drawn around the
@@ -68,6 +69,30 @@ public class NearNeighborExample implements Example {
     private static final Color PASSAGE_BOX = new Color(30, 145, 120);
     private static final Color KNN_BALL = new Color(40, 120, 190);
     private static final Color STOP_BOX = new Color(214, 118, 34);
+    /**
+     * The whole returned neighbour list, not just the closest. Translucent so
+     * overlap reads as concentration; same hue as the winner dot, Layers.color(0).
+     */
+    private static final Color NN_CLOUD = new Color(214, 39, 40, 90);
+
+    /**
+     * Distance threshold handed to getNearNeighborsInSample. It is a threshold and
+     * not a k: every tree contributes its traversal leaf, and leaves farther than
+     * this are dropped. Sorted ascending by distance, so element 0 is the closest.
+     */
+    private static final double NN_THRESHOLD = 1.0;
+    /**
+     * Radius floor and scale for the vote-weighted cloud; area encodes the vote.
+     */
+    private static final double NN_MIN_R = 1.5;
+    private static final double NN_SCALE_R = 5.0;
+    /**
+     * Levels for the isolines. Null derives them from this grid's own quantile band
+     * and prints them on the first field refresh; paste those values back in here
+     * to compare two grids. A quantile is taken over whatever node set was sampled,
+     * so derived levels are not comparable across resolutions.
+     */
+    private static final double[] FIXED_LEVELS = null;
 
     /** Topo state for the recording, kept apart from the live toggle. */
     private static final boolean GIF_TOPO = true;
@@ -156,10 +181,22 @@ public class NearNeighborExample implements Example {
 
             if (frame % FIELD_EVERY == 0) {
                 Instant f0 = Instant.now();
-                rawField = Contour.isolines(
-                        (x, y) -> newForest.getAnisotropicDensity(new float[] { (float) x, (float) y })
-                                .passageDensity(0.001),
-                        -range * 0.95, 2 * range * 0.95, FIELD_GRID, CONTOURS, CONTOUR_LO, CONTOUR_HI, ISO);
+                double fieldLo = -range * 0.95;
+                double fieldSpan = 2 * range * 0.95;
+                Contour.Field density = (x, y) -> newForest.getAnisotropicDensity(new float[] { (float) x, (float) y })
+                        .passageDensity(0.001);
+                // .meanLogVolume();
+
+                // Sampled once and reused for the isolines, so this is the same
+                // FIELD_GRID^2 queries as before; only the level choice moved out.
+                double[][] v = Contour.sample(density, fieldLo, fieldSpan, FIELD_GRID);
+                double[] levels = (FIXED_LEVELS != null) ? FIXED_LEVELS
+                        : Contour.quantileLevels(v, CONTOURS, CONTOUR_LO, CONTOUR_HI);
+                if (frame == 0 && FIXED_LEVELS == null) {
+                    System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
+                }
+                rawField = Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO);
+
                 field = new ArrayList<>();
                 for (Layer inner : rawField) {
                     field.add((g, vp) -> {
@@ -172,9 +209,40 @@ public class NearNeighborExample implements Example {
             }
 
             float[] movingQuery = rotateClockWise(queryPoint, -3 * PI * degree / 360);
+
+            // The forest returns the whole list, one entry per distinct traversal leaf,
+            // merged across trees and sorted ascending by distance. The closest drives
+            // the arrow and every diagnostic below; the rest are drawn as the cloud.
             Instant q0 = Instant.now();
-            float[] neighbor = newForest.getNearNeighborsInSample(movingQuery, 1).get(0).point;
+            List<Neighbor> neighbors = newForest.getNearNeighborsInSample(movingQuery, NN_THRESHOLD);
+            if (neighbors.isEmpty()) {
+                // Nothing within the threshold: fall back to the unbounded overload
+                // rather than silently dropping the frame.
+                neighbors = newForest.getNearNeighborsInSample(movingQuery);
+            }
             queryNanos += Duration.between(q0, Instant.now()).toNanos();
+
+            // Defensive only: the list is non-empty once the forest is output-ready,
+            // which it is after the first frame's thousand updates.
+            float[] neighbor = neighbors.isEmpty() ? movingQuery : neighbors.get(0).point;
+
+            // Neighbor.count is the number of trees that landed on that point, summed
+            // by the collector when duplicates merge. Normalised by the largest so the
+            // encoding does not change when numberOfTrees does.
+            double[][] nnXy = new double[neighbors.size()][2];
+            double[] nnWeight = new double[neighbors.size()];
+            double nnMax = 1;
+            int nnVotes = 0;
+            for (Neighbor nb : neighbors) {
+                nnMax = Math.max(nnMax, nb.count);
+                nnVotes += nb.count;
+            }
+            for (int i = 0; i < neighbors.size(); i++) {
+                Neighbor nb = neighbors.get(i);
+                nnXy[i][0] = nb.point[0];
+                nnXy[i][1] = nb.point[1];
+                nnWeight[i] = nb.count / nnMax;
+            }
 
             double nnDistance = Math.hypot(neighbor[0] - movingQuery[0], neighbor[1] - movingQuery[1]);
 
@@ -255,6 +323,12 @@ public class NearNeighborExample implements Example {
                 body.add(boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, true));
                 body.add(boxFill(movingQuery[0], movingQuery[1], box, CUT_BOX, 50, true));
             }
+            // The cloud of leaves the traversals actually reached, above the box fills
+            // and below the arrow and the winner. Area encodes the vote, so the shape of
+            // the cloud is the forest's implicit kernel at this query. These are not
+            // exact nearest neighbours: each tree returns where its random cuts sent the
+            // query, which is the point of drawing them.
+            body.add(Layers.weightedDots(nnXy, nnWeight, NN_CLOUD, NN_MIN_R, NN_SCALE_R));
             body.add(Layers.arrows(new double[][] { { movingQuery[0], movingQuery[1] } },
                     new double[][] { { neighbor[0] - movingQuery[0], neighbor[1] - movingQuery[1] } }, Layers.color(1),
                     2.0f));
@@ -290,12 +364,13 @@ public class NearNeighborExample implements Example {
             body.add(Layers.label(-range * 0.92, -range * 0.90, readout,
                     (box == null || nnInBox) ? new Color(60, 60, 60) : new Color(176, 32, 160)));
             body.add(Layers.legend(
-                    new String[] { "data", "approx NN, k = 1 (forest)", "cut box", "passage box",
-                            "stop box (shading only)", "exact k-NN ball, k = sqrt(n)", "density isolines" },
-                    new Color[] { new Color(120, 120, 120), Layers.color(0), CUT_BOX, PASSAGE_BOX, STOP_BOX, KNN_BALL,
-                            ISO },
-                    new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.BOX, Layers.Swatch.BOX,
-                            Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.LINE }));
+                    new String[] { "data", "near neighbors, area = tree votes", "closest (forest)", "cut box",
+                            "passage box", "stop box (shading only)", "exact k-NN ball, k = sqrt(n)",
+                            "density isolines" },
+                    new Color[] { new Color(120, 120, 120), NN_CLOUD, Layers.color(0), CUT_BOX, PASSAGE_BOX, STOP_BOX,
+                            KNN_BALL, ISO },
+                    new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.BOX,
+                            Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.LINE }));
 
             List<Layer> scene = new ArrayList<>(field);
             scene.addAll(body);
@@ -348,11 +423,11 @@ public class NearNeighborExample implements Example {
                 System.out.printf(
                         "[%3d deg] total %d ms | query %.3f ms/frame | box %.3f ms/frame "
                                 + "| field %.1f ms | nn %.4f | reach/nn %.2f | aspect %.2f | box %d pts %.0f/area "
-                                + "| nn-sq %d pts %.0f/area | x%.2f denser | flat %d%n",
+                                + "| nn-sq %d pts %.0f/area | x%.2f denser | leaves %d/%d votes | flat %d%n",
                         degree, Duration.between(start, Instant.now()).toMillis(), queryNanos / 1e6 / frame,
                         boxNanos / 1e6 / frame, fieldNanos / 1e6 / frame, nnDistance,
                         (nnDistance > 0) ? reach / nnDistance : 0, anisotropy, inBox, densBox, inIso, densIso,
-                        (densIso > 0) ? densBox / densIso : 0.0, flat);
+                        (densIso > 0) ? densBox / densIso : 0.0, neighbors.size(), nnVotes, flat);
             }
         }
 

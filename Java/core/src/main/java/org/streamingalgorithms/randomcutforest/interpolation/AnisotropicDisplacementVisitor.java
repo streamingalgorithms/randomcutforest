@@ -30,8 +30,24 @@ import org.streamingalgorithms.randomcutforest.tree.ITree;
  * distribution, scanned leaf-to-root. Geometry is copied from growingBox at
  * each level; it is never reconstructed from probability-weighted lengths.
  *
- * The last visited box is the stopping box. The first mass crossing caps all
- * three selected levels. Outputs are averaged equally across trees by scales.
+ * First passage ends the upward traversal. Passage is achieved either by the
+ * local cut probability falling to Q_STOP or by the node mass reaching
+ * treeMass^massTargetExponent. Because the parent's accept() returns
+ * immediately once pointInsideBox is set, measure, probMass and distances
+ * receive no terms from levels above first passage: the recurrences hold their
+ * value as of that level, so the length scale distances.getHighLowSum(i) /
+ * probMass.getHighLowSum(i) is the scale at passage rather than a whole-path
+ * average dominated by the root. The level that achieves passage is included,
+ * since the parent calls deposit() before recur() within a level.
+ *
+ * Set stopAtFirstPassage false to restore the previous behaviour, in which only
+ * Q_STOP terminated the walk and the mass crossing merely capped the three
+ * selected levels. The score and height carried by the same
+ * InterpolationMeasure are truncated along with the measure arrays, so a caller
+ * that needs the whole-path score should use a separate visitor for it.
+ *
+ * The last visited box is the stopping box, which under truncation is the first
+ * passage box. Outputs are averaged equally across trees by scales.
  */
 public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
 
@@ -40,9 +56,12 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     /** Local cut-probability threshold for ending the traversal, not a quantile. */
     public static final double Q_STOP = 0.05;
     public static final double DEFAULT_MASS_EXPONENT = 0.5;
+    public static final boolean DEFAULT_STOP_AT_FIRST_PASSAGE = true;
     private static final int INITIAL_CAPACITY = 32;
 
     private final double massTargetExponent;
+    /** When true the mass crossing ends the walk instead of only capping levels. */
+    private final boolean stopAtFirstPassage;
     private final double[] cutBox;
     private final double[] passageBox;
     private final double[] stopBox;
@@ -62,12 +81,18 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     private FirstPassageScales pending;
 
     AnisotropicDisplacementVisitor(int dimension, double pointMass, boolean centerOfMass) {
-        this(dimension, pointMass, centerOfMass, DEFAULT_MASS_EXPONENT);
+        this(dimension, pointMass, centerOfMass, DEFAULT_MASS_EXPONENT, DEFAULT_STOP_AT_FIRST_PASSAGE);
     }
 
     AnisotropicDisplacementVisitor(int dimension, double pointMass, boolean centerOfMass, double massTargetExponent) {
+        this(dimension, pointMass, centerOfMass, massTargetExponent, DEFAULT_STOP_AT_FIRST_PASSAGE);
+    }
+
+    AnisotropicDisplacementVisitor(int dimension, double pointMass, boolean centerOfMass, double massTargetExponent,
+            boolean stopAtFirstPassage) {
         super(dimension, pointMass, centerOfMass);
         this.massTargetExponent = massTargetExponent;
+        this.stopAtFirstPassage = stopAtFirstPassage;
         cutBox = new double[len];
         passageBox = new double[len];
         stopBox = new double[len];
@@ -80,6 +105,12 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
 
     public AnisotropicDisplacementVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass) {
         this(pointToScore.length, pointMass, centerOfMass);
+        this.treeMass = treeMass;
+    }
+
+    public AnisotropicDisplacementVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass,
+            double massTargetExponent, boolean stopAtFirstPassage) {
+        this(pointToScore.length, pointMass, centerOfMass, massTargetExponent, stopAtFirstPassage);
         this.treeMass = treeMass;
     }
 
@@ -105,6 +136,9 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
             // Duplicate leaf has no geometric first-separation event. Keep its
             // zero box for a possible mass crossing, but assign no passage weight.
             // Quantiles are conditional on the nondegenerate passage weight.
+            // The walk is deliberately not terminated here: a heavy duplicate can
+            // set massLevel at level 0, and stopping would leave every selected
+            // box degenerate and every volume zero.
             appendLevel(0.0, 0.0, node.getMass());
         }
     }
@@ -113,10 +147,14 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     protected void deposit(float[] prob, float[] lenComp, double decay, double mass) {
         deposited = true;
         double q = 1.0 - decay;
+        boolean massReachedBefore = massLevel >= 0;
         appendLevel(q, decay, mass);
-        // Preserve the existing whole-node truncation of the upward traversal.
-        // Probability and weighted distance arrays remain untouched.
-        if (q <= Q_STOP) {
+        // First passage. Setting pointInsideBox makes the parent's accept() return
+        // on the next level, so no further terms enter measure, probMass or
+        // distances. Only a crossing carrying nondegenerate passage weight ends
+        // the walk; see acceptLeaf.
+        boolean massCrossedHere = stopAtFirstPassage && !massReachedBefore && massLevel == levels - 1;
+        if (q <= Q_STOP || massCrossedHere) {
             pointInsideBox = true;
         }
     }
@@ -148,6 +186,9 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
 
         // Conditional q becomes an unconditional first-separation weight after
         // multiplying by survival through all buffered ancestors, top-down.
+        // Under truncation the buffer ends at first passage, so total is the
+        // passage weight of the truncated path and the quantiles below are taken
+        // within it. This is what bounds passageBox away from the root box.
         double survival = 1.0;
         double total = 0.0;
         for (int level = levels - 1; level >= 0; level--) {
@@ -159,6 +200,9 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
         int cutLevel = crossingLevel(LAMBDA_CUT, total);
         int passageLevel = crossingLevel(LAMBDA_PASSAGE, total);
         int stopLevel = levels - 1;
+        // Retained for the acceptLeaf path, where massLevel can precede the last
+        // buffered level. When deposit() ended the walk, massLevel == levels - 1
+        // and these are no-ops.
         if (massLevel >= 0) {
             cutLevel = Math.min(cutLevel, massLevel);
             passageLevel = Math.min(passageLevel, massLevel);
@@ -252,6 +296,11 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     }
 
     public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass) {
+        return reusableFactory(pointMass, centerOfMass, DEFAULT_MASS_EXPONENT, DEFAULT_STOP_AT_FIRST_PASSAGE);
+    }
+
+    public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass,
+            double massTargetExponent, boolean stopAtFirstPassage) {
         return new IVisitorFactory<InterpolationMeasure>() {
             @Override
             public boolean isReusable() {
@@ -270,13 +319,14 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
 
             @Override
             public IRFVisitor<InterpolationMeasure> newReusableVisitor(float[] point) {
-                return new AnisotropicDisplacementVisitor(point.length, pointMass, centerOfMass);
+                return new AnisotropicDisplacementVisitor(point.length, pointMass, centerOfMass, massTargetExponent,
+                        stopAtFirstPassage);
             }
 
             @Override
             public Visitor<InterpolationMeasure> newVisitor(ITree<?, ?> tree, float[] point) {
                 return new AnisotropicDisplacementVisitor(tree.projectToTree(point), tree.getMass(), pointMass,
-                        centerOfMass);
+                        centerOfMass, massTargetExponent, stopAtFirstPassage);
             }
         };
     }

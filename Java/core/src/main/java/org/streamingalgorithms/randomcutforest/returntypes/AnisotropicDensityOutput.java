@@ -18,6 +18,23 @@ package org.streamingalgorithms.randomcutforest.returntypes;
 /**
  * DensityOutput plus tree-averaged boxes recorded at local cut-probability or
  * mass crossings.
+ *
+ * <p>
+ * <b>An axis of zero gap carries no extent.</b> A coordinate the cuts never
+ * fall in, because the bounding box has no width there, contributes no factor
+ * to a volume and reduces that volume's dimension by one. Every density here
+ * follows that rule and {@link #getActiveDimensions} reports how many axes
+ * survived it. Volumes of different active dimension are not comparable, since
+ * a product over k axes has units of length^k, so read the count beside any
+ * density and prefer {@link #meanLogVolume} when comparing across queries.
+ *
+ * <p>
+ * <b>Where the submanifold dimension lives.</b> Selecting a subset of axes is
+ * only meaningful when fewer are asked for than are active, and it belongs to
+ * the mixture in {@link #getDensity(double, int)}, which already carries the
+ * parameter. {@link #getCutDensity(double)} takes its product over every active
+ * axis and needs neither parameter nor sort: asking for all of them is asking
+ * for each of them, and order does not affect a product.
  */
 public class AnisotropicDensityOutput extends DensityOutput {
 
@@ -122,12 +139,26 @@ public class AnisotropicDensityOutput extends DensityOutput {
     // ------------------------------------------------------------------
 
     /**
-     * Displaced mass over a product volume built from the crossing half-lengths.
-     * Where the submanifold dimension is below the ambient one, the product is
-     * taken over the k most contracted axes, since those are the ones that actually
-     * shrink along the path.
+     * Axes of the cut box with positive width. This is the dimension of the volume
+     * {@link #getCutDensity(double)} divides by, below the ambient dimension
+     * whenever a coordinate carries no extent.
      */
-    public double getCutDensity(double q, int manifoldDimension) {
+    public int getActiveDimensions() {
+        int active = 0;
+        for (double w : getAxisExtents()) {
+            if (w > 0.0) {
+                active++;
+            }
+        }
+        return active;
+    }
+
+    /**
+     * Displaced mass over the cut-box volume, the product over every axis of
+     * positive width. No sort and no submanifold parameter; see the class note. The
+     * dimension of the volume is {@link #getActiveDimensions}.
+     */
+    public double getCutDensity(double q) {
         double weight = getSampleWeight();
         if (!(weight > 0.0)) {
             return 0.0;
@@ -136,33 +167,106 @@ public class AnisotropicDensityOutput extends DensityOutput {
         if (!(sumOfPts > 0.0)) {
             return 0.0;
         }
-
-        // Product of the selected axis widths of the averaged cut box.
-        double[] sorted = getAxisExtents();
-        java.util.Arrays.sort(sorted);
         double volume = 1.0;
-        int used = 0;
-        for (double width : sorted) {
-            if (used == manifoldDimension) {
-                break;
-            }
+        int active = 0;
+        for (double width : getAxisExtents()) {
             if (width > 0.0) {
                 volume *= width;
-                used++;
+                active++;
             }
         }
-        if (manifoldDimension <= 0 || used < manifoldDimension) {
-            return 0.0;
-        }
-
-        if (!(volume > 0)) {
+        // No active axis is a point, not a unit box: an empty product reads as
+        // volume 1 and would pass the guard below unnoticed.
+        if (active == 0 || !(volume > 0.0)) {
             return 0.0;
         }
         return sumOfPts / (q * sumOfPts + volume);
     }
 
     public double getCutDensity() {
-        return getCutDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR, getDimensions());
+        return getCutDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
+    }
+
+    /**
+     * Mixture density, restricted to a submanifold dimension when one is asked for.
+     *
+     * <p>
+     * Each active axis proposes a length scale t = distance / probability mass and
+     * the volume is estimated as t raised to the number of axes forming it,
+     * weighted by that axis's probability mass. An axis of zero gap is never cut,
+     * so its probability mass is zero and it leaves both the sum and the count with
+     * no special case: the weights do what a product cannot.
+     *
+     * <p>
+     * When fewer axes are asked for than are active, the axes are sorted and the
+     * ones of <b>largest</b> length scale kept. That inverts the wording of the old
+     * cut-density comment, which sorted ascending and took the most contracted. For
+     * data near a lower-dimensional set the neighbourhood is wide along the
+     * submanifold and thin across it, so the axes spanning it are the wide ones and
+     * taking the contracted ones selects the normal directions instead. The old
+     * behaviour only looked right because exact zeros were skipped, which hides the
+     * difference for a perfectly flat axis and not for a merely thin one.
+     *
+     * @param q                 smoothing parameter
+     * @param manifoldDimension axes to include; at or above the active count all
+     *                          active axes are used, 0 or less yields 0
+     */
+    @Override
+    public double getDensity(double q, int manifoldDimension) {
+        if (manifoldDimension <= 0 || sampleSize == 0) {
+            return 0.0;
+        }
+        double sumOfPts = measure.getHighLowSum() / sampleSize;
+        if (!(sumOfPts > 0.0)) {
+            return 0.0;
+        }
+        double[] scale = new double[dimensions];
+        double[] mass = new double[dimensions];
+        int active = collectActive(scale, mass);
+        if (active == 0) {
+            return 0.0;
+        }
+        int used = Math.min(manifoldDimension, active);
+        double cutoff = (used < active) ? kthLargest(scale, active, used) : Double.NEGATIVE_INFINITY;
+
+        double sumOfFactors = 0.0;
+        int taken = 0;
+        for (int i = 0; i < active && taken < used; i++) {
+            if (scale[i] >= cutoff) {
+                sumOfFactors += mass[i] * Math.exp(Math.log(scale[i]) * used);
+                taken++;
+            }
+        }
+        return sumOfPts / (q * sumOfPts + sumOfFactors);
+    }
+
+    /**
+     * Packs the length scale and probability mass of every axis that is cut at all
+     * into the fronts of the two arrays.
+     *
+     * @return how many were packed
+     */
+    private int collectActive(double[] scale, double[] mass) {
+        int active = 0;
+        for (int i = 0; i < dimensions; i++) {
+            double p = probMass.getHighLowSum(i);
+            if (p > 0.0) {
+                double t = distances.getHighLowSum(i) / p;
+                if (t > 0.0) {
+                    scale[active] = t;
+                    mass[active] = p;
+                    active++;
+                }
+            }
+        }
+        return active;
+    }
+
+    /** The k-th largest of the first n entries, k >= 1; sorts a copy. */
+    private static double kthLargest(double[] values, int n, int k) {
+        double[] sorted = java.util.Arrays.copyOf(values, n);
+        java.util.Arrays.sort(sorted);
+        return sorted[n - k];
     }
 
     private double[] getDirectionalDensity(double q) {
@@ -201,6 +305,10 @@ public class AnisotropicDensityOutput extends DensityOutput {
         return out;
     }
 
+    /**
+     * Displaced mass over the passage-box volume. Whether an axis of zero gap
+     * annihilates this is decided by FirstPassageScales.meanVolume, not here.
+     */
     public double passageDensity(double q) {
         double weight = getSampleWeight();
         double volume = scales.meanVolume(false);
@@ -208,7 +316,43 @@ public class AnisotropicDensityOutput extends DensityOutput {
             return 0.0;
         }
         double sumOfPts = measure.getHighLowSum() / weight;
-        return (sumOfPts > 0.0) ? sumOfPts / (q * sumOfPts + volume) : 0.0;
+        return (sumOfPts > 0.0) ? 1.0 / (sampleSize * (q + volume / sumOfPts)) : 0.0;
+    }
+
+    /**
+     * Probability-weighted mean log volume over the selected axes, in the same
+     * convention as {@link #getDensity(double, int)}: same active set, same
+     * selection, same exponent. NaN when no axis is active. A sum of logs rather
+     * than the log of a product, so an axis of zero gap is an absent term rather
+     * than an annihilating factor, and narrow axes do not underflow.
+     */
+    public double meanLogVolume() {
+        return meanLogVolume(dimensions);
+    }
+
+    public double meanLogVolume(int manifoldDimension) {
+        if (manifoldDimension <= 0) {
+            return Double.NaN;
+        }
+        double[] scale = new double[dimensions];
+        double[] mass = new double[dimensions];
+        int active = collectActive(scale, mass);
+        if (active == 0) {
+            return Double.NaN;
+        }
+        int used = Math.min(manifoldDimension, active);
+        double cutoff = (used < active) ? kthLargest(scale, active, used) : Double.NEGATIVE_INFINITY;
+
+        double acc = 0.0, wsum = 0.0;
+        int taken = 0;
+        for (int i = 0; i < active && taken < used; i++) {
+            if (scale[i] >= cutoff) {
+                acc += mass[i] * used * Math.log(scale[i]);
+                wsum += mass[i];
+                taken++;
+            }
+        }
+        return (wsum > 0.0) ? acc / wsum : Double.NaN;
     }
 
     /** Density using the volume of the averaged recorded stopping box. */
@@ -226,18 +370,23 @@ public class AnisotropicDensityOutput extends DensityOutput {
         return getStoppingDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
     }
 
-    /** Volume of a DiVector-layout box: the product of its axis widths. */
+    /**
+     * Volume of a DiVector-layout box: the product of its axis widths of positive
+     * width. 0 only when no axis is active, since an empty product would read as a
+     * unit box.
+     */
     private double volumeOf(double[] box) {
         int d = getDimensions();
         double v = 1.0;
+        int active = 0;
         for (int i = 0; i < d; i++) {
             double w = box[i] + box[i + d];
-            if (!(w > 0)) {
-                return 0.0;
+            if (w > 0.0) {
+                v *= w;
+                active++;
             }
-            v *= w;
         }
-        return v;
+        return (active > 0) ? v : 0.0;
     }
 
     /**
@@ -245,7 +394,11 @@ public class AnisotropicDensityOutput extends DensityOutput {
      * assumed.
      */
     public double getVolumeAnisotropy() {
-        double mixture = getDensity();
+        int active = getActiveDimensions();
+        if (active <= 0) {
+            return 1.0;
+        }
+        double mixture = getDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR, active);
         return (mixture > 0.0) ? getCutDensity() / mixture : 1.0;
     }
 
