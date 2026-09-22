@@ -116,7 +116,7 @@ public class HalfImpact implements Example {
 
     @Override
     public String description() {
-        return "extent box along a ray through a ring, by impact parameter";
+        return "cut box along a ray through a ring, by impact parameter";
     }
 
     @Override
@@ -136,8 +136,7 @@ public class HalfImpact implements Example {
 
         float[][] ring = annulus(RING_THICKNESS, randomSeed);
 
-        Plot2D plot = livePlot ? Plot2D.open("Half Impact - extent box along a ray", range, 860)
-                : Plot2D.offscreen(range);
+        Plot2D plot = livePlot ? Plot2D.open("Half Impact - cut box along a ray", range, 860) : Plot2D.offscreen(range);
         GifWriter gif = saveGif ? new GifWriter(new File("half_impact.gif"), 60, true) : null;
 
         // The ring never moves, so the density field is fixed for the whole run and is
@@ -209,8 +208,7 @@ public class HalfImpact implements Example {
                     // The impact frontier. Every tree returns the leaf its own random cuts
                     // routed the probe to, merged across trees by point with Neighbor.count
                     // holding the number of trees that reached it. Drawn as a cloud, this is
-                    // which part of the wall the forest considers local to the probe, and it
-                    // is the thing the extent box summarises into four numbers.
+                    // which part of the wall the forest considers local to the probe,
                     //
                     // Unbounded overload on purpose. At t = -2.2 the probe stands more than
                     // a radius clear of the ring, and a distance cap would return nothing
@@ -248,13 +246,6 @@ public class HalfImpact implements Example {
                         // extents; for the diagonal pass they do not.
                         along = reach(box, ux, uy) + reach(box, -ux, -uy);
                         across = reach(box, nx, ny) + reach(box, -nx, -ny);
-                        // Both regions on the same ruler. The nn-square is centred and
-                        // square by construction -- one distance, no direction, no offset,
-                        // which is everything a scalar local scale carries. The extent box
-                        // is neither centred nor square. Where the neighbourhood is
-                        // genuinely round, at the centre of the ring, the two should
-                        // coincide; the ring is equidistant in every direction there and
-                        // both should read about R.
                         tracks.add(boxOutline(px, py, new double[] { nn, nn, nn, nn }, NN_BOX));
                         tracks.add(boxOutline(px, py, box, color));
                         aspectSum += out.getAnisotropy();
@@ -276,12 +267,12 @@ public class HalfImpact implements Example {
                             -range * 0.94, -range * 0.92, String
                                     .format("heading %.0f deg   b = %.2f   t = %+.2f   %s", ANGLES[a], b, t,
                                             (box == null) ? "no single scale"
-                                                    : String.format("extent %.3f x %.3f  aspect %.2f   nn-square %.3f",
+                                                    : String.format("cut %.3f x %.3f  aspect %.2f   nn-square %.3f",
                                                             along, across, out.getAnisotropy(), 2 * nn)),
                             new Color(60, 60, 60)));
                     body.add(Layers.legend(
                             new String[] { "ring (data)", "density isolines", "directional density",
-                                    "leaves reached (area = tree votes)", "extent box (measured)",
+                                    "leaves reached (area = tree votes)", "cut box (measured)",
                                     "nn-square (isotropic baseline)" },
                             new Color[] { new Color(140, 140, 140), ISO, GRAD, LEAF_CLOUD, color, NN_BOX },
                             new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.LINE, Layers.Swatch.LINE,
@@ -332,27 +323,6 @@ public class HalfImpact implements Example {
     /**
      * The scalar density field as isolines, plus the directional density as arrows.
      *
-     * <p>
-     * All three views come from the same walk that produced the extent box, and
-     * they are complementary rather than redundant. The density is a scalar,
-     * displaced mass over box volume; the extent box is the local metric that
-     * supplied that volume; the directional density says where the mass sits
-     * relative to the query. So the box explains the number the isolines are
-     * drawing.
-     *
-     * <p>
-     * There is a consistency check visible in the picture. The directional density
-     * is a gradient direction and the isolines are level sets, so the arrows should
-     * cross the contours at right angles. Anywhere they do not is a place where the
-     * scalar and directional halves of the same measurement disagree.
-     *
-     * <p>
-     * The marching squares used to be inlined here and is now Contour's. Two things
-     * follow. The ambiguous-cell centre is measured with the SAME callable that
-     * filled the grid, where the inlined copy sampled those centres with
-     * getCutDensity while the grid held passageDensity -- two estimators deciding
-     * one contour's topology. And the levels are chosen in one place, so they can
-     * be pinned and a second resolution compared against them.
      */
     private static List<Layer> densityField(RandomCutForest forest, double range) {
         System.out.println("building the static density field...");
@@ -429,24 +399,6 @@ public class HalfImpact implements Example {
         return out;
     }
 
-    /**
-     * Does the extent box reach through the wall, or stop inside it?
-     *
-     * <p>
-     * A thin wall has nothing in it to terminate the box: the nearest mass to an
-     * approaching probe is a sliver, and the enlarged bounding box runs from the
-     * probe across the sliver and into the hollow interior. Thickening the wall
-     * gives the box somewhere to stop, because a patch of the wall already spans a
-     * radial range and the box closes on the probe sooner.
-     *
-     * <p>
-     * Reported as a penetration ratio: the box's reach inward from a probe outside,
-     * divided by the distance from that probe to the inner edge. Above one means
-     * the box has crossed the wall entirely and is describing the empty interior as
-     * part of the probe's neighbourhood. The point count is held fixed across
-     * thicknesses, so the only thing varying is how widely the same material is
-     * spread.
-     */
     private static void penetrationStudy(long seed) {
         double probeR = 1.45;
         System.out.printf("penetration study, probe on the axis at r = %.2f, %d points throughout%n", probeR,
@@ -455,7 +407,7 @@ public class HalfImpact implements Example {
                 "aspect");
         for (double w : THICKNESS_SWEEP) {
             RandomCutForest f = RandomCutForest.builder().numberOfTrees(100).sampleSize(256).dimensions(2)
-                    .randomSeed(seed).timeDecay(1.0 / (0.8 * RING_POINTS)).centerOfMassEnabled(true).build();
+                    .randomSeed(seed).timeDecay(1.0 / (0.8 * RING_POINTS)).build();
             float[][] pts = annulus(w, seed);
             for (int rep = 0; rep < 3; rep++) {
                 for (float[] q : pts) {

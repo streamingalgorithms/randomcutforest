@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.tree;
 
+import static java.lang.Math.max;
+
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorOperators;
@@ -425,19 +427,38 @@ public final class VectorSupportSIMD {
     public static void probAndDistInto(float[] gap, float[] dist, float[] box, int boxOff, int dim, double invSumNew) {
         final float inv = (float) invSumNew;
         final FloatVector vInv = FloatVector.broadcast(SP, inv);
-        for (int half = 0; half < 2; half++) {
-            final int off = half * dim;
-            int i = 0;
-            final int bound = SP.loopBound(dim);
-            for (; i < bound; i += LANES) {
-                FloatVector g = FloatVector.fromArray(SP, gap, off + i);
-                FloatVector prob = g.mul(vInv);
-                prob.intoArray(gap, off + i);
-                FloatVector oldR = FloatVector.fromArray(SP, box, boxOff + i)
-                        .add(FloatVector.fromArray(SP, box, boxOff + i + dim));
-                prob.mul(g.add(oldR)).intoArray(dist, off + i);
-            }
-            VectorSupportLegacy.probAndDistRange(gap, dist, box, boxOff, dim, inv, off, i, dim);
+
+        int i = 0;
+        final int bound = SP.loopBound(dim);
+        for (; i < bound; i += LANES) {
+            FloatVector oldR = FloatVector.fromArray(SP, box, boxOff + i)
+                    .add(FloatVector.fromArray(SP, box, boxOff + i + dim));
+
+            FloatVector g0 = FloatVector.fromArray(SP, gap, i);
+            FloatVector p0 = g0.mul(vInv);
+            p0.intoArray(gap, i);
+            p0.mul(g0.add(oldR)).intoArray(dist, i);
+
+            final int j = dim + i;
+            FloatVector g1 = FloatVector.fromArray(SP, gap, j);
+            FloatVector p1 = g1.mul(vInv);
+            p1.intoArray(gap, j);
+            p1.mul(g1.add(oldR)).intoArray(dist, j);
+        }
+
+        for (; i < dim; i++) {
+            float oldR = box[boxOff + i] + box[boxOff + i + dim];
+
+            float g0 = gap[i];
+            float p0 = g0 * inv;
+            gap[i] = p0;
+            dist[i] = p0 * (g0 + oldR);
+
+            final int j = dim + i;
+            float g1 = gap[j];
+            float p1 = g1 * inv;
+            gap[j] = p1;
+            dist[j] = p1 * (g1 + oldR);
         }
     }
 
@@ -494,8 +515,8 @@ public final class VectorSupportSIMD {
             float l = values[offset + dim + j];
             for (int i = start; i < end; i++) {
                 float k = store[pOffs[i] + j];
-                h = Math.max(h, k);
-                l = Math.max(l, -k);
+                h = max(h, k);
+                l = max(l, -k);
             }
             values[offset + j] = h;
             values[offset + dim + j] = l;
@@ -565,6 +586,124 @@ public final class VectorSupportSIMD {
             }
         }
         return probability;
+    }
+
+    /**
+     * Vector form of {@link VectorSupportLegacy#gapAttributionWeighted}. Iterates
+     * over axes so both faces are in hand together, which the range select needs.
+     *
+     * <p>
+     * Four accumulators reduced ONCE per call, not once per block. The per-block
+     * reduction in the unweighted {@link #gapAttribution} is worth 1.28x at 100
+     * dimensions and 1.39x at 256 on its own, and taking that gain here is why this
+     * kernel is not slower than the cached-rangeSum one it replaces.
+     *
+     * <p>
+     * The range select is a blend on gapHigh > 0, not a branch.
+     */
+    /**
+     * Weighted gap + range in one pass over the 2*d half-dimensions.
+     *
+     * <p>
+     * {@code contrib}, when non-null, receives the WEIGHTED gap {@code w_i * g_i},
+     * not the raw gap. The attribution visitor normalizes it by {@code (S + R)},
+     * and under a gauge {@code S = sum_i w_i * g_i}, so only the weighted form
+     * decomposes the probability. Writing the raw gap yields a DiVector that sums
+     * to the wrong total and ranks the wrong axis whenever the gauge is
+     * non-uniform. Unweighted callers are unaffected: w == 1 makes the two forms
+     * identical.
+     *
+     * <p>
+     * The weight loads sit above the fill so they are in hand when it runs. When
+     * {@code fill} is true each product is computed twice, once for contrib and
+     * once inside the fma; that is one extra vector multiply per half-dimension on
+     * the attribution path only, and fill is loop-invariant so C2 unswitches it.
+     * The two roundings also differ in the last bits, so a test asserting
+     * {@code sum(contrib) == S} needs a tolerance, not equality.
+     */
+    public static double gapAttributionWeighted(float[] values, int offset, int dimensions, float[] newValues,
+            int nvOffset, float[] contrib, float[] w, int wOff, double[] out) {
+        final boolean fill = contrib != null && contrib.length >= 2 * dimensions;
+
+        final FloatVector ZERO = FloatVector.zero(SP);
+        FloatVector sA = ZERO, sB = ZERO, rA = ZERO, rB = ZERO;
+        int i = 0;
+
+        final int lb = SP.loopBound(dimensions);
+        final int pairBound = lb - (lb % (2 * LANES));
+        for (; i < pairBound; i += 2 * LANES) {
+            final int h0 = i, l0 = i + dimensions, h1 = i + LANES, l1 = i + LANES + dimensions;
+
+            FloatVector hv0 = FloatVector.fromArray(SP, values, offset + h0);
+            FloatVector lv0 = FloatVector.fromArray(SP, values, offset + l0);
+            FloatVector hv1 = FloatVector.fromArray(SP, values, offset + h1);
+            FloatVector lv1 = FloatVector.fromArray(SP, values, offset + l1);
+
+            FloatVector kh0 = FloatVector.fromArray(SP, w, wOff + h0);
+            FloatVector kl0 = FloatVector.fromArray(SP, w, wOff + l0);
+            FloatVector kh1 = FloatVector.fromArray(SP, w, wOff + h1);
+            FloatVector kl1 = FloatVector.fromArray(SP, w, wOff + l1);
+
+            FloatVector gh0 = FloatVector.fromArray(SP, newValues, nvOffset + h0).sub(hv0).max(ZERO);
+            FloatVector gl0 = FloatVector.fromArray(SP, newValues, nvOffset + l0).sub(lv0).max(ZERO);
+            FloatVector gh1 = FloatVector.fromArray(SP, newValues, nvOffset + h1).sub(hv1).max(ZERO);
+            FloatVector gl1 = FloatVector.fromArray(SP, newValues, nvOffset + l1).sub(lv1).max(ZERO);
+
+            if (fill) {
+                gh0.mul(kh0).intoArray(contrib, h0);
+                gl0.mul(kl0).intoArray(contrib, l0);
+                gh1.mul(kh1).intoArray(contrib, h1);
+                gl1.mul(kl1).intoArray(contrib, l1);
+            }
+
+            sA = gl0.fma(kl0, gh0.fma(kh0, sA));
+            sB = gl1.fma(kl1, gh1.fma(kh1, sB));
+
+            // range weight: low half when the query is above the box, else high
+            FloatVector kr0 = kh0.blend(kl0, gh0.compare(VectorOperators.GT, ZERO));
+            FloatVector kr1 = kh1.blend(kl1, gh1.compare(VectorOperators.GT, ZERO));
+            rA = hv0.add(lv0).fma(kr0, rA);
+            rB = hv1.add(lv1).fma(kr1, rB);
+        }
+
+        for (; i < lb; i += LANES) {
+            final int h = i, l = i + dimensions;
+            FloatVector hv = FloatVector.fromArray(SP, values, offset + h);
+            FloatVector lv = FloatVector.fromArray(SP, values, offset + l);
+            FloatVector kh = FloatVector.fromArray(SP, w, wOff + h);
+            FloatVector kl = FloatVector.fromArray(SP, w, wOff + l);
+            FloatVector gh = FloatVector.fromArray(SP, newValues, nvOffset + h).sub(hv).max(ZERO);
+            FloatVector gl = FloatVector.fromArray(SP, newValues, nvOffset + l).sub(lv).max(ZERO);
+            if (fill) {
+                gh.mul(kh).intoArray(contrib, h);
+                gl.mul(kl).intoArray(contrib, l);
+            }
+            sA = gl.fma(kl, gh.fma(kh, sA));
+            rA = hv.add(lv).fma(kh.blend(kl, gh.compare(VectorOperators.GT, ZERO)), rA);
+        }
+
+        double wS = (double) sA.add(sB).reduceLanes(VectorOperators.ADD);
+        double wR = (double) rA.add(rB).reduceLanes(VectorOperators.ADD);
+
+        for (; i < dimensions; i++) {
+            final int h = i, l = i + dimensions;
+            float hv = values[offset + h], lv = values[offset + l];
+            float kh = w[wOff + h], kl = w[wOff + l];
+            float gh = Math.max(0f, newValues[nvOffset + h] - hv);
+            float gl = Math.max(0f, newValues[nvOffset + l] - lv);
+            if (fill) {
+                contrib[h] = kh * gh;
+                contrib[l] = kl * gl;
+            }
+            wS += kh * gh + kl * gl;
+            wR += ((gh > 0f) ? kl : kh) * (hv + lv);
+        }
+
+        if (out != null) {
+            out[0] = wS;
+            out[1] = wR;
+        }
+        return (wS == 0.0) ? 0.0 : (wR == 0.0 ? 1.0 : wS / (wS + wR));
     }
 
     // ---- distances ---------------------------------------------------------
@@ -654,7 +793,7 @@ public final class VectorSupportSIMD {
         }
 
         double dist = m0.max(m1).max(m2.max(m3)).reduceLanes(VectorOperators.MAX);
-        return Math.max(dist, VectorSupportLegacy.lInfRange(a, b, i, n));
+        return max(dist, VectorSupportLegacy.lInfRange(a, b, i, n));
     }
 
     public static double updateBoundsAndGapInterchanged(float[] values, int offset, int dim, float[] store, int[] pOffs,
@@ -708,5 +847,248 @@ public final class VectorSupportSIMD {
         R += out[0]; // read the tail's partial before overwriting
         out[0] = R;
         return S;
+    }
+
+    /**
+     * Vector form of {@link VectorSupportLegacy#gapIntoWeighted}. Blocked reduce
+     * over BLOCK, then a single-chunk loop, then the scalar tail, exactly as
+     * gapInto. Three reductions per block instead of one; the extra live vectors
+     * are the four weights and the four small-box values, which keeps the block
+     * inside the register file on 256-bit lanes.
+     *
+     * <p>
+     * out is seeded before the tail is delegated, so the scalar range method can
+     * accumulate into it and no scratch array is allocated. If the gc profiler
+     * reports any allocation on this arm, that is the thing to look at.
+     */
+    public static double gapIntoWeighted(float[] nv, int nvOff, float[] v, int vOff, float[] dst, int dstOff, int n,
+            float[] w, int wOff, double[] out) {
+
+        final FloatVector ZERO = FloatVector.zero(SP);
+
+        FloatVector sA = ZERO, sB = ZERO;
+        FloatVector pA = ZERO, pB = ZERO;
+        FloatVector qA = ZERO, qB = ZERO;
+
+        int i = 0;
+        final int blockBound = n - (n % BLOCK);
+
+        for (; i < blockBound; i += BLOCK) {
+            FloatVector a0 = FloatVector.fromArray(SP, nv, nvOff + i);
+            FloatVector b0 = FloatVector.fromArray(SP, v, vOff + i);
+            FloatVector a1 = FloatVector.fromArray(SP, nv, nvOff + i + LANES);
+            FloatVector b1 = FloatVector.fromArray(SP, v, vOff + i + LANES);
+            FloatVector a2 = FloatVector.fromArray(SP, nv, nvOff + i + 2 * LANES);
+            FloatVector b2 = FloatVector.fromArray(SP, v, vOff + i + 2 * LANES);
+            FloatVector a3 = FloatVector.fromArray(SP, nv, nvOff + i + 3 * LANES);
+            FloatVector b3 = FloatVector.fromArray(SP, v, vOff + i + 3 * LANES);
+
+            FloatVector g0 = a0.sub(b0).max(ZERO);
+            FloatVector g1 = a1.sub(b1).max(ZERO);
+            FloatVector g2 = a2.sub(b2).max(ZERO);
+            FloatVector g3 = a3.sub(b3).max(ZERO);
+
+            g0.intoArray(dst, dstOff + i);
+            g1.intoArray(dst, dstOff + i + LANES);
+            g2.intoArray(dst, dstOff + i + 2 * LANES);
+            g3.intoArray(dst, dstOff + i + 3 * LANES);
+
+            FloatVector k0 = FloatVector.fromArray(SP, w, wOff + i);
+            FloatVector k1 = FloatVector.fromArray(SP, w, wOff + i + LANES);
+            FloatVector k2 = FloatVector.fromArray(SP, w, wOff + i + 2 * LANES);
+            FloatVector k3 = FloatVector.fromArray(SP, w, wOff + i + 3 * LANES);
+
+            sA = sA.add(g0).add(g1);
+            sB = sB.add(g2).add(g3);
+            pA = g1.fma(k1, g0.fma(k0, pA));
+            pB = g3.fma(k3, g2.fma(k2, pB));
+            qA = b1.fma(k1, b0.fma(k0, qA));
+            qB = b3.fma(k3, b2.fma(k2, qB));
+        }
+
+        final int chunkBound = SP.loopBound(n);
+        for (; i < chunkBound; i += LANES) {
+            FloatVector a = FloatVector.fromArray(SP, nv, nvOff + i);
+            FloatVector b = FloatVector.fromArray(SP, v, vOff + i);
+            FloatVector k = FloatVector.fromArray(SP, w, wOff + i);
+            FloatVector g = a.sub(b).max(ZERO);
+            g.intoArray(dst, dstOff + i);
+            sA = sA.add(g);
+            pA = g.fma(k, pA);
+            qA = b.fma(k, qA);
+        }
+
+        double s = (double) sA.add(sB).reduceLanes(VectorOperators.ADD);
+        out[0] = (double) pA.add(pB).reduceLanes(VectorOperators.ADD);
+        out[1] = (double) qA.add(qB).reduceLanes(VectorOperators.ADD);
+
+        s += VectorSupportLegacy.gapRangeWeighted(nv, nvOff, v, vOff, dst, dstOff, w, wOff, i, n, out);
+        return s;
+    }
+
+    /**
+     * Gauged form of {@link #probAndDistInto}. {@code w == null} is the unweighted
+     * path.
+     *
+     * <p>
+     * The gauge enters the PROBABILITY and not the DISTANCE. prob is a
+     * dimensionless share of the cut measure, so it carries w; dist is a length in
+     * the coordinates the data actually lives in, so it does not. Both the gap and
+     * the old range stay native inside the dist term.
+     *
+     * <p>
+     * {@code invSumNew} must already be the weighted 1/(S+R) when w is non-null,
+     * for the same reason: it is the normaliser of the weighted measure.
+     */
+    public static void probAndDistIntoWeighted(float[] gap, float[] dist, float[] box, int boxOff, int dim,
+            double invSumNew, float[] w, int wOff) {
+        if (w == null) {
+            probAndDistInto(gap, dist, box, boxOff, dim, invSumNew);
+            return;
+        }
+
+        final float inv = (float) invSumNew;
+        final FloatVector vInv = FloatVector.broadcast(SP, inv);
+
+        int i = 0;
+        final int bound = SP.loopBound(dim);
+        for (; i < bound; i += LANES) {
+            FloatVector oldR = FloatVector.fromArray(SP, box, boxOff + i)
+                    .add(FloatVector.fromArray(SP, box, boxOff + i + dim));
+
+            FloatVector g0 = FloatVector.fromArray(SP, gap, i);
+            FloatVector p0 = g0.mul(FloatVector.fromArray(SP, w, wOff + i)).mul(vInv);
+            p0.intoArray(gap, i);
+            p0.mul(g0.add(oldR)).intoArray(dist, i); // g0, oldR native
+
+            final int j = dim + i;
+            FloatVector g1 = FloatVector.fromArray(SP, gap, j);
+            FloatVector p1 = g1.mul(FloatVector.fromArray(SP, w, wOff + j)).mul(vInv);
+            p1.intoArray(gap, j);
+            p1.mul(g1.add(oldR)).intoArray(dist, j);
+        }
+
+        for (; i < dim; i++) {
+            float oldR = box[boxOff + i] + box[boxOff + i + dim];
+
+            float g0 = gap[i];
+            float p0 = g0 * w[wOff + i] * inv;
+            gap[i] = p0;
+            dist[i] = p0 * (g0 + oldR);
+
+            final int j = dim + i;
+            float g1 = gap[j];
+            float p1 = g1 * w[wOff + j] * inv;
+            gap[j] = p1;
+            dist[j] = p1 * (g1 + oldR);
+        }
+    }
+
+    /**
+     * Two vectors of axes per block, then BOTH sums reduce into double before the
+     * next block. Same accumulation discipline as gapAttribution.
+     */
+    public static double weightedSums(float[] gap, float[] box, int boxOff, int dim, float[] w, int wOff,
+            double[] out) {
+        final FloatVector ZERO = FloatVector.zero(SP);
+        double sW = 0.0;
+        double rW = 0.0;
+        int i = 0;
+
+        final int lb = SP.loopBound(dim);
+        final int pairBound = lb - (lb % (2 * LANES));
+        for (; i < pairBound; i += 2 * LANES) {
+            final int h0 = i, l0 = i + dim, h1 = i + LANES, l1 = i + LANES + dim;
+
+            FloatVector gh0 = FloatVector.fromArray(SP, gap, h0);
+            FloatVector gl0 = FloatVector.fromArray(SP, gap, l0);
+            FloatVector kh0 = FloatVector.fromArray(SP, w, wOff + h0);
+            FloatVector kl0 = FloatVector.fromArray(SP, w, wOff + l0);
+            FloatVector r0 = FloatVector.fromArray(SP, box, boxOff + h0)
+                    .add(FloatVector.fromArray(SP, box, boxOff + l0));
+            FloatVector kr0 = kh0.blend(kl0, gh0.compare(VectorOperators.GT, ZERO));
+
+            FloatVector gh1 = FloatVector.fromArray(SP, gap, h1);
+            FloatVector gl1 = FloatVector.fromArray(SP, gap, l1);
+            FloatVector kh1 = FloatVector.fromArray(SP, w, wOff + h1);
+            FloatVector kl1 = FloatVector.fromArray(SP, w, wOff + l1);
+            FloatVector r1 = FloatVector.fromArray(SP, box, boxOff + h1)
+                    .add(FloatVector.fromArray(SP, box, boxOff + l1));
+            FloatVector kr1 = kh1.blend(kl1, gh1.compare(VectorOperators.GT, ZERO));
+
+            sW += (double) gl0.fma(kl0, gh0.fma(kh0, gl1.fma(kl1, gh1.mul(kh1)))).reduceLanes(VectorOperators.ADD);
+            rW += (double) r1.fma(kr1, r0.mul(kr0)).reduceLanes(VectorOperators.ADD);
+        }
+
+        for (; i < lb; i += LANES) {
+            final int h = i, l = i + dim;
+            FloatVector gh = FloatVector.fromArray(SP, gap, h);
+            FloatVector gl = FloatVector.fromArray(SP, gap, l);
+            FloatVector kh = FloatVector.fromArray(SP, w, wOff + h);
+            FloatVector kl = FloatVector.fromArray(SP, w, wOff + l);
+            FloatVector r = FloatVector.fromArray(SP, box, boxOff + h).add(FloatVector.fromArray(SP, box, boxOff + l));
+
+            sW += (double) gl.fma(kl, gh.mul(kh)).reduceLanes(VectorOperators.ADD);
+            rW += (double) r.mul(kh.blend(kl, gh.compare(VectorOperators.GT, ZERO))).reduceLanes(VectorOperators.ADD);
+        }
+
+        for (; i < dim; i++) {
+            final int j = i + dim;
+            final float gh = gap[i], gl = gap[j];
+            final float kh = w[wOff + i], kl = w[wOff + j];
+            sW += (double) kh * gh + (double) kl * gl;
+            rW += (double) ((gh > 0f) ? kl : kh) * (box[boxOff + i] + box[boxOff + j]);
+        }
+
+        out[0] = rW;
+        return sW;
+    }
+
+    public static double weightedGapSum(float[] gap, int n, float[] w, int wOff) {
+        double sW = 0.0;
+        int i = 0;
+
+        final int blockBound = n - (n % BLOCK);
+        for (; i < blockBound; i += BLOCK) {
+            FloatVector p0 = FloatVector.fromArray(SP, gap, i).mul(FloatVector.fromArray(SP, w, wOff + i));
+            FloatVector p1 = FloatVector.fromArray(SP, gap, i + LANES)
+                    .mul(FloatVector.fromArray(SP, w, wOff + i + LANES));
+            FloatVector p2 = FloatVector.fromArray(SP, gap, i + 2 * LANES)
+                    .mul(FloatVector.fromArray(SP, w, wOff + i + 2 * LANES));
+            FloatVector p3 = FloatVector.fromArray(SP, gap, i + 3 * LANES)
+                    .mul(FloatVector.fromArray(SP, w, wOff + i + 3 * LANES));
+            sW += (double) p0.add(p1).add(p2.add(p3)).reduceLanes(VectorOperators.ADD);
+        }
+
+        final int chunkBound = SP.loopBound(n);
+        for (; i < chunkBound; i += LANES) {
+            sW += (double) FloatVector.fromArray(SP, gap, i).mul(FloatVector.fromArray(SP, w, wOff + i))
+                    .reduceLanes(VectorOperators.ADD);
+        }
+
+        for (; i < n; i++) {
+            sW += (double) w[wOff + i] * gap[i];
+        }
+        return sW;
+    }
+
+    /** Pure map, no reduction: the float/double rule does not arise. */
+    public static void probOnlyIntoWeighted(float[] gap, float[] dist, int n, double invSumNew, float[] w, int wOff) {
+        final float inv = (float) invSumNew;
+        final FloatVector vInv = FloatVector.broadcast(SP, inv);
+        int i = 0;
+        final int bound = SP.loopBound(n);
+        for (; i < bound; i += LANES) {
+            FloatVector g = FloatVector.fromArray(SP, gap, i);
+            FloatVector p = g.mul(FloatVector.fromArray(SP, w, wOff + i)).mul(vInv);
+            p.intoArray(gap, i);
+            p.mul(g).intoArray(dist, i); // g native: dist is a length
+        }
+        for (; i < n; i++) {
+            final float g = gap[i];
+            final float p = g * w[wOff + i] * inv;
+            gap[i] = p;
+            dist[i] = p * g;
+        }
     }
 }

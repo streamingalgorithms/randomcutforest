@@ -296,6 +296,89 @@ public final class VectorSupport {
                         expOff, gapOut, gapOff, out);
     }
 
+    /**
+     * Weighted gap; see {@link VectorSupportLegacy#gapIntoWeighted}. A null weight
+     * routes to the unweighted kernel rather than multiplying by ones, so the
+     * existing path is reached as literal untouched code and an unweighted run is
+     * bit-identical rather than merely close. out is left untouched in that case.
+     */
+    public static double gapIntoWeighted(float[] nv, int nvOff, float[] v, int vOff, float[] dst, int dstOff, int n,
+            float[] w, int wOff, double[] out) {
+        if (w == null) {
+            return gapInto(nv, nvOff, v, vOff, dst, dstOff, n);
+        }
+        return simd(n) ? VectorSupportSIMD.gapIntoWeighted(nv, nvOff, v, vOff, dst, dstOff, n, w, wOff, out)
+                : VectorSupportLegacy.gapIntoWeighted(nv, nvOff, v, vOff, dst, dstOff, n, w, wOff, out);
+    }
+
+    /**
+     * Weighted form; see {@link VectorSupportLegacy#gapAttributionWeighted}. A null
+     * weight is not accepted: the caller decides, so the unweighted path stays the
+     * existing code rather than a predicted branch.
+     */
+    public static double gapAttributionWeighted(float[] values, int offset, int dimensions, float[] newValues,
+            int nvOffset, float[] contrib, float[] w, int wOff, double[] out) {
+        return simd(2 * dimensions)
+                ? VectorSupportSIMD.gapAttributionWeighted(values, offset, dimensions, newValues, nvOffset, contrib, w,
+                        wOff, out)
+                : VectorSupportLegacy.gapAttributionWeighted(values, offset, dimensions, newValues, nvOffset, contrib,
+                        w, wOff, out);
+    }
+
+    /**
+     * Weighted gap and range sums over a box, from RAW gaps already in {@code gap}.
+     * Returns S_w = Σ w_j·g_j; writes R_w into {@code out[0]}.
+     *
+     * <p>
+     * Face selection is the definition of the weighted range, not a derivation: the
+     * LOW weight when the query sits above the box (high gap positive), the HIGH
+     * weight otherwise. Stated identically here and in gapAttributionWeighted, or
+     * the two paths silently disagree.
+     *
+     * <p>
+     * {@code box} is [max, -min], so {@code box[i] + box[i+dim]} is range_i.
+     * Indexed over AXES, so the length that matters for dispatch is 2*dim.
+     */
+    public static double weightedSums(float[] gap, float[] box, int boxOff, int dim, float[] w, int wOff,
+            double[] out) {
+        return simd(2 * dim) ? VectorSupportSIMD.weightedSums(gap, box, boxOff, dim, w, wOff, out)
+                : VectorSupportLegacy.weightedSums(gap, box, boxOff, dim, w, wOff, out);
+    }
+
+    /** Weighted gap sum alone: a leaf box has zero range, so no face to select. */
+    public static double weightedGapSum(float[] gap, int n, float[] w, int wOff) {
+        return simd(n) ? VectorSupportSIMD.weightedGapSum(gap, n, w, wOff)
+                : VectorSupportLegacy.weightedGapSum(gap, n, w, wOff);
+    }
+
+    /** Gauged {@link #probOnlyInto}; {@code w == null} is the unweighted path. */
+    public static void probOnlyIntoWeighted(float[] gap, float[] dist, int n, double invSumNew, float[] w, int wOff) {
+        if (w == null) {
+            probOnlyInto(gap, dist, n, invSumNew);
+            return;
+        }
+        if (simd(n)) {
+            VectorSupportSIMD.probOnlyIntoWeighted(gap, dist, n, invSumNew, w, wOff);
+        } else {
+            VectorSupportLegacy.probOnlyIntoWeighted(gap, dist, n, invSumNew, w, wOff);
+        }
+    }
+
+    /**
+     * Gauged {@link #probAndDistInto}; {@code w == null} is the unweighted path.
+     */
+    public static void probAndDistIntoWeighted(float[] gap, float[] dist, float[] box, int boxOff, int dim,
+            double invSumNew, float[] w, int wOff) {
+        if (w == null) {
+            probAndDistInto(gap, dist, box, boxOff, dim, invSumNew);
+            return;
+        }
+        if (simd(2 * dim)) {
+            VectorSupportSIMD.probAndDistIntoWeighted(gap, dist, box, boxOff, dim, invSumNew, w, wOff);
+        } else {
+            VectorSupportLegacy.probAndDistIntoWeighted(gap, dist, box, boxOff, dim, invSumNew, w, wOff);
+        }
+    }
     // ---- distances ---------------------------------------------------------
 
     public static double L1distance(float[] a, float[] b) {
@@ -309,4 +392,5 @@ public final class VectorSupport {
     public static double LInfinitydistance(float[] a, float[] b) {
         return simd(a.length) ? VectorSupportSIMD.LInfinitydistance(a, b) : VectorSupportLegacy.LInfinitydistance(a, b);
     }
+
 }

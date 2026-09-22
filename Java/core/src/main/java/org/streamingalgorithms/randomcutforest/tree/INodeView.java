@@ -59,7 +59,11 @@ public interface INodeView {
 
     double probabilityAndSeparation(ArrayBox box, float[] components);
 
+    double probabilityAndSeparationWeighted(float[] components, float[] w);
+
     float[] separation(double[] ranges);
+
+    float[] separationWeighted(double[] ranges, float[] w);
 
     /**
      * for a leaf node, return the index in the point store for the leaf point. If

@@ -721,10 +721,10 @@ public class RandomCutTreeTest {
         assertThrows(IllegalArgumentException.class, () -> tree.traverseMulti(null, null));
         tree.addPoint(index, 0, helper);
         double unseen = tree.traverse(new float[2], ScoreVisitor.reusableFactory(false, 0, (x, y) -> 1, (x, y) -> 2,
-                (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY));
+                (x, y) -> 3, DefaultScoreFunctions.Normalizer.IDENTITY, null));
         assertEquals(unseen, 2.0);
         double seen = tree.traverse(p, ScoreVisitor.reusableFactory(false, 0, (x, y) -> 1.25, (x, y) -> 2, (x, y) -> 3,
-                DefaultScoreFunctions.Normalizer.IDENTITY));
+                DefaultScoreFunctions.Normalizer.IDENTITY, null));
         assertEquals(seen, 3.75); // damp*seen
     }
 

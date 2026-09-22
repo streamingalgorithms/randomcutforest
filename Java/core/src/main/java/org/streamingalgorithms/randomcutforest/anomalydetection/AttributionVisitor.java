@@ -15,6 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
 
 import java.util.Arrays;
@@ -75,6 +76,21 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         this(pointToScore, treeMass, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD);
     }
 
+    protected AttributionVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold,
+            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer, float[] weights) {
+        this(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
+        checkArgument(weights == null || weights.length == 2 * dimension, "weights must be 2 * dimension");
+        this.weights = weights;
+    }
+
+    public AttributionVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
+            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer, float[] weights) {
+        this(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer,
+                weights);
+    }
+
     @Override
     protected float[] contributionTarget() {
         return gapComponents;
@@ -130,6 +146,18 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             double sum = VectorSupport.signedGapInto(expanded, 0, +1f, leafPoint, 0, gapComponents, 0, dimension)
                     + VectorSupport.signedGapInto(expanded, dimension, -1f, leafPoint, 0, gapComponents, dimension,
                             dimension);
+            if (weights != null) {
+                // The leaf split has to be gauged too, or axis i gets share
+                // |d_i| / sum|d_j| instead of w_i|d_i| / sum w_j|d_j|. Normalizing
+                // by its own sum makes this invariant under a UNIFORM gauge, which
+                // is exactly why an ungauged leaf goes unnoticed until the weights
+                // differ across axes. Visited once per tree, not per node.
+                sum = 0;
+                for (int i = 0; i < gapComponents.length; i++) {
+                    gapComponents[i] *= weights[i];
+                    sum += gapComponents[i];
+                }
+            }
             double factor = (sum == 0) ? 0.0 : savedScore / sum;
             for (int i = 0; i < directionalAttribution.length; i++)
                 directionalAttribution[i] = gapComponents[i] * factor;
@@ -198,11 +226,25 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
     public static final IVisitorFactory<DiVector> DEFAULT_ATTRIBUTION_FACTORY = reusableFactory(true,
             DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
             DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
-            DefaultScoreFunctions.DEFAULT_NORMALIZER);
+            DefaultScoreFunctions.DEFAULT_NORMALIZER, null);
+
+    /**
+     * Mirrors {@code ScoreVisitor.scoreFactory}. A null gauge returns the
+     * singleton, so the unweighted path is untouched. A non-null gauge builds a new
+     * factory, and SequentialForestTraversalExecutor.slotFor pools by factory
+     * identity over four slots -- hold the factory rather than calling this per
+     * query.
+     */
+    public static IVisitorFactory<DiVector> attributionFactory(float[] weights) {
+        return (weights == null) ? DEFAULT_ATTRIBUTION_FACTORY
+                : reusableFactory(true, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
+                        DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
+                        DefaultScoreFunctions.DEFAULT_NORMALIZER, weights);
+    }
 
     public static IVisitorFactory<DiVector> reusableFactory(boolean acrossQueries, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
-            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer) {
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer, float[] weights) {
         return new IVisitorFactory<DiVector>() {
             @Override
             public boolean isReusable() {
@@ -223,14 +265,14 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
             @Override
             public IRFVisitor<DiVector> newReusableVisitor(float[] point) {
                 return new AttributionVisitor(point.length, 0, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn,
-                        dampFn, normalizer); // sized, unarmed; no copy
+                        dampFn, normalizer, weights); // sized, unarmed; no copy
             }
 
             // non-reusable path still supported: arm immediately
             @Override
             public Visitor<DiVector> newVisitor(ITree<?, ?> tree, float[] point) {
                 return new AttributionVisitor(tree.projectToTree(point), tree.getMass(), ignoreLeafMassThreshold,
-                        scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
+                        scoreSeenFn, scoreUnseenFn, dampFn, normalizer, weights);
             }
         };
     }

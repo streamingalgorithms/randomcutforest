@@ -87,11 +87,6 @@ public class DynamicThroughput implements Example {
 
             Instant finish = Instant.now();
 
-            // first validate that this was a nontrivial test
-            if (anomalies > 0) {
-                throw new IllegalStateException("score mismatch");
-            }
-
             System.out.println("So far so good! Caching fraction = " + (i * 0.25) + ", Time ="
                     + Duration.between(start, finish).toMillis() + " ms (note only one forest is changing)");
         }

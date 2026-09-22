@@ -70,6 +70,19 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
         this(pointToScore, treeMass, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD);
     }
 
+    protected ScoreVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold,
+            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer, float[] weights) {
+        super(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer, weights);
+    }
+
+    public ScoreVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
+            DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
+            DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer, float[] weights) {
+        super(pointToScore.length, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer,
+                weights);
+    }
+
     @Override
     protected float[] contributionTarget() {
         return null;
@@ -113,7 +126,7 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
     @Override
     public void reset() {
         super.reset(); // savedScore=0, pointInsideBox=false, shadowBoxActive=false,
-                       // hitDuplicates=false
+        // hitDuplicates=false
         // foldedScore deliberately NOT cleared — accumulates across trees
         // this function is purely informational placeholder
     }
@@ -131,10 +144,10 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
     public static final IVisitorFactory<Double> DEFAULT_SCORE_FACTORY = reusableFactory(true,
             DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
             DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
-            DefaultScoreFunctions.DEFAULT_NORMALIZER);
+            DefaultScoreFunctions.DEFAULT_NORMALIZER, null);
 
     public static IVisitorFactory<Double> reusableFactory(boolean acrossQueries, int ignoreLeafMassThreshold,
-            ScoreFn scoreSeenFn, ScoreFn scoreUnseenFn, DampFn dampFn, Normalizer normalizer) {
+            ScoreFn scoreSeenFn, ScoreFn scoreUnseenFn, DampFn dampFn, Normalizer normalizer, float[] weights) {
         return new IVisitorFactory<Double>() {
             @Override
             public boolean isReusable() {
@@ -155,14 +168,21 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
             @Override
             public IRFVisitor<Double> newReusableVisitor(float[] point) {
                 return new ScoreVisitor(point.length, 0, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn,
-                        normalizer); // sized, unarmed; no copy
+                        normalizer, weights); // sized, unarmed; no copy
             }
 
             @Override
             public Visitor<Double> newVisitor(ITree<?, ?> tree, float[] point) {
                 return new ScoreVisitor(tree.projectToTree(point), tree.getMass(), ignoreLeafMassThreshold, scoreSeenFn,
-                        scoreUnseenFn, dampFn, normalizer);
+                        scoreUnseenFn, dampFn, normalizer, weights);
             }
         };
+    }
+
+    public static IVisitorFactory<Double> scoreFactory(float[] weights) {
+        return (weights == null) ? DEFAULT_SCORE_FACTORY
+                : reusableFactory(true, DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
+                        DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,
+                        DefaultScoreFunctions.DEFAULT_NORMALIZER, weights);
     }
 }

@@ -229,6 +229,12 @@ public class PredictiveRandomCutForest {
         return (point != null) ? forest.getAnomalyScore(point) : 0;
     }
 
+    public double getExpectedInverseDepthScoreWeighted(float[] inputPoint, long timestamp, float[] weights) {
+        checkArgument(inputPoint.length == preprocessor.getInputLength(), "incorrect length");
+        float[] point = preprocessor.getScaledShingledInput(toDoubleArray(inputPoint), timestamp, null, forest);
+        return (point != null) ? forest.getAnomalyScoreWeighted(point, weights) : 0;
+    }
+
     /**
      * Same as above -- but now the subparts of the score are exposed in the full
      * RCF space which is inputDimension (add +1 for TIME_AUGMENTED) times the

@@ -129,7 +129,17 @@ public class ImputeVisitorTest {
         }
 
         @Override
+        public double probabilityAndSeparationWeighted(float[] components, float[] w) {
+            return 0;
+        }
+
+        @Override
         public float[] separation(double[] ranges) {
+            return new float[0];
+        }
+
+        @Override
+        public float[] separationWeighted(double[] ranges, float[] w) {
             return new float[0];
         }
 

@@ -20,24 +20,30 @@ import static java.lang.Math.PI;
 import static org.streamingalgorithms.randomcutforest.examples.datasets.Fan.rotateClockWise;
 
 import java.awt.*;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Path2D;
+import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.Example;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Fan;
 import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
+import org.streamingalgorithms.randomcutforest.examples.plot.BoxUnionLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
@@ -46,6 +52,32 @@ import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
+/**
+ * Dynamic summarization of a rotating fan, with the measure drawn alongside the
+ * clustering.
+ *
+ * <p>
+ * The same forest supplies both, but not the same part of it, and that is what
+ * makes the comparison worth drawing. {@code summarize} reaches the point store
+ * and runs CURE over the surviving points weighted by their reference counts;
+ * It uses the sampler.{@link RandomCutForest#getAnisotropicDensity} is the
+ * opposite: it is nothing but tree geometry, a walk up the cuts.
+ *
+ * <p>
+ * So the clustering and the measure are two readings of one sketch that share
+ * the sample and share nothing else. A box around a representative is not a
+ * restatement of how that representative was chosen. Two dimensions means the
+ * boxes are drawn exactly, not projected.
+ *
+ * <p>
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps one frame, <b>t</b>
+ * shows or hides the boxes, <b>c</b> cycles the scale the boxes are read at
+ * (CUT, PASSAGE, STOP), <b>k</b> turns centring on and off, and <b>s</b> writes
+ * the current frame to a png. All of them work while paused, and both the png
+ * and the gif record whatever the toggles say at the moment the frame is
+ * written -- the layers consult their gates at draw time, so a recording made
+ * while toggling shows the toggling.
+ */
 public class Summarization implements Example {
 
     public static void main(String[] args) throws Exception {
@@ -62,113 +94,123 @@ public class Summarization implements Example {
         return "Dynamic clustering/summarization";
     }
 
-    private static final Color[] PALETTE = { new Color(214, 39, 40), // red
-            new Color(31, 119, 180), // blue
-            new Color(44, 160, 44), // green
-            new Color(255, 127, 14), // orange
-            new Color(148, 103, 189), // purple
-            new Color(140, 86, 75), // brown
-            new Color(227, 26, 158), // magenta
-            new Color(23, 142, 150), // teal
-            new Color(8, 48, 107), // navy
-            new Color(177, 89, 40), // sienna
-            new Color(106, 61, 154), // deep purple
-            new Color(99, 99, 99), // gray
+    /**
+     * Scale the c key starts on. The query points are fixed: always the cluster's
+     * own members, never its representatives.
+     *
+     */
+    private static final ClusterBoxes.BoxKind DRAWN_KIND = ClusterBoxes.BoxKind.PASSAGE;
+
+    /**
+     * Starting state of the k key -- shows the symmetrized box.
+     *
+     * <p>
+     * Press k to see the difference; {@code ClusterBoxes.describe} prints the mean
+     * discarded drift on every line that reports a box size, so how much is being
+     * given up is never a matter of opinion.
+     */
+    private static final boolean CENTER_BOXES = false;
+
+    /**
+     * Fraction of the boxes actually drawn. The census, the volumes and every other
+     * number use all of them.
+     */
+    private static final double DRAW_FRACTION = 0.25;
+
+    /**
+     * Side of the png written by the s key; sized for a page, not for a display.
+     */
+    private static final int SHOT_PX = 1400;
+
+    /** Frame at which the one-shot box-size diagnostic prints. */
+    private static final int FIRST_REPORT_DEGREE = 5;
+
+    /**
+     * Points per frame, over all blades, so about 540 each at five blades.
+     *
+     * <p>
+     * Raised from 1350. The blades were thin enough that the cover had visible gaps
+     * along them and the unclaimed figure sat near 4%, and at that density it is
+     * hard to tell a gap in the measure from a gap in the data. The decay below
+     * moves with this, so the reservoir keeps holding the same fraction of a frame.
+     *
+     */
+    private static final int DATA_SIZE = 2700;
+
+    /**
+     * Sample size, decay and tree count, kept together because only their ratios
+     * matter and setting one without the others is what makes the boxes wrong.
+     *
+     * <p>
+     * The forest is a sketch, and what the boxes can resolve is set by how much of
+     * the picture a single tree holds, and that is set by the sample rather than by
+     * the data: at a 256 sample over five thin blades, one tree sees about fifty
+     * points per blade spread along its length whatever DATA_SIZE is, and the walk
+     * stops at the mass crossing at sampleSize^(1/2) = 16 of them -- a third of
+     * what the tree knows about that blade, measured on a plot whose half-range is
+     * 15. NearNeighborExample gets away with the same 256 because its whole world
+     * is 1.6 across and its data is one filled blob, so 256 points resolve it. Here
+     * they do not.
+     *
+     * <p>
+     * Raising the sample to hold a whole frame was tried and reverted: it cost
+     * several times the update phase and the boxes did not improve, because what
+     * limits them here is the blade's geometry within a tree rather than the number
+     * of points in the reservoir. 256 stays.
+     *
+     * <p>
+     * Read together: DATA_SIZE sets how densely the cover is queried, TIME_DECAY
+     * sets what the clustering is computed from, and sampleSize sets what one tree
+     * can resolve. They were entangled here and are not any more.
+     *
+     */
+    private static final int SAMPLE_SIZE = 256;
+    private static final double TIME_DECAY = 1.0 / 800;
+    private static final int NUMBER_OF_TREES = 100;
+
+    /**
+     * Query budget per cluster per frame. Zero means every member, which is the
+     * default and the honest one.
+     *
+     */
+    private static final int MEMBER_QUERIES = 0;
+
+    /**
+     * One hue per blade, validated rather than chosen by eye.
+     *
+     * <p>
+     * These five clear every pairwise gate against a white surface. There is no
+     * sixth hue on purpose. {@code summarize} may return up to
+     * {@code 2 * blades + 2} clusters, and a sixth found in a five-blade fan is
+     * over-segmentation, usually transient as two blades pass.
+     */
+    private static final Color[] PALETTE = { new Color(0x2A, 0x78, 0xD6), // blue
+            new Color(0xEB, 0x68, 0x34), // orange
+            new Color(0x1B, 0xAF, 0x7A), // aqua
+            new Color(0x4A, 0x3A, 0xA7), // violet
+            new Color(0xC2, 0x18, 0x5B), // crimson
     };
 
-    static final class ClusterView extends JPanel {
-        private final double range;
-        private volatile double[][] bg = new double[0][];
-        private volatile java.util.List<double[][]> blades = new ArrayList<>();
-        private volatile java.util.List<double[]> weights = new ArrayList<>();
-        private volatile java.util.List<Color> colors = new ArrayList<>();
+    /** Anything past the palette: over-segmentation, shown as such. */
+    private static final Color OVERFLOW = new Color(125, 125, 125);
 
-        ClusterView(double range) {
-            this.range = range;
-            setBackground(Color.WHITE);
-        }
+    private static final Color CLAIMED = new Color(198, 198, 198);
+    private static final Color UNCLAIMED = new Color(72, 72, 72);
 
-        void setFrame(double[][] bg, java.util.List<double[][]> blades, java.util.List<double[]> weights,
-                java.util.List<Color> colors) {
-            this.bg = bg;
-            this.blades = blades;
-            this.weights = weights;
-            this.colors = colors;
-            repaint(); // thread-safe, fine to call from the worker loop
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2 = (Graphics2D) g;
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            int w = getWidth(), h = getHeight(), m = 24;
-            double pw = w - 2.0 * m, ph = h - 2.0 * m;
-
-            // faint frame + origin axes for orientation
-            g2.setColor(new Color(235, 235, 235));
-            for (int u = -15; u <= 15; u += 5) {
-                int px = (int) (m + (u + range) / (2 * range) * pw);
-                int py = (int) (m + (range - u) / (2 * range) * ph);
-                g2.drawLine(px, m, px, h - m);
-                g2.drawLine(m, py, w - m, py);
-            }
-            g2.setColor(new Color(200, 200, 200));
-            g2.drawRect(m, m, (int) pw, (int) ph);
-
-            // background: the raw rotating points
-            g2.setColor(new Color(218, 218, 218));
-            for (double[] p : bg) {
-                int px = (int) (m + (p[0] + range) / (2 * range) * pw);
-                int py = (int) (m + (range - p[1]) / (2 * range) * ph);
-                g2.fillOval(px - 1, py - 1, 2, 2);
-            }
-
-            // clusters: filled blade + connecting line + weight-sized centers
-            for (int b = 0; b < blades.size(); b++) {
-                double[][] pts = blades.get(b);
-                double[] ww = weights.get(b);
-                Color col = colors.get(b);
-
-                Path2D path = new Path2D.Double();
-                double[][] px = new double[pts.length][2];
-                for (int i = 0; i < pts.length; i++) {
-                    px[i][0] = m + (pts[i][0] + range) / (2 * range) * pw;
-                    px[i][1] = m + (range - pts[i][1]) / (2 * range) * ph;
-                    if (i == 0)
-                        path.moveTo(px[i][0], px[i][1]);
-                    else
-                        path.lineTo(px[i][0], px[i][1]);
-                }
-                if (pts.length > 2) {
-                    path.closePath();
-                    g2.setColor(new Color(col.getRed(), col.getGreen(), col.getBlue(), 55));
-                    g2.fill(path);
-                }
-                g2.setColor(col);
-                g2.setStroke(new BasicStroke(1.6f));
-                g2.draw(path);
-
-                for (int i = 0; i < pts.length; i++) {
-                    double r = 3.0 + 13.0 * Math.sqrt(ww[i]); // area ~ weight; min radius keeps lone centers visible
-                    g2.fill(new Ellipse2D.Double(px[i][0] - r, px[i][1] - r, 2 * r, 2 * r));
-                }
-            }
-        }
+    private static Color clusterColor(int index) {
+        return (index >= 0 && index < PALETTE.length) ? PALETTE[index] : OVERFLOW;
     }
 
     @Override
     public void run() throws Exception {
         int newDimensions = 2;
         long randomSeed = 123;
-        int dataSize = 1350;
+        int dataSize = DATA_SIZE;
         int numberOfBlades = 5;
         double range = 15.0;
 
-        RandomCutForest newForest = RandomCutForest.builder().numberOfTrees(100).sampleSize(256)
-                .dimensions(newDimensions).randomSeed(randomSeed).timeDecay(1.0 / 800).centerOfMassEnabled(true)
-                .build();
+        RandomCutForest newForest = RandomCutForest.builder().numberOfTrees(NUMBER_OF_TREES).sampleSize(SAMPLE_SIZE)
+                .dimensions(newDimensions).randomSeed(randomSeed).timeDecay(TIME_DECAY).build();
 
         boolean printFile = false; // old gnuplot text dump
         boolean livePlot = true; // on-screen window
@@ -190,9 +232,48 @@ public class Summarization implements Example {
         List<ICluster<float[]>> oldSummary = null;
         int[] oldColors = null;
 
-        int count = 0, sum = 0;
+        // Gated inside the layer, so a repaint alone honours the toggle while paused.
+        AtomicBoolean showBoxes = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_T, "summarization.boxes", () -> showBoxes.set(!showBoxes.get()));
+
+        AtomicReference<ClusterBoxes.BoxKind> drawnKind = new AtomicReference<>(DRAWN_KIND);
+        plot.bindKey(KeyEvent.VK_C, "summarization.boxkind", () -> {
+            ClusterBoxes.BoxKind[] all = ClusterBoxes.BoxKind.values();
+            ClusterBoxes.BoxKind next = all[(drawnKind.get().ordinal() + 1) % all.length];
+            drawnKind.set(next);
+            System.out.println("scale -> " + next + " (" + next.blurb() + ")");
+        });
+
+        AtomicBoolean centered = new AtomicBoolean(CENTER_BOXES);
+        plot.bindKey(KeyEvent.VK_K, "summarization.center", () -> {
+            centered.set(!centered.get());
+            System.out.println("boxes -> " + (centered.get()
+                    ? "CENTRED on the query (symmetric by construction, " + "widths preserved, positions moved)"
+                    : "as the forest returned them (asymmetric)"));
+        });
+
+        AtomicReference<List<Layer>> current = new AtomicReference<>(new ArrayList<>());
+        AtomicInteger shotIndex = new AtomicInteger();
+        plot.bindKey(KeyEvent.VK_S, "summarization.shot", () -> {
+            List<Layer> scene = current.get();
+            if (scene.isEmpty()) {
+                return;
+            }
+            File out = new File(String.format("summarization_%02d.png", shotIndex.getAndIncrement()));
+            try {
+                ImageIO.write(plot.renderImage(SHOT_PX, SHOT_PX, scene), "png", out);
+                System.out.println("wrote " + out.getName());
+            } catch (IOException e) {
+                System.out.println("screenshot failed: " + e.getMessage());
+            }
+        });
+        System.out.println("keys: space pauses, right arrow steps, t toggles the boxes, "
+                + "c cycles the scale (CUT/PASSAGE/STOP), k toggles centring, s writes a png");
+        System.out.printf("drawing %.0f%% of the boxes; every printed figure uses all of them%n", 100 * DRAW_FRACTION);
+
+        int count = 0, sum = 0, over = 0, under = 0;
         Instant start = Instant.now();
-        long updateNanos = 0, summarizeNanos = 0;
+        long updateNanos = 0, summarizeNanos = 0, boxNanos = 0;
 
         for (int degree = 0; degree < 360; degree += 1) {
             float[][] bg = new float[data.length][2];
@@ -220,17 +301,105 @@ public class Summarization implements Example {
                     Summarizer::L2distance, oldSummary);
             summarizeNanos += Duration.between(s0, Instant.now()).toNanos();
 
+            // The same forest that produced the clustering also carries the measure
+            // around it: one anisotropic box per representative, so each cluster is a
+            // union of boxes. In two dimensions the boxes project to themselves, so
+            // what is on screen is the set, not a shadow of it.
+            Instant b0 = Instant.now();
+            ClusterBoxes.BoxKind frameKind = drawnKind.get();
+            List<ClusterBoxes.Union> unions = ClusterBoxes.forMembers(newForest, summary, bg, MEMBER_QUERIES, frameKind,
+                    centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
+            boxNanos += Duration.between(b0, Instant.now()).toNanos();
+
+            // Say how big they came out, once the forest has seen enough to be
+            // worth asking. Boxes too small to see and no boxes at all look the
+            // same on screen and are not the same problem.
+            if (degree == FIRST_REPORT_DEGREE) {
+                System.out.printf(
+                        "forest: %d trees, sample %d of %d points/frame, decay 1/%.0f "
+                                + "(window %.2f frames), mass target sampleSize^(1/2) = %.0f%n",
+                        NUMBER_OF_TREES, SAMPLE_SIZE, dataSize, 1 / TIME_DECAY, 1 / (TIME_DECAY * dataSize),
+                        Math.sqrt(SAMPLE_SIZE));
+
+                System.out.printf(
+                        "  summarizer clusters the point store: about %.0f distinct points "
+                                + "(the decay window, not the sample), max %d clusters allowed%n",
+                        1 / TIME_DECAY, 2 * numberOfBlades + 2);
+
+                Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> sweep = ClusterBoxes.forMembersAll(newForest,
+                        summary, bg, MEMBER_QUERIES, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
+                for (ClusterBoxes.BoxKind kind : ClusterBoxes.BoxKind.values()) {
+                    System.out.printf("  reps    %-8s %s%n", kind,
+                            ClusterBoxes.describe(ClusterBoxes.forClusters(newForest, summary, kind, centered.get())));
+                    System.out.printf("  members %-8s %s%n", kind, ClusterBoxes.describe(sweep.get(kind)));
+                }
+                System.out.println("  plot half-range is " + range + ", so compare the half-widths against that");
+                ClusterBoxes.reachReport(sweep, summary);
+            }
+
+            int[] hits = ClusterBoxes.hitCounts(unions, bg);
+            int[] frameCensus = ClusterBoxes.censusOf(hits, bg.length);
+
             sum += summary.size();
-            System.out.println(degree + " " + summary.size());
+
+            int[] reachTotal = ClusterBoxes.reachTotal(ClusterBoxes.reach(unions, summary));
+            double boxes = Math.max(1, reachTotal[4]);
+
+            System.out.printf(
+                    "%3d  clusters %2d  unclaimed %5.1f%%  contested %4.1f%%  |  %s reach: own %5.1f%%  "
+                            + "other-only %4.1f%%  none %4.1f%%%n",
+                    degree, summary.size(), 100.0 * frameCensus[2] / bg.length, 100.0 * frameCensus[1] / bg.length,
+                    frameKind, 100.0 * reachTotal[ClusterBoxes.REACH_OWN] / boxes,
+                    100.0 * reachTotal[ClusterBoxes.REACH_OTHER_ONLY] / boxes,
+                    100.0 * reachTotal[ClusterBoxes.REACH_NONE] / boxes);
             if (summary.size() == numberOfBlades) {
                 ++count;
+            } else if (summary.size() > numberOfBlades) {
+                ++over;
+            } else {
+                ++under;
             }
             int[] colors = align(summary, oldSummary, oldColors);
 
             // ---- build the scene ----
             List<Layer> scene = new ArrayList<>();
-            scene.add(Layers.dots(bg, new Color(150, 150, 150), 1.8));
-            // scene.add(Layers.dots(bg, new Color(218, 218, 218), 1.0));
+
+            // behind the data, so the points stay legible through the translucent fill
+            List<double[][]> polygons = new ArrayList<>();
+            List<Integer> owner = new ArrayList<>();
+            Color[] boxPalette = new Color[summary.size()];
+            // Drawn from a thinned copy; every figure above came from the full
+            // union. drawStride is 1 when DRAW_FRACTION is 1.0.
+            int drawStride = (int) Math.max(1, Math.round(1.0 / Math.max(1e-9, DRAW_FRACTION)));
+            for (int i = 0; i < summary.size(); i++) {
+                boxPalette[i] = clusterColor(colors[i]);
+                if (i < unions.size()) {
+                    ClusterBoxes.Union shown = ClusterBoxes.everyNth(unions.get(i), drawStride);
+                    for (double[][] poly : ClusterBoxes.projectAxes(shown, 0, 1, newDimensions)) {
+                        polygons.add(poly);
+                        owner.add(i);
+                    }
+                }
+            }
+            if (!polygons.isEmpty()) {
+                scene.add(new BoxUnionLayer(polygons, owner.stream().mapToInt(Integer::intValue).toArray(), boxPalette,
+                        showBoxes::get, 45, 170));
+            }
+
+            int uncovered = frameCensus[2];
+            float[][] claimed = new float[bg.length - uncovered][];
+            float[][] unclaimed = new float[uncovered][];
+            int ci = 0;
+            int ui = 0;
+            for (int i = 0; i < bg.length; i++) {
+                if (hits[i] > 0 || uncovered == 0) {
+                    claimed[ci++] = bg[i];
+                } else {
+                    unclaimed[ui++] = bg[i];
+                }
+            }
+            scene.add(Layers.dots(claimed, CLAIMED, 1.6));
+            scene.add(Layers.dots(unclaimed, UNCLAIMED, 2.4));
             for (int i = 0; i < summary.size(); i++) {
                 double weight = summary.get(i).getWeight();
                 List<double[]> rp = new ArrayList<>();
@@ -255,7 +424,7 @@ public class Summarization implements Example {
                     ring[k] = rp.get(ord[k]);
                     w[k] = rw.get(ord[k]);
                 }
-                Color col = Layers.color(colors[i]);
+                Color col = clusterColor(colors[i]);
                 scene.add(Layers.polyline(ring, col, true, 55, 1.6f));
                 scene.add(Layers.weightedDots(ring, w, col, 3.0, 13.0));
             }
@@ -275,10 +444,33 @@ public class Summarization implements Example {
                 gif.writeFrame(plot.renderImage(gifSizePx, gifSizePx, scene));
             }
 
+            current.set(scene);
+            plot.awaitResume();
+
             if ((degree + 1) % reportEvery == 0) {
                 long ms = Duration.between(start, Instant.now()).toMillis();
-                System.out.printf("[%3d deg] total %d ms | summarize %.1f ms (%.2f ms/frame) | update %.1f ms%n",
-                        degree + 1, ms, summarizeNanos / 1e6, summarizeNanos / 1e6 / (degree + 1), updateNanos / 1e6);
+                System.out.printf(
+                        "[%3d deg] total %d ms | summarize %.1f ms (%.2f ms/frame) | update %.1f ms"
+                                + " | boxes %.2f ms/frame%n",
+                        degree + 1, ms, summarizeNanos / 1e6, summarizeNanos / 1e6 / (degree + 1), updateNanos / 1e6,
+                        boxNanos / 1e6 / (degree + 1));
+
+                int[] census = frameCensus; // already computed for the per-frame line
+                double total = Math.max(1, bg.length);
+                int connected = 0;
+                double cohesion = 0;
+                for (int c = 0; c < unions.size(); c++) {
+                    if (ClusterBoxes.components(unions.get(c)) == 1) {
+                        connected++;
+                    }
+                    cohesion += ClusterBoxes.cohesion(unions.get(c), degree * 131L + c, 4000);
+                }
+                System.out.printf(
+                        "          census: covered %.1f%%, contested %.1f%%, unclaimed %.1f%%"
+                                + " | %d/%d unions connected, mean cohesion %.2f%n",
+                        100 * census[0] / total, 100 * census[1] / total, 100 * census[2] / total, connected,
+                        unions.size(), unions.isEmpty() ? 0.0 : cohesion / unions.size());
+                System.out.println("          members/" + frameKind + ": " + ClusterBoxes.describe(unions));
             }
 
             if (summary.size() == numberOfBlades) {
@@ -286,9 +478,10 @@ public class Summarization implements Example {
                 oldColors = colors;
             }
         }
-
-        System.out.printf("Exact detection: %.2f fraction, avg clusters %.2f%n", Math.round(count / 3.6) * 0.01,
-                Math.round(sum / 3.6) * 0.01);
+        System.out.printf("Exact cluster count: %.2f of frames returned exactly %d clusters, avg %.2f%n",
+                Math.round(count / 3.6) * 0.01, numberOfBlades, Math.round(sum / 3.6) * 0.01);
+        System.out.printf("  misses: %d frames over-segmented, %d under -- over means every blade was found "
+                + "and one was split%n", over, under);
 
         if (gif != null) {
             gif.close();
@@ -342,27 +535,59 @@ public class Summarization implements Example {
         return data;
     }
 
+    /**
+     * Carries colours over from the previous frame, as a matching.
+     *
+     * <p>
+     * Taking each cluster's nearest predecessor independently does not give a
+     * matching: two clusters can both be nearest to the same predecessor and both
+     * inherit its colour, which is how a five-blade fan ends up drawn with two
+     * blades in the same blue. Assigning greedily in order of increasing distance
+     *
+     * <p>
+     * A cluster with no colour left over -- a new one, or one whose predecessor was
+     * claimed -- takes the lowest index nobody is using.
+     */
     int[] align(List<ICluster<float[]>> current, List<ICluster<float[]>> previous, int[] oldColors) {
-        int[] nearest = new int[current.size()];
-
-        if (previous == null || previous.size() == 0) {
-            for (int i = 0; i < current.size(); i++) {
-                nearest[i] = i;
+        int n = current.size();
+        int[] assigned = new int[n];
+        Arrays.fill(assigned, -1);
+        if (previous == null || previous.isEmpty() || oldColors == null) {
+            for (int i = 0; i < n; i++) {
+                assigned[i] = i;
             }
-        } else {
-            Arrays.fill(nearest, previous.size() + 1);
-            for (int i = 0; i < current.size(); i++) {
-                double dist = previous.get(0).distance(current.get(i), Summarizer::L1distance);
-                nearest[i] = oldColors[0];
-                for (int j = 1; j < previous.size(); j++) {
-                    double t = previous.get(j).distance(current.get(i), Summarizer::L1distance);
-                    if (t < dist) {
-                        dist = t;
-                        nearest[i] = oldColors[j];
-                    }
-                }
+            return assigned;
+        }
+
+        int m = Math.min(previous.size(), oldColors.length);
+        List<double[]> pairs = new ArrayList<>(n * m); // {distance, current, previous}
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                pairs.add(new double[] { previous.get(j).distance(current.get(i), Summarizer::L1distance), i, j });
             }
         }
-        return nearest;
+        pairs.sort((a, b) -> Double.compare(a[0], b[0]));
+
+        java.util.Set<Integer> taken = new java.util.HashSet<>();
+        for (double[] pair : pairs) {
+            int i = (int) pair[1];
+            int colour = oldColors[(int) pair[2]];
+            if (assigned[i] >= 0 || taken.contains(colour)) {
+                continue;
+            }
+            assigned[i] = colour;
+            taken.add(colour);
+        }
+        int next = 0;
+        for (int i = 0; i < n; i++) {
+            if (assigned[i] < 0) {
+                while (taken.contains(next)) {
+                    next++;
+                }
+                assigned[i] = next;
+                taken.add(next);
+            }
+        }
+        return assigned;
     }
 }

@@ -121,15 +121,18 @@ public class FirstPassageScales {
         if (treeCount == 0) {
             return 0.0;
         }
+
         double volume = 1.0;
+        int active = 0;
         for (int i = 0; i < dimensions; i++) {
             double width = (sum[i] + sum[i + dimensions]) / treeCount;
-            if (!(width > 0.0)) {
-                return 0.0;
+            if (width > 0.0) {
+                volume *= width;
+                active++;
             }
-            volume *= width;
         }
-        return volume;
+        return (active == 0) ? 0.0 : volume;
+
     }
 
     public static FirstPassageScales addToLeft(FirstPassageScales left, FirstPassageScales right) {

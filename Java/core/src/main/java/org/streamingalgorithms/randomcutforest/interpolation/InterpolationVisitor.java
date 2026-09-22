@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.interpolation;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+
 import java.util.Arrays;
 
 import org.streamingalgorithms.randomcutforest.DefaultScoreFunctions;
@@ -90,6 +92,18 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
      */
     protected final double[] growingBox;
 
+    /**
+     * External gauge, float[2*dim] in [high, low] layout; null means unweighted and
+     * every path below is then bit-identical to the ungauged version.
+     *
+     * <p>
+     * The gauge enters PROBABILITIES and not LENGTHS. probMass and measure are
+     * expectations against the cut distribution, so they carry it; distances is a
+     * length at separation and growingBox is a geometric snapshot, so neither does.
+     * That split is the whole of what changes here.
+     */
+    protected float[] weights;
+
     protected final DefaultScoreFunctions.ScoreFn scoreSeenFn;
     protected final DefaultScoreFunctions.ScoreFn scoreUnseenFn;
     protected final DefaultScoreFunctions.DampFn dampFn;
@@ -122,6 +136,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     private final float[] distComp; // prob * (gap + oldRange)
 
     private double sumOfNewRange;
+    private final double[] wSums = new double[1]; // [0] = weighted range sum
 
     InterpolationVisitor(int dimension, double pointMass, boolean centerOfMass) {
         this(dimension, pointMass, centerOfMass, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
@@ -157,6 +172,18 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         this.treeMass = treeMass;
     }
 
+    InterpolationVisitor(int dimension, double pointMass, boolean centerOfMass, float[] weights) {
+        this(dimension, pointMass, centerOfMass);
+        checkArgument(weights == null || weights.length == 2 * dimension, "weights must be 2 * dimension");
+        this.weights = weights;
+    }
+
+    public InterpolationVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass,
+            float[] weights) {
+        this(pointToScore.length, pointMass, centerOfMass, weights);
+        this.treeMass = treeMass;
+    }
+
     private void setDefaults() {
         savedScore = 0.0;
         savedHeight = 0.0;
@@ -181,8 +208,18 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
      */
     private double computeGap(ArrayBox small, float[] nv, int nvOff) {
         double S = VectorSupport.gapInto(nv, nvOff, small.values, small.offset, gap, 0, len);
-        sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
-        return S;
+        if (weights == null) {
+            sumOfNewRange = small.getRangeSum() + S; // rangeSum field == Σ oldRange
+            return S;
+        }
+        // gap[] stays RAW -- probAndDistIntoWeighted needs the native length for
+        // the distance term and applies w itself. The cached rangeSum is a
+        // weightless sum and cannot be reused under a gauge, so the weighted
+        // range is recomputed here with the same face-selection rule as the
+        // scoring kernel: the low weight when the query is above the box.
+        double sW = VectorSupport.weightedSums(gap, small.values, small.offset, dim, weights, 0, wSums);
+        sumOfNewRange = wSums[0] + sW;
+        return sW;
     }
 
     /**
@@ -239,7 +276,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         double influenceVal = influenceExt(node, depthOfNode, centerOfMass, savedMass, null);
         double heightVal = heightExt(node, depthOfNode, savedMass);
         double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
-        VectorSupport.probAndDistInto(gap, distComp, small.values, small.offset, dim, invSumNew);
+        VectorSupport.probAndDistIntoWeighted(gap, distComp, small.values, small.offset, dim, invSumNew, weights, 0);
         deposit(gap, distComp, 1.0 - probOfCut, node.getMass());
         recur(fieldVal, influenceVal, 1.0 - probOfCut);
 
@@ -258,6 +295,11 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         }
         double S = VectorSupport.signedGapInto(expandedPoint, 0, +1f, leaf, 0, gap, 0, dim)
                 + VectorSupport.signedGapInto(expandedPoint, dim, -1f, leaf, 0, gap, dim, dim);
+        if (weights != null) {
+            // gap[] stays raw; only the normaliser is gauged. A leaf box has zero
+            // range, so there is no face to select -- S_w is the whole of it.
+            S = VectorSupport.weightedGapSum(gap, len, weights, 0);
+        }
         sumOfNewRange = S; // leaf rangeSum ≡ 0
         if (S <= 0) {
             savedMass = pointMass + leafNode.getMass();
@@ -274,7 +316,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             double fieldVal = fieldPoint(leafNode, depthOfNode, savedMass, null);
             double influenceVal = influencePoint(leafNode, depthOfNode, savedMass, null);
             double invSumNew = (sumOfNewRange == 0.0) ? 0.0 : 1.0 / sumOfNewRange;
-            VectorSupport.probOnlyInto(gap, distComp, len, invSumNew);
+            VectorSupport.probOnlyIntoWeighted(gap, distComp, len, invSumNew, weights, 0);
             deposit(gap, distComp, 0.0, leafNode.getMass());
             recur(fieldVal, influenceVal, 0.0); // sumOfNewRange == S here
             savedScore = (sumOfNewRange == 0) ? 0.0 : fieldVal * (S / sumOfNewRange);
@@ -386,6 +428,11 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     }
 
     public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass) {
+        return reusableFactory(pointMass, centerOfMass, null);
+    }
+
+    public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass,
+            float[] weights) {
         return new IVisitorFactory<InterpolationMeasure>() {
             @Override
             public boolean isReusable() {
@@ -404,12 +451,13 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
 
             @Override
             public IRFVisitor<InterpolationMeasure> newReusableVisitor(float[] point) {
-                return new InterpolationVisitor(point.length, pointMass, centerOfMass);
+                return new InterpolationVisitor(point.length, pointMass, centerOfMass, weights);
             }
 
             @Override
             public Visitor<InterpolationMeasure> newVisitor(ITree<?, ?> tree, float[] point) {
-                return new InterpolationVisitor(tree.projectToTree(point), tree.getMass(), pointMass, centerOfMass);
+                return new InterpolationVisitor(tree.projectToTree(point), tree.getMass(), pointMass, centerOfMass,
+                        weights);
             }
         };
     }

@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.defaultScalarNormalizerFunction;
@@ -185,7 +186,7 @@ public class AnomalyAttributionVisitorTest {
         when(parent.getMass()).thenReturn(parentMass);
         ArrayBox parentBox = new ArrayBox(point, new float[] { 2.0f, -0.5f });
         float[] parentGaps = new float[4];
-        when(parent.separation(any(double[].class))).thenAnswer(inv -> {
+        when(parent.separationWeighted(any(double[].class), nullable(float[].class))).thenAnswer(inv -> {
             double[] ranges = inv.getArgument(0);
             parentBox.probabilityOfCut(new float[4], parentGaps, ranges);
             return parentGaps;
@@ -226,13 +227,14 @@ public class AnomalyAttributionVisitorTest {
         ArrayBox grandParentBox = parentBox
                 .getMergedBox(new ArrayBox(new float[] { -1.0f, 1.0f }).getMergedBox(new float[] { -0.5f, -1.5f }));
         float[] gpGaps = new float[4];
-        when(grandParent.separation(any(double[].class))).thenAnswer(inv -> {
+        when(grandParent.separationWeighted(any(double[].class), nullable(float[].class))).thenAnswer(inv -> {
             double[] ranges = inv.getArgument(0);
             grandParentBox.probabilityOfCut(new float[4], gpGaps, ranges);
             return gpGaps;
         });
+
         visitor.accept(grandParent, depth);
-        assertTrue(visitor.isConverged()); // NOW it converged — the containment short-circuit fired
+        assertTrue(visitor.isConverged());
         result = visitor.observeResult();
 
         for (int i = 0; i < pointToScore.length; i++) {

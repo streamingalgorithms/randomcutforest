@@ -154,6 +154,29 @@ public class NodeView implements INodeView {
         return probabilityAndSeparation(expanded, components);
     }
 
+    /**
+     * {@code w == null} is the unweighted path and must reach the original method
+     * unchanged -- including its fused fast path, which the gauge cannot use.
+     */
+    @Override
+    public double probabilityAndSeparationWeighted(float[] components, float[] w) {
+        if (w == null) {
+            return probabilityAndSeparation(components);
+        }
+        return tree.probabilityOfCutExpandedWeighted(currentNodeOffset, expanded, currentBox, components, reusableBox,
+                w, null);
+    }
+
+    /** Same contract as above. */
+    @Override
+    public float[] separationWeighted(double[] ranges, float[] w) {
+        if (w == null) {
+            return separation(ranges);
+        }
+        tree.probabilityOfCutExpandedWeighted(currentNodeOffset, expanded, currentBox, gapBuf, reusableBox, w, ranges);
+        return gapBuf;
+    }
+
     @Override
     public float[] separation(double[] ranges) {
         if (fusedNode == currentNodeOffset && fusedNode != -1) {

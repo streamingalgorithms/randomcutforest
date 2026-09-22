@@ -988,6 +988,25 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         }
     }
 
+    /**
+     * Weighted form of {@link #probabilityOfCutExpanded}. The rangeSumData shortcut
+     * is gone on purpose: that cached scalar is the unweighted range sum.
+     */
+    public double probabilityOfCutExpandedWeighted(int node, float[] expandedPoint, ArrayBox otherBox,
+            float[] components, ArrayBox reusableBox, float[] w, double[] out) {
+        int nodeIdx = translate(node);
+        if (nodeIdx != Integer.MAX_VALUE && rangeSumData[nodeIdx] != 0) {
+            int base = 2 * nodeIdx * dimension;
+            return VectorSupport.gapAttributionWeighted(boundingBoxData, base, dimension, expandedPoint, 0, components,
+                    w, 0, out);
+        } else if (otherBox != null) {
+            return otherBox.probabilityOfCutWeighted(expandedPoint, components, w, out);
+        } else {
+            fillArrayBox(node, reusableBox);
+            return reusableBox.probabilityOfCutWeighted(expandedPoint, components, w, out);
+        }
+    }
+
     /*
      * public double probabilityFromCache(int node, float[] expandedPoint, float[]
      * components, int bs, long[] mask) { int nodeIdx = translate(node); if (nodeIdx

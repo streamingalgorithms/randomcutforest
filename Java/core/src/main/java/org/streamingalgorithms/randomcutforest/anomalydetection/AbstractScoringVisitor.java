@@ -15,6 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.anomalydetection;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.DEFAULT_IGNORE_LEAF_MASS_THRESHOLD;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.ScoreFn;
 
@@ -68,6 +69,8 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
     protected boolean hitDuplicates;
     protected final double[] ranges = new double[2]; // [0]=S, [1]=R
     protected float[] gaps; // valid only inside updateFromNode
+    /** Null means unweighted, and then the existing code path runs untouched. */
+    protected float[] weights;
 
     protected AbstractScoringVisitor(float[] pointToScore, int treeMass, int ignoreLeafMassThreshold,
             DefaultScoreFunctions.ScoreFn scoreSeenFn, DefaultScoreFunctions.ScoreFn scoreUnseenFn,
@@ -89,6 +92,14 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
         this.normalizer = normalizer;
         this.shadowBox = null;
         setDefaults();
+    }
+
+    protected AbstractScoringVisitor(int dimension, int treeMass, int ignoreLeafMassThreshold, ScoreFn scoreSeenFn,
+            ScoreFn scoreUnseenFn, DefaultScoreFunctions.DampFn dampFn, DefaultScoreFunctions.Normalizer normalizer,
+            float[] weights) {
+        this(dimension, treeMass, ignoreLeafMassThreshold, scoreSeenFn, scoreUnseenFn, dampFn, normalizer);
+        checkArgument(weights == null || weights.length == 2 * dimension, "weights must be 2 * dimension");
+        this.weights = weights;
     }
 
     void setDefaults() {
@@ -116,19 +127,30 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
      */
     protected abstract void updateFromNode(double probabilityOfSeparation, int depth, int mass, float[] gaps);
 
+    /**
+     * Control flow here is identical to the pre-gauge version, deliberately. The
+     * gauge is carried as an ARGUMENT, never as a branch: {@code w} is null on the
+     * unweighted path and the callee dispatches on it. Three ternaries here cost
+     * ~1.75x at cacheFraction 0 -- not from the branches, which predict perfectly,
+     * but because a bigger hot body falls off C2's inline threshold and takes the
+     * whole downstream chain with it. This method is the hottest in the library;
+     * anything added to it is paid at every internal node of every tree of every
+     * query. Keep it this size.
+     */
     @Override
     public final void accept(INodeView node, int depthOfNode) {
         if (pointInsideBox)
             return;
 
+        final float[] w = weights; // one field read; null means unweighted
         double prob;
         if (!(hitDuplicates || ignoreLeaf)) {
             if (contributionTarget() != null) {
-                gaps = node.separation(ranges); // raw gaps, S and R
+                gaps = node.separationWeighted(ranges, w); // raw gaps, S and R
                 double S = ranges[0], R = ranges[1];
                 prob = (S == 0.0) ? 0.0 : (R == 0.0 ? 1.0 : S / (S + R));
             } else {
-                prob = node.probabilityAndSeparation((float[]) null);
+                prob = node.probabilityAndSeparationWeighted((float[]) null, w);
             }
             if (prob <= 0) {
                 pointInsideBox = true;
@@ -138,7 +160,7 @@ public abstract class AbstractScoringVisitor<R> extends RFVisitor<R> {
             ArrayBox sib = (ArrayBox) node.getSiblingBoundingBox();
             gaps = contributionTarget();
             ArrayBox box = growShadow(sib);
-            prob = box.probabilityOfCut(node.expanded(), gaps, ranges);
+            prob = box.probabilityOfCut(node.expanded(), gaps, w, ranges);
         }
         updateFromNode(prob, depthOfNode, node.getMass(), gaps);
     }

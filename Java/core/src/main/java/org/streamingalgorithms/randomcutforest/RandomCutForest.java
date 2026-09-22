@@ -23,6 +23,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor.DEFAULT_SCORE_FACTORY;
+import static org.streamingalgorithms.randomcutforest.interpolation.AnisotropicDisplacementVisitor.DEFAULT_MASS_EXPONENT;
 import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.DEFAULT_SEPARATION_RATIO_FOR_MERGE;
 
@@ -292,7 +293,8 @@ public class RandomCutForest {
         this.stateCoordinator = stateCoordinator;
         this.components = components;
         this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
-        this.anisotropicFactory = AnisotropicDisplacementVisitor.reusableFactory(1.0, centerOfMassEnabled);
+        this.anisotropicFactory = AnisotropicDisplacementVisitor.reusableFactory(1.0, centerOfMassEnabled,
+                DEFAULT_MASS_EXPONENT);
         initExecutors(stateCoordinator, components);
     }
 
@@ -851,6 +853,16 @@ public class RandomCutForest {
     }
 
     /**
+     * Anomaly score under a gauge. weights is float[2 * dimensions], indexed like
+     * the gap array: i is the high direction of coordinate i, i + dimensions the
+     * low. Null is accepted and is exactly {@link #getAnomalyScore}. Passing all
+     * ones must also reproduce it, which is the acceptance test.
+     */
+    public double getAnomalyScoreWeighted(float[] point, float[] weights) {
+        return scoreWith(point, ScoreVisitor.scoreFactory(weights));
+    }
+
+    /**
      * Anomaly score evaluated sequentially with option of early stopping the early
      * stopping parameter precision gives an approximate solution in the range
      * (1-precision)*score(q)- precision, (1+precision)*score(q) + precision for the
@@ -885,7 +897,21 @@ public class RandomCutForest {
      * @return an anomaly score for the given point.
      */
     public DiVector getAnomalyAttribution(float[] point) {
-        return attributionWith(point, DEFAULT_ATTRIBUTION_FACTORY);
+        return attributionWith(point, AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY);
+    }
+
+    /**
+     * Gauged attribution. {@code weights} is float[2 * dimensions] in [high, low]
+     * layout; null falls through to the unweighted singleton.
+     *
+     * <p>
+     * attributionFactory builds a new factory per call and slotFor pools by factory
+     * identity over four slots, so a caller scoring in a loop should hold the
+     * factory and call attributionWith directly rather than going through here.
+     * Same caveat as the score path.
+     */
+    public DiVector getAnomalyAttributionWeighted(float[] point, float[] weights) {
+        return attributionWith(point, AttributionVisitor.attributionFactory(weights));
     }
 
     private DiVector attributionWith(float[] point, IVisitorFactory<DiVector> vf) {
@@ -1509,7 +1535,7 @@ public class RandomCutForest {
         checkArgument(ignoreLeafMassThreshold >= 0, "...");
         return scoreWith(point,
                 ScoreVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
-                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp), NO_NORMALIZER));
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(damp), NO_NORMALIZER, null));
     }
 
     /**
@@ -1604,7 +1630,7 @@ public class RandomCutForest {
         checkArgument(ignoreLeafMassThreshold >= 0, "incorrect threshold");
         return attributionWith(point,
                 AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
-                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), NO_NORMALIZER));
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), NO_NORMALIZER, null));
     }
 
     /**
@@ -1632,7 +1658,8 @@ public class RandomCutForest {
         }
         return approximateAttribution(point, precision, highIsCritical,
                 AttributionVisitor.reusableFactory(false, ignoreLeafMassThreshold, DefaultScoreFunctions.score(seen),
-                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), Normalizer.IDENTITY));
+                        DefaultScoreFunctions.score(unseen), DefaultScoreFunctions.damp(newDamp), Normalizer.IDENTITY,
+                        null));
     }
 
     private double approximateScore(float[] point, double precision, boolean highIsCritical,
@@ -1643,7 +1670,7 @@ public class RandomCutForest {
         }
 
         IVisitorFactory<Double> visitorFactory = ScoreVisitor.reusableFactory(false, ignoreLeafMassThreshold, seen,
-                unseen, damp, normalizer);
+                unseen, damp, normalizer, null);
 
         ConvergingAccumulator<Double> accumulator = new OneSidedConvergingDoubleAccumulator(HIGH, precision,
                 DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
