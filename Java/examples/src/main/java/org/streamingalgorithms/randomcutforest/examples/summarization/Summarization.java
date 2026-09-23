@@ -296,7 +296,7 @@ public class Summarization implements Example {
 
         for (int degree = 0; degree < 360; degree += 1) {
             float[][] bg = new float[data.length][2];
-            List<float[]> anomalyPts = new ArrayList<>();      // (a) per frame
+            List<float[]> anomalyPts = new ArrayList<>(); // (a) per frame
             int n = 0;
 
             Instant u0 = Instant.now();
@@ -309,11 +309,11 @@ public class Summarization implements Example {
                     file.append(vec[0] + " " + vec[1] + "\n");
                 }
                 var score = newForest.getAnomalyScore(vec);
-                if (thresholder.getPrimaryGrade(score)>0){
+                if (thresholder.getPrimaryGrade(score) > 0) {
                     anomalyPts.add(vec);
                     anomaly++;
                 }
-                thresholder.update(score,0);
+                thresholder.update(score, 0);
                 newForest.update(vec);
             }
             updateNanos += Duration.between(u0, Instant.now()).toNanos();
@@ -324,7 +324,7 @@ public class Summarization implements Example {
 
             Instant s0 = Instant.now();
             List<ICluster<float[]>> summary = newForest.summarize(2 * numberOfBlades + 2, 0.05, 5, 0.5,
-                   VectorSupport::L2distance, oldSummary);
+                    VectorSupport::L2distance, oldSummary);
             summarizeNanos += Duration.between(s0, Instant.now()).toNanos();
             System.out.println(summary.get(0).getClass().getSimpleName());
             // The same forest that produced the clustering also carries the measure
@@ -333,14 +333,14 @@ public class Summarization implements Example {
             // what is on screen is the set, not a shadow of it.
             Instant b0 = Instant.now();
             ClusterBoxes.BoxKind frameKind = drawnKind.get();
-            Arrays.fill(ratios,0.0);
+            Arrays.fill(ratios, 0.0);
             List<ClusterBoxes.Union> unions = ClusterBoxes.forMembers(newForest, summary, bg, MEMBER_QUERIES, frameKind,
                     ratios, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
             // (c) The grade was assigned as the point arrived, against the forest at
             // that moment; the box is read here, after all of this frame's updates.
             // Two different times, and the box is the later one.
-            Arrays.fill(ratiosAnomaly,0.0);
-            List<double[][]> anomalyPolys = anomalyBoxes(newForest, anomalyPts, ratiosAnomaly,centered.get());
+            Arrays.fill(ratiosAnomaly, 0.0);
+            List<double[][]> anomalyPolys = anomalyBoxes(newForest, anomalyPts, ratiosAnomaly, centered.get());
             int frameMemberBoxes = 0;
             for (ClusterBoxes.Union u : unions) {
                 frameMemberBoxes += u.size();
@@ -372,9 +372,8 @@ public class Summarization implements Example {
                 Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> sweep = ClusterBoxes.forMembersAll(newForest,
                         summary, bg, MEMBER_QUERIES, null, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
                 for (ClusterBoxes.BoxKind kind : ClusterBoxes.BoxKind.values()) {
-                    System.out.printf("  reps    %-8s %s%n", kind,
-                            ClusterBoxes.describe(
-                                    ClusterBoxes.forClusters(newForest, summary, kind, null, centered.get())));
+                    System.out.printf("  reps    %-8s %s%n", kind, ClusterBoxes
+                            .describe(ClusterBoxes.forClusters(newForest, summary, kind, null, centered.get())));
                     System.out.printf("  members(samples) %-8s %s%n", kind, ClusterBoxes.describe(sweep.get(kind)));
                 }
                 System.out.println("  plot half-range is " + range + ", so compare the half-widths against that");
@@ -392,9 +391,9 @@ public class Summarization implements Example {
             System.out.printf(
                     "%3d  clusters %2d  anom %3d  unclaimed %5.1f%%  contested %4.1f%%  |  %s reach: own %5.1f%%  "
                             + "other-only %4.1f%%  none %4.1f%%%n",
-                    degree, summary.size(), anomalyPts.size(),    // (d) count on the line
-                    100.0 * frameCensus[2] / bg.length, 100.0 * frameCensus[1] / bg.length,
-                    frameKind, 100.0 * reachTotal[ClusterBoxes.REACH_OWN] / boxes,
+                    degree, summary.size(), anomalyPts.size(), // (d) count on the line
+                    100.0 * frameCensus[2] / bg.length, 100.0 * frameCensus[1] / bg.length, frameKind,
+                    100.0 * reachTotal[ClusterBoxes.REACH_OWN] / boxes,
                     100.0 * reachTotal[ClusterBoxes.REACH_OTHER_ONLY] / boxes,
                     100.0 * reachTotal[ClusterBoxes.REACH_NONE] / boxes);
 
@@ -534,7 +533,8 @@ public class Summarization implements Example {
                 Math.round(count / 3.6) * 0.01, numberOfBlades, Math.round(sum / 3.6) * 0.01);
         System.out.printf("  misses: %d frames over-segmented, %d under -- over means every blade was found "
                 + "and one was split%n", over, under);
-        System.out.printf("Standalone RCF, average anomaly : %.2f (%.4f percent)%n", anomaly/360.0, anomaly/(360.0*dataSize));
+        System.out.printf("Standalone RCF, average anomaly : %.2f (%.4f percent)%n", anomaly / 360.0,
+                anomaly / (360.0 * dataSize));
         ratioRows("all frames", globalRatios, memberQueries, globalRatiosAnomaly, anomalyQueries);
         if (gif != null) {
             gif.close();
@@ -567,7 +567,7 @@ public class Summarization implements Example {
      * comparison of the two populations.
      */
     private static void ratioRows(String label, double[] member, long memberCount, double[] anomalyRatios,
-                                  long anomalyCount) {
+            long anomalyCount) {
         System.out.printf("          box ratios (%s, per-axis geometric mean)   %8s %11s %12s%n", label, "cut/gap",
                 "passage/cut", "stop/passage");
         ratioRow("members(samples)", member, memberCount);
@@ -579,8 +579,8 @@ public class Summarization implements Example {
             System.out.printf("            %-18s %8s   %9s %11s %12s%n", name, "(none)", "-", "-", "-");
             return;
         }
-        System.out.printf("            %-18s %8d   %9.3f %11.3f %12.3f%n", name, count,
-                Math.exp(sums[0] / count), Math.exp(sums[1] / count), Math.exp(sums[2] / count));
+        System.out.printf("            %-18s %8d   %9.3f %11.3f %12.3f%n", name, count, Math.exp(sums[0] / count),
+                Math.exp(sums[1] / count), Math.exp(sums[2] / count));
     }
 
     private static int[] angleOrder(List<double[]> pts) {
@@ -681,8 +681,13 @@ public class Summarization implements Example {
         }
         return assigned;
     }
-    /** The CUT box at each flagged point, as a rectangle; in 2-D the box is the drawing. */
-    private static List<double[][]> anomalyBoxes(RandomCutForest forest, List<float[]> points, double[] ratioSums, boolean centered) {
+
+    /**
+     * The CUT box at each flagged point, as a rectangle; in 2-D the box is the
+     * drawing.
+     */
+    private static List<double[][]> anomalyBoxes(RandomCutForest forest, List<float[]> points, double[] ratioSums,
+            boolean centered) {
         List<double[][]> polys = new ArrayList<>();
         for (float[] q : points) {
             AnisotropicLocalGeometry density = forest.getAnisotropicDensity(q);
@@ -704,7 +709,10 @@ public class Summarization implements Example {
         }
         return polys;
     }
-    /** Top-right key. Names the classes, not the blade hues, which are arbitrary. */
+
+    /**
+     * Top-right key. Names the classes, not the blade hues, which are arbitrary.
+     */
     private static final class LegendLayer implements Layer {
         private final Supplier<String> scale;
         private final IntSupplier anomalies;

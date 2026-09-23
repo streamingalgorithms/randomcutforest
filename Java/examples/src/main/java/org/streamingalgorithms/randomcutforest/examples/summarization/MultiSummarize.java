@@ -144,7 +144,7 @@ public class MultiSummarize implements Example {
         Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> drawByKind = ClusterBoxes.forMembersAll(forest, summary,
                 points, COVER_DRAW_QUERIES, null, CENTER_BOXES, ClusterBoxes.DEFAULT_CORE_QUANTILE);
         Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> refByKind = ClusterBoxes.forMembersAll(forest, summary,
-                points, MEMBER_QUERIES, null,CENTER_BOXES, ClusterBoxes.DEFAULT_CORE_QUANTILE);
+                points, MEMBER_QUERIES, null, CENTER_BOXES, ClusterBoxes.DEFAULT_CORE_QUANTILE);
         List<ClusterBoxes.Union> reference = refByKind.get(DRAWN_KIND);
         System.out.printf("forest over %d points, boxes for %d clusters: %d ms%n", dataSize, summary.size(),
                 Duration.between(f0, Instant.now()).toMillis());
@@ -171,7 +171,7 @@ public class MultiSummarize implements Example {
         System.out.println();
         List<ClusterBoxes.Union> byKind = new ArrayList<>();
         for (ClusterBoxes.BoxKind kind : ClusterBoxes.BoxKind.values()) {
-            List<ClusterBoxes.Union> at = ClusterBoxes.forClusters(forest, summary, kind, null,CENTER_BOXES);
+            List<ClusterBoxes.Union> at = ClusterBoxes.forClusters(forest, summary, kind, null, CENTER_BOXES);
             byKind.add(at.isEmpty() ? null : at.get(0));
             System.out.printf("  reps    %-8s %s%n", kind, ClusterBoxes.describe(at));
         }

@@ -100,7 +100,7 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
         pathBox = new double[INITIAL_CAPACITY * len];
         pathDecay = new double[INITIAL_CAPACITY];
         pathMass = new double[INITIAL_CAPACITY];
-        pathGap = new float[INITIAL_CAPACITY*len];
+        pathGap = new float[INITIAL_CAPACITY * len];
         scales = new FirstPassageScales(dimension);
         foldedScales = new FirstPassageScales(dimension);
     }
@@ -154,11 +154,11 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
             int capacity = pathDecay.length * 2;
             pathBox = Arrays.copyOf(pathBox, capacity * len);
             pathDecay = Arrays.copyOf(pathDecay, capacity);
-            pathMass = Arrays.copyOf(pathMass,capacity);
-            pathGap=Arrays.copyOf(pathGap,capacity*len);
+            pathMass = Arrays.copyOf(pathMass, capacity);
+            pathGap = Arrays.copyOf(pathGap, capacity * len);
         }
         System.arraycopy(growingBox, 0, pathBox, levels * len, len);
-        System.arraycopy(rawGap,0,pathGap,levels*len,len);
+        System.arraycopy(rawGap, 0, pathGap, levels * len, len);
         pathDecay[levels] = decay;
         pathMass[levels] = mass;
         if (massLevel < 0 && mass >= Math.pow(Math.max(1.0, treeMass), massTargetExponent)) {
@@ -202,7 +202,7 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
         copyBox(cutLevel, cutBox);
         copyBox(passageLevel, passageBox);
         copyBox(stopLevel, stopBox);
-        copyGap(cutLevel,gapBox);
+        copyGap(cutLevel, gapBox);
         scales.observeTree(cutBox, passageBox, stopBox, gapBox, pathMass[cutLevel]);
     }
 
@@ -211,8 +211,8 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     }
 
     private void copyGap(int level, double[] out) {
-        for(int i=0;i<len;i++){
-            out[i] = pathGap[level*len+i];
+        for (int i = 0; i < len; i++) {
+            out[i] = pathGap[level * len + i];
         }
     }
 
@@ -227,7 +227,7 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
         Arrays.fill(cutBox, 0.0);
         Arrays.fill(passageBox, 0.0);
         Arrays.fill(stopBox, 0.0);
-        Arrays.fill(gapBox,0.0);
+        Arrays.fill(gapBox, 0.0);
         // Buffer slots are overwritten on append; no per-tree clearing.
     }
 

@@ -258,7 +258,8 @@ public final class ClusterBoxes {
      * A union of the boxes at an arbitrary set of query points.
      */
 
-    private static Union forQueries(RandomCutForest forest, List<float[]> queries,  BoxKind kind, double[] sumRatios, boolean centered) {
+    private static Union forQueries(RandomCutForest forest, List<float[]> queries, BoxKind kind, double[] sumRatios,
+            boolean centered) {
         List<double[]> origins = new ArrayList<>();
         List<double[]> los = new ArrayList<>();
         List<double[]> his = new ArrayList<>();
@@ -307,7 +308,8 @@ public final class ClusterBoxes {
     /**
      * All three boxes at one set of queries, from one traversal each.
      */
-    private static Map<BoxKind, Union> forQueriesAll(RandomCutForest forest, List<float[]> queries, double[] sumRatios, boolean centered) {
+    private static Map<BoxKind, Union> forQueriesAll(RandomCutForest forest, List<float[]> queries, double[] sumRatios,
+            boolean centered) {
         BoxKind[] kinds = BoxKind.values();
         List<List<double[]>> origins = new ArrayList<>();
         List<List<double[]>> los = new ArrayList<>();
@@ -571,8 +573,8 @@ public final class ClusterBoxes {
      */
     private static double[] boxOf(AnisotropicLocalGeometry density, BoxKind kind) {
         switch (kind) {
-            case GAP:
-                return density.gapBox();
+        case GAP:
+            return density.gapBox();
         case CUT:
             return density.cutBox();
         case STOP:

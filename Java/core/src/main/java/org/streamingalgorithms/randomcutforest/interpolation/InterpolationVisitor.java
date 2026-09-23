@@ -198,7 +198,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         Arrays.fill(distances, 0.0);
         Arrays.fill(probMass, 0.0);
         Arrays.fill(growingBox, 0.0);
-        Arrays.fill(rawGap,0.0f);
+        Arrays.fill(rawGap, 0.0f);
         // folded*, foldedScore, foldedHeight deliberately NOT cleared
     }
 

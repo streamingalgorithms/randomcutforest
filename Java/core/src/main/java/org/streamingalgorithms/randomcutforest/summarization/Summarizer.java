@@ -54,15 +54,15 @@ public class Summarizer {
     public static int LENGTH_BOUND = 1000;
 
     public static Double L1distance(float[] a, float[] b) {
-        return VectorSupport.L1distance(a,b);
+        return VectorSupport.L1distance(a, b);
     }
 
     public static Double L2distance(float[] a, float[] b) {
-       return VectorSupport.L2distance(a,b);
+        return VectorSupport.L2distance(a, b);
     }
 
     public static Double LInfinitydistance(float[] a, float[] b) {
-        return VectorSupport.LInfinitydistance(a,b);
+        return VectorSupport.LInfinitydistance(a, b);
     }
 
     /**

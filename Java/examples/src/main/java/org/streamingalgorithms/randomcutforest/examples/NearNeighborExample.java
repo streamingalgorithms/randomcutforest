@@ -36,15 +36,15 @@ import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeome
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
- * Dynamic near neighbour, with the gap, cut, passage and stop boxes drawn around
- * the query over a shaded density field.
+ * Dynamic near neighbour, with the gap, cut, passage and stop boxes drawn
+ * around the query over a shaded density field.
  *
  * <p>
  * The four boxes nest: GAP is the empty margin between the query and the points
- * it merges with, and CUT is that margin plus those points' own spread, so
- * GAP is contained in CUT is contained in PASSAGE is contained in STOP. The gap
- * box is therefore invisible whenever the query sits inside the data, which is
- * the correct reading rather than a missing layer.
+ * it merges with, and CUT is that margin plus those points' own spread, so GAP
+ * is contained in CUT is contained in PASSAGE is contained in STOP. The gap box
+ * is therefore invisible whenever the query sits inside the data, which is the
+ * correct reading rather than a missing layer.
  */
 public class NearNeighborExample implements Example {
 
@@ -242,7 +242,7 @@ public class NearNeighborExample implements Example {
                 // extra queries -- and the lines from the adaptive march, which
                 // refines where the estimator says its own box is small. Swap the
                 // AnisoContour call for
-                //   Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO)
+                // Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO)
                 // to put the lines back on the free grid and keep the shading.
                 rawField = new ArrayList<>();
                 rawField.add(bandLayer(v, fieldLo, fieldSpan, levels, BAND));
@@ -431,8 +431,8 @@ public class NearNeighborExample implements Example {
                     // first the larger by Jensen, so a big gap means the picture and the
                     // number disagree about how much space the estimate covers.
                     : String.format(
-                    "cut box %d pts / %.3f = %.0f      k-NN ball %d pts / %.3f = %.0f" + "   aspect %.2f",
-                    inBox, areaBox, densBox, kNN, Math.PI * kRadius * kRadius, kDensity, anisotropy);
+                            "cut box %d pts / %.3f = %.0f      k-NN ball %d pts / %.3f = %.0f" + "   aspect %.2f",
+                            inBox, areaBox, densBox, kNN, Math.PI * kRadius * kRadius, kDensity, anisotropy);
             body.add(Layers.label(-range * 0.92, -range * 0.90, readout,
                     (box == null || nnInBox) ? new Color(60, 60, 60) : new Color(176, 32, 160)));
             body.add(Layers.legend(

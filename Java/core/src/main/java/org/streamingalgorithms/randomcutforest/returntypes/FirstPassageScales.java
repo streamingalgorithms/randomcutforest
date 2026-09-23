@@ -33,8 +33,7 @@ public class FirstPassageScales {
     private final double[] passageSum;
     private final double[] stopSum;
     private int treeCount;
-    private final double[] gapSum;   // Σ m over trees with positive width, per half-axis
-
+    private final double[] gapSum; // Σ m over trees with positive width, per half-axis
 
     public FirstPassageScales(int dimensions) {
         checkArgument(dimensions > 0, "dimensions must be greater than 0");
@@ -90,7 +89,7 @@ public class FirstPassageScales {
         return perTree(gapSum);
     }
 
-   public double[] cutBox() {
+    public double[] cutBox() {
         return perTree(cutSum);
     }
 
@@ -112,7 +111,7 @@ public class FirstPassageScales {
 
     /** Compatibility name: volume of the averaged box, NOT mean per-tree volume. */
     public double meanVolume(boolean cut) {
-        return volume( cut? cutSum:passageSum);
+        return volume(cut ? cutSum : passageSum);
     }
 
     public double stopVolume() {
@@ -163,10 +162,10 @@ public class FirstPassageScales {
         double[] acc = new double[3];
         int[] terms = new int[3];
         for (int i = 0; i < dimensions; i++) {
-            double g = gapSum[i] + gapSum[i+dimensions];
-            double c = cutSum[i] + cutSum[i+dimensions];
-            double p = passageSum[i] + cutSum[i+dimensions];
-            double s = stopSum[i] + stopSum[i+dimensions];
+            double g = gapSum[i] + gapSum[i + dimensions];
+            double c = cutSum[i] + cutSum[i + dimensions];
+            double p = passageSum[i] + cutSum[i + dimensions];
+            double s = stopSum[i] + stopSum[i + dimensions];
             if (c > 0 && g > 0) {
                 acc[0] += log(c / g);
                 terms[0]++;

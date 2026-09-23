@@ -45,8 +45,8 @@ import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
  *
  * <p>
  * The box collapses to nothing while the probe is inside the wall, which is
- * correct and is the frame that tells you the statistic is not merely a rescaled
- * distance.
+ * correct and is the frame that tells you the statistic is not merely a
+ * rescaled distance.
  *
  * <p>
  * Two headings are swept because {@code getAnisotropy} is an axis-aligned
@@ -315,17 +315,13 @@ public class HalfImpact implements Example {
                     body.add(Layers.weightedDots(leafXy, leafWeight, LEAF_CLOUD, LEAF_MIN_R, LEAF_SCALE_R));
                     body.addAll(tracks);
                     body.add(Layers.dots(new float[][] { probe }, Color.BLACK, 4));
-                    body.add(Layers.label(
-                            -range * 0.94, -range * 0.92, String
-                                    .format("heading %.0f deg   b = %.2f   t = %+.2f   %s", ANGLES[a], b, t,
-                                            (box == null) ? "no single scale"
-                                                    : (along + across == 0)
-                                                      ? String.format("inside the wall, no gap   nn-square %.3f",
-                                                    2 * nn)
-                                                      : String.format(
-                                                    "gap %.3f x %.3f  ray aspect %.2f   nn-square %.3f",
-                                                    along, across,
-                                                    (across > 0) ? along / across : 0, 2 * nn)),
+                    body.add(Layers.label(-range * 0.94, -range * 0.92,
+                            String.format("heading %.0f deg   b = %.2f   t = %+.2f   %s", ANGLES[a], b, t,
+                                    (box == null) ? "no single scale"
+                                            : (along + across == 0)
+                                                    ? String.format("inside the wall, no gap   nn-square %.3f", 2 * nn)
+                                                    : String.format("gap %.3f x %.3f  ray aspect %.2f   nn-square %.3f",
+                                                            along, across, (across > 0) ? along / across : 0, 2 * nn)),
                             new Color(60, 60, 60)));
                     body.add(Layers.legend(
                             new String[] { "ring (data)", "density isolines", "directional density",
