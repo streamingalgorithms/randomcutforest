@@ -29,6 +29,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 public class Summarizer {
@@ -53,28 +54,15 @@ public class Summarizer {
     public static int LENGTH_BOUND = 1000;
 
     public static Double L1distance(float[] a, float[] b) {
-        double dist = 0;
-        for (int i = 0; i < a.length; i++) {
-            dist += Math.abs(a[i] - b[i]);
-        }
-        return dist;
+        return VectorSupport.L1distance(a,b);
     }
 
     public static Double L2distance(float[] a, float[] b) {
-        double dist = 0;
-        for (int i = 0; i < a.length; i++) {
-            double t = Math.abs(a[i] - b[i]);
-            dist += t * t;
-        }
-        return Math.sqrt(dist);
+       return VectorSupport.L2distance(a,b);
     }
 
     public static Double LInfinitydistance(float[] a, float[] b) {
-        double dist = 0;
-        for (int i = 0; i < a.length; i++) {
-            dist = max(Math.abs(a[i] - b[i]), dist);
-        }
-        return dist;
+        return VectorSupport.LInfinitydistance(a,b);
     }
 
     /**

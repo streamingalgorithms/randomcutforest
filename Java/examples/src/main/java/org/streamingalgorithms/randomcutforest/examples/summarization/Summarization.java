@@ -35,9 +35,10 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 
 import javax.imageio.ImageIO;
-import javax.swing.*;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.Example;
@@ -48,8 +49,10 @@ import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
+import org.streamingalgorithms.randomcutforest.parkservices.threshold.BasicThresholder;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
-import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 /**
@@ -185,11 +188,13 @@ public class Summarization implements Example {
      * over-segmentation, usually transient as two blades pass.
      */
     private static final Color[] PALETTE = { new Color(0x2A, 0x78, 0xD6), // blue
-            new Color(0xEB, 0x68, 0x34), // orange
+            new Color(0xEB, 0x78, 0x34), // orange
             new Color(0x1B, 0xAF, 0x7A), // aqua
-            new Color(0x4A, 0x3A, 0xA7), // violet
-            new Color(0xC2, 0x18, 0x5B), // crimson
+            new Color(0x6D, 0x4D, 0xCC), // violet
+            new Color(0xF2, 0xB5, 0x00), // yellow
     };
+    /** Anomalies: the point and its box, in the one hue no cluster can take. */
+    private static final Color ANOMALY = new Color(0xEE, 0x00, 0x00);
 
     /** Anything past the palette: over-segmentation, shown as such. */
     private static final Color OVERFLOW = new Color(125, 125, 125);
@@ -209,9 +214,20 @@ public class Summarization implements Example {
         int numberOfBlades = 5;
         double range = 15.0;
 
+        double[] globalRatios = new double[3];
+        double[] globalRatiosAnomaly = new double[3];
+
+        double[] ratios = new double[3];
+        double[] ratiosAnomaly = new double[3];
+        // Denominators. addRatios contributes one number per query per ratio -- a
+        // per-axis mean of the log -- so the divisor is simply how many queries
+        // were reliable, not how many axes they had between them.
+        long memberQueries = 0, anomalyQueries = 0;
+
         RandomCutForest newForest = RandomCutForest.builder().numberOfTrees(NUMBER_OF_TREES).sampleSize(SAMPLE_SIZE)
                 .dimensions(newDimensions).randomSeed(randomSeed).timeDecay(TIME_DECAY).build();
 
+        BasicThresholder thresholder = new BasicThresholder(0.0);
         boolean printFile = false; // old gnuplot text dump
         boolean livePlot = true; // on-screen window
         boolean saveGif = true; // animated gif output
@@ -235,6 +251,8 @@ public class Summarization implements Example {
         // Gated inside the layer, so a repaint alone honours the toggle while paused.
         AtomicBoolean showBoxes = new AtomicBoolean(true);
         plot.bindKey(KeyEvent.VK_T, "summarization.boxes", () -> showBoxes.set(!showBoxes.get()));
+        AtomicBoolean showAnomaly = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_A, "summarization.anomaly", () -> showAnomaly.set(!showAnomaly.get()));
 
         AtomicReference<ClusterBoxes.BoxKind> drawnKind = new AtomicReference<>(DRAWN_KIND);
         plot.bindKey(KeyEvent.VK_C, "summarization.boxkind", () -> {
@@ -274,9 +292,11 @@ public class Summarization implements Example {
         int count = 0, sum = 0, over = 0, under = 0;
         Instant start = Instant.now();
         long updateNanos = 0, summarizeNanos = 0, boxNanos = 0;
+        int anomaly = 0;
 
         for (int degree = 0; degree < 360; degree += 1) {
             float[][] bg = new float[data.length][2];
+            List<float[]> anomalyPts = new ArrayList<>();      // (a) per frame
             int n = 0;
 
             Instant u0 = Instant.now();
@@ -288,6 +308,12 @@ public class Summarization implements Example {
                 if (printFile) {
                     file.append(vec[0] + " " + vec[1] + "\n");
                 }
+                var score = newForest.getAnomalyScore(vec);
+                if (thresholder.getPrimaryGrade(score)>0){
+                    anomalyPts.add(vec);
+                    anomaly++;
+                }
+                thresholder.update(score,0);
                 newForest.update(vec);
             }
             updateNanos += Duration.between(u0, Instant.now()).toNanos();
@@ -297,18 +323,35 @@ public class Summarization implements Example {
             }
 
             Instant s0 = Instant.now();
-            List<ICluster<float[]>> summary = newForest.summarize(2 * numberOfBlades + 2, 0.05, 5, 0.8,
-                    Summarizer::L2distance, oldSummary);
+            List<ICluster<float[]>> summary = newForest.summarize(2 * numberOfBlades + 2, 0.05, 5, 0.5,
+                   VectorSupport::L2distance, oldSummary);
             summarizeNanos += Duration.between(s0, Instant.now()).toNanos();
-
+            System.out.println(summary.get(0).getClass().getSimpleName());
             // The same forest that produced the clustering also carries the measure
             // around it: one anisotropic box per representative, so each cluster is a
             // union of boxes. In two dimensions the boxes project to themselves, so
             // what is on screen is the set, not a shadow of it.
             Instant b0 = Instant.now();
             ClusterBoxes.BoxKind frameKind = drawnKind.get();
+            Arrays.fill(ratios,0.0);
             List<ClusterBoxes.Union> unions = ClusterBoxes.forMembers(newForest, summary, bg, MEMBER_QUERIES, frameKind,
-                    centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
+                    ratios, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
+            // (c) The grade was assigned as the point arrived, against the forest at
+            // that moment; the box is read here, after all of this frame's updates.
+            // Two different times, and the box is the later one.
+            Arrays.fill(ratiosAnomaly,0.0);
+            List<double[][]> anomalyPolys = anomalyBoxes(newForest, anomalyPts, ratiosAnomaly,centered.get());
+            int frameMemberBoxes = 0;
+            for (ClusterBoxes.Union u : unions) {
+                frameMemberBoxes += u.size();
+            }
+            int frameAnomalyBoxes = anomalyPolys.size();
+            memberQueries += frameMemberBoxes;
+            anomalyQueries += frameAnomalyBoxes;
+            for (int i = 0; i < ratios.length; i++) {
+                globalRatios[i] += ratios[i];
+                globalRatiosAnomaly[i] += ratiosAnomaly[i];
+            }
             boxNanos += Duration.between(b0, Instant.now()).toNanos();
 
             // Say how big they came out, once the forest has seen enough to be
@@ -327,11 +370,12 @@ public class Summarization implements Example {
                         1 / TIME_DECAY, 2 * numberOfBlades + 2);
 
                 Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> sweep = ClusterBoxes.forMembersAll(newForest,
-                        summary, bg, MEMBER_QUERIES, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
+                        summary, bg, MEMBER_QUERIES, null, centered.get(), ClusterBoxes.DEFAULT_CORE_QUANTILE);
                 for (ClusterBoxes.BoxKind kind : ClusterBoxes.BoxKind.values()) {
                     System.out.printf("  reps    %-8s %s%n", kind,
-                            ClusterBoxes.describe(ClusterBoxes.forClusters(newForest, summary, kind, centered.get())));
-                    System.out.printf("  members %-8s %s%n", kind, ClusterBoxes.describe(sweep.get(kind)));
+                            ClusterBoxes.describe(
+                                    ClusterBoxes.forClusters(newForest, summary, kind, null, centered.get())));
+                    System.out.printf("  members(samples) %-8s %s%n", kind, ClusterBoxes.describe(sweep.get(kind)));
                 }
                 System.out.println("  plot half-range is " + range + ", so compare the half-widths against that");
                 ClusterBoxes.reachReport(sweep, summary);
@@ -346,12 +390,14 @@ public class Summarization implements Example {
             double boxes = Math.max(1, reachTotal[4]);
 
             System.out.printf(
-                    "%3d  clusters %2d  unclaimed %5.1f%%  contested %4.1f%%  |  %s reach: own %5.1f%%  "
+                    "%3d  clusters %2d  anom %3d  unclaimed %5.1f%%  contested %4.1f%%  |  %s reach: own %5.1f%%  "
                             + "other-only %4.1f%%  none %4.1f%%%n",
-                    degree, summary.size(), 100.0 * frameCensus[2] / bg.length, 100.0 * frameCensus[1] / bg.length,
+                    degree, summary.size(), anomalyPts.size(),    // (d) count on the line
+                    100.0 * frameCensus[2] / bg.length, 100.0 * frameCensus[1] / bg.length,
                     frameKind, 100.0 * reachTotal[ClusterBoxes.REACH_OWN] / boxes,
                     100.0 * reachTotal[ClusterBoxes.REACH_OTHER_ONLY] / boxes,
                     100.0 * reachTotal[ClusterBoxes.REACH_NONE] / boxes);
+
             if (summary.size() == numberOfBlades) {
                 ++count;
             } else if (summary.size() > numberOfBlades) {
@@ -383,7 +429,11 @@ public class Summarization implements Example {
             }
             if (!polygons.isEmpty()) {
                 scene.add(new BoxUnionLayer(polygons, owner.stream().mapToInt(Integer::intValue).toArray(), boxPalette,
-                        showBoxes::get, 45, 170));
+                        showBoxes::get, 55, 0));
+            }
+            if (!anomalyPolys.isEmpty()) {
+                scene.add(new BoxUnionLayer(anomalyPolys, new int[anomalyPolys.size()], new Color[] { ANOMALY },
+                        showAnomaly::get, 75, 0));
             }
 
             int uncovered = frameCensus[2];
@@ -428,6 +478,7 @@ public class Summarization implements Example {
                 scene.add(Layers.polyline(ring, col, true, 55, 1.6f));
                 scene.add(Layers.weightedDots(ring, w, col, 3.0, 13.0));
             }
+            scene.add(new LegendLayer(() -> frameKind.toString(), anomalyPts::size));
             if (printFile) {
                 file.append("\n");
                 file.append("\n");
@@ -471,6 +522,7 @@ public class Summarization implements Example {
                         100 * census[0] / total, 100 * census[1] / total, 100 * census[2] / total, connected,
                         unions.size(), unions.isEmpty() ? 0.0 : cohesion / unions.size());
                 System.out.println("          members/" + frameKind + ": " + ClusterBoxes.describe(unions));
+                ratioRows("this frame", ratios, frameMemberBoxes, ratiosAnomaly, frameAnomalyBoxes);
             }
 
             if (summary.size() == numberOfBlades) {
@@ -482,7 +534,8 @@ public class Summarization implements Example {
                 Math.round(count / 3.6) * 0.01, numberOfBlades, Math.round(sum / 3.6) * 0.01);
         System.out.printf("  misses: %d frames over-segmented, %d under -- over means every blade was found "
                 + "and one was split%n", over, under);
-
+        System.out.printf("Standalone RCF, average anomaly : %.2f (%.4f percent)%n", anomaly/360.0, anomaly/(360.0*dataSize));
+        ratioRows("all frames", globalRatios, memberQueries, globalRatiosAnomaly, anomalyQueries);
         if (gif != null) {
             gif.close();
             System.out.println("wrote dynamic_summarization.gif");
@@ -490,6 +543,44 @@ public class Summarization implements Example {
         if (file != null) {
             file.close();
         }
+    }
+
+    /**
+     * The three nested ratios, for cluster members and for anomaly points side by
+     * side.
+     *
+     * <p>
+     * Each is a geometric mean over axes and over queries: addRatios contributes
+     * the mean log ratio per axis for one query, so dividing by the query count and
+     * exponentiating gives a per-axis ratio rather than a volume ratio, which is
+     * what makes the three columns comparable to each other and across dimensions.
+     * All three are at least 1 by the nesting GAP within CUT within PASSAGE within
+     * STOP.
+     *
+     * <p>
+     * cut/gap is the one that separates the two rows. It is large where the void is
+     * small against the neighbourhood it merges with -- an embedded point -- and
+     * near 1 where the void is the whole box, which is what an isolated point looks
+     * like. An axis with no gap at all contributes nothing to it, so a row whose
+     * queries are mostly interior is averaging over fewer axes than its count
+     * suggests; passage/cut and stop/passage have no such hole and are the honest
+     * comparison of the two populations.
+     */
+    private static void ratioRows(String label, double[] member, long memberCount, double[] anomalyRatios,
+                                  long anomalyCount) {
+        System.out.printf("          box ratios (%s, per-axis geometric mean)   %8s %11s %12s%n", label, "cut/gap",
+                "passage/cut", "stop/passage");
+        ratioRow("members(samples)", member, memberCount);
+        ratioRow("anomalies", anomalyRatios, anomalyCount);
+    }
+
+    private static void ratioRow(String name, double[] sums, long count) {
+        if (count <= 0) {
+            System.out.printf("            %-18s %8s   %9s %11s %12s%n", name, "(none)", "-", "-", "-");
+            return;
+        }
+        System.out.printf("            %-18s %8d   %9.3f %11.3f %12.3f%n", name, count,
+                Math.exp(sums[0] / count), Math.exp(sums[1] / count), Math.exp(sums[2] / count));
     }
 
     private static int[] angleOrder(List<double[]> pts) {
@@ -563,7 +654,7 @@ public class Summarization implements Example {
         List<double[]> pairs = new ArrayList<>(n * m); // {distance, current, previous}
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < m; j++) {
-                pairs.add(new double[] { previous.get(j).distance(current.get(i), Summarizer::L1distance), i, j });
+                pairs.add(new double[] { previous.get(j).distance(current.get(i), VectorSupport::L1distance), i, j });
             }
         }
         pairs.sort((a, b) -> Double.compare(a[0], b[0]));
@@ -589,5 +680,77 @@ public class Summarization implements Example {
             }
         }
         return assigned;
+    }
+    /** The CUT box at each flagged point, as a rectangle; in 2-D the box is the drawing. */
+    private static List<double[][]> anomalyBoxes(RandomCutForest forest, List<float[]> points, double[] ratioSums, boolean centered) {
+        List<double[][]> polys = new ArrayList<>();
+        for (float[] q : points) {
+            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(q);
+            if (!density.isReliable()) {
+                continue;
+            }
+            // DiVector layout: box[i] reaches toward MINUS i, box[i + d] toward PLUS i.
+            double[] box = density.gapBox();
+            density.getScales().addRatios(ratioSums);
+            int d = q.length;
+            double[] lo = new double[d];
+            double[] hi = new double[d];
+            for (int i = 0; i < d; i++) {
+                double width = box[i] + box[i + d];
+                lo[i] = centered ? q[i] - 0.5 * width : q[i] - box[i];
+                hi[i] = centered ? q[i] + 0.5 * width : q[i] + box[i + d];
+            }
+            polys.add(new double[][] { { lo[0], lo[1] }, { hi[0], lo[1] }, { hi[0], hi[1] }, { lo[0], hi[1] } });
+        }
+        return polys;
+    }
+    /** Top-right key. Names the classes, not the blade hues, which are arbitrary. */
+    private static final class LegendLayer implements Layer {
+        private final Supplier<String> scale;
+        private final IntSupplier anomalies;
+
+        LegendLayer(Supplier<String> scale, IntSupplier anomalies) {
+            this.scale = scale;
+            this.anomalies = anomalies;
+        }
+
+        @Override
+        public void draw(Graphics2D g, Plot2D.Viewport vp) {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            String[] text = { "cluster cover  (" + scale.get() + ")", "anomaly  (GAP, " + anomalies.getAsInt() + ")",
+                    "covered by a cluster", "claimed by none" };
+            Color[] swatch = { PALETTE[0], ANOMALY, CLAIMED, UNCLAIMED };
+            g.setFont(g.getFont().deriveFont(Font.PLAIN, 12f));
+            FontMetrics fm = g.getFontMetrics();
+            int pad = 9, sw = 13, gap = 7, line = fm.getHeight() + 4;
+            int w = 0;
+            for (String s : text) {
+                w = Math.max(w, fm.stringWidth(s));
+            }
+            w += 2 * pad + sw + gap;
+            int h = 2 * pad + text.length * line - 4;
+            int x = (int) Math.round(vp.px(vp.xmax())) - w - 14;
+            int y = (int) Math.round(vp.py(vp.ymax())) + 14;
+
+            g.setColor(new Color(255, 255, 255, 215));
+            g.fillRoundRect(x, y, w, h, 6, 6);
+            g.setColor(new Color(0, 0, 0, 40));
+            g.drawRoundRect(x, y, w, h, 6, 6);
+            for (int i = 0; i < text.length; i++) {
+                int ty = y + pad + i * line;
+                Color c = swatch[i];
+                // Swatches match how the thing is actually drawn: the two box
+                // classes as translucent fills, the two point classes as dots.
+                if (i < 2) {
+                    g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), i == 0 ? 55 : 75));
+                    g.fillRect(x + pad, ty + 2, sw, sw);
+                } else {
+                    g.setColor(c);
+                    g.fillOval(x + pad + 3, ty + 5, sw - 6, sw - 6);
+                }
+                g.setColor(new Color(40, 40, 40));
+                g.drawString(text[i], x + pad + sw + gap, ty + fm.getAscent() + 1);
+            }
+        }
     }
 }

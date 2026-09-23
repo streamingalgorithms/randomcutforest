@@ -154,6 +154,7 @@ public final class AnisoContour {
             }
         }
 
+
         for (int k = 0; k < levels.length; k++) {
             emit(x0, y0, x1, y1, a, b, c, d, centre, levels[k], perLevel.get(k));
         }

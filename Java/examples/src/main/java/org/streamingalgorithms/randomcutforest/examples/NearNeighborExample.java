@@ -31,17 +31,20 @@ import java.util.List;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Yinyang;
-import org.streamingalgorithms.randomcutforest.examples.plot.Contour;
-import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
-import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
-import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
-import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
-import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.examples.plot.*;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
- * Dynamic near neighbour, with cut, passage and stop boxes drawn around the
- * query.
+ * Dynamic near neighbour, with the gap, cut, passage and stop boxes drawn around
+ * the query over a shaded density field.
+ *
+ * <p>
+ * The four boxes nest: GAP is the empty margin between the query and the points
+ * it merges with, and CUT is that margin plus those points' own spread, so
+ * GAP is contained in CUT is contained in PASSAGE is contained in STOP. The gap
+ * box is therefore invisible whenever the query sits inside the data, which is
+ * the correct reading rather than a missing layer.
  */
 public class NearNeighborExample implements Example {
 
@@ -69,6 +72,46 @@ public class NearNeighborExample implements Example {
     private static final Color PASSAGE_BOX = new Color(30, 145, 120);
     private static final Color KNN_BALL = new Color(40, 120, 190);
     private static final Color STOP_BOX = new Color(214, 118, 34);
+    /**
+     * The void box: the same red as the neighbour cloud, because it is the same
+     * statement about isolation seen from the measure instead of from the data.
+     */
+    private static final Color GAP_BOX = new Color(214, 39, 40);
+
+    /**
+     * Adaptive march for the isolines, off by default.
+     *
+     * <p>
+     * It refines a cell when the cell is wide relative to the estimator's own
+     * half-extent, which resolves the field faithfully but is the wrong criterion
+     * for a contour: the box is small in the dense interior, where the field is
+     * flat, and large out toward the sparse boundary, which is where the level sets
+     * actually are. So the budget goes to the interior and the contours end up
+     * drawn on unrefined seed cells -- coarser than the uniform grid that chose the
+     * levels, and visibly more angular. Its T-junctions add breaks at depth
+     * boundaries, and one-axis bisection leaves long thin cells whose long edge
+     * carries the interpolation error.
+     *
+     * <p>
+     * The filamenting that motivated it was the volume annihilation on a vanishing
+     * axis, which is fixed, so the uniform grid is the better default now. Flip to
+     * see the difference; cost is about five probes per seed cell plus two per
+     * split, on top of the grid.
+     */
+    private static final boolean ADAPTIVE_ISOLINES = false;
+    private static final int ANISO_SEED = 16;
+    private static final int ANISO_DEPTH = 2;
+    private static final double ANISO_COVER = 2.0;
+
+    /**
+     * Shading. Cool and neutral so it does not compete with the warm isolines drawn
+     * over it, and floored: the levels come from a quantile band starting at
+     * CONTOUR_LO, so band 1 covers 1 - CONTOUR_LO of the canvas by construction --
+     * more than half of it empty space. Painting from band BAND_FLOOR up puts the
+     * ink where the density actually is.
+     */
+    private static final Color BAND = new Color(70, 90, 120);
+    private static final int BAND_FLOOR = 2;
     /**
      * The whole returned neighbour list, not just the closest. Translucent so
      * overlap reads as concentration; same hue as the winner dot, Layers.color(0).
@@ -195,7 +238,28 @@ public class NearNeighborExample implements Example {
                 if (frame == 0 && FIXED_LEVELS == null) {
                     System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
                 }
-                rawField = Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO);
+                // Bands from the uniform grid that already chose the levels -- no
+                // extra queries -- and the lines from the adaptive march, which
+                // refines where the estimator says its own box is small. Swap the
+                // AnisoContour call for
+                //   Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO)
+                // to put the lines back on the free grid and keep the shading.
+                rawField = new ArrayList<>();
+                rawField.add(bandLayer(v, fieldLo, fieldSpan, levels, BAND));
+                if (ADAPTIVE_ISOLINES) {
+                    AnisoContour.Probe probe = (x, y, extent) -> {
+                        AnisotropicLocalGeometry o = newForest
+                                .getAnisotropicDensity(new float[] { (float) x, (float) y });
+                        double[] b = o.cutBox();
+                        extent[0] = 0.5 * (b[0] + b[2]);
+                        extent[1] = 0.5 * (b[1] + b[3]);
+                        return o.passageDensity(0.001);
+                    };
+                    rawField.addAll(AnisoContour.isolines(probe, fieldLo, fieldSpan, ANISO_SEED, ANISO_DEPTH,
+                            ANISO_COVER, levels, ISO));
+                } else {
+                    rawField.addAll(Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO));
+                }
 
                 field = new ArrayList<>();
                 for (Layer inner : rawField) {
@@ -248,15 +312,17 @@ public class NearNeighborExample implements Example {
 
             // Three boxes at the same query point; diagnostics below use the cut box.
             double[] box = null;
+            double[] gapBox = null;
             double[] passageBox = null;
             double[] stopBox = null;
             double anisotropy = 1.0;
             if (showBox) {
                 Instant b0 = Instant.now();
-                AnisotropicDensityOutput out = newForest.getAnisotropicDensity(movingQuery);
+                AnisotropicLocalGeometry out = newForest.getAnisotropicDensity(movingQuery);
                 boxNanos += Duration.between(b0, Instant.now()).toNanos();
                 if (out.isReliable()) {
                     box = out.cutBox();
+                    gapBox = out.gapBox();
                     passageBox = out.passageBox();
                     stopBox = out.stopBox();
                     anisotropy = out.getAnisotropy();
@@ -317,11 +383,17 @@ public class NearNeighborExample implements Example {
             // comparison.
             body.add(circleLayer(movingQuery[0], movingQuery[1], kRadius, KNN_BALL));
             if (box != null) {
-                // Translucent fills preserve the nested regions. Draw the soft,
-                // outline-free stop box first, then passage and cut on top.
+                // Translucent fills only. The outlines were fighting the isolines,
+                // and the nesting already reads from the stacked alpha. Drawn
+                // outermost first so every box stays visible: STOP, PASSAGE, CUT,
+                // then the gap on top.
                 body.add(boxFill(movingQuery[0], movingQuery[1], stopBox, STOP_BOX, 35, false));
-                body.add(boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, true));
-                body.add(boxFill(movingQuery[0], movingQuery[1], box, CUT_BOX, 50, true));
+                body.add(boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, false));
+                body.add(boxFill(movingQuery[0], movingQuery[1], box, CUT_BOX, 50, false));
+                // One-sided by construction -- only the faces pointing at the data
+                // carry a gap -- and identically zero when the query is interior.
+                // A zero-area rectangle there is the statistic working.
+                body.add(boxFill(movingQuery[0], movingQuery[1], gapBox, GAP_BOX, 90, false));
             }
             // The cloud of leaves the traversals actually reached, above the box fills
             // and below the arrow and the winner. Area encodes the vote, so the shape of
@@ -359,18 +431,19 @@ public class NearNeighborExample implements Example {
                     // first the larger by Jensen, so a big gap means the picture and the
                     // number disagree about how much space the estimate covers.
                     : String.format(
-                            "cut box %d pts / %.3f = %.0f      k-NN ball %d pts / %.3f = %.0f" + "   aspect %.2f",
-                            inBox, areaBox, densBox, kNN, Math.PI * kRadius * kRadius, kDensity, anisotropy);
+                    "cut box %d pts / %.3f = %.0f      k-NN ball %d pts / %.3f = %.0f" + "   aspect %.2f",
+                    inBox, areaBox, densBox, kNN, Math.PI * kRadius * kRadius, kDensity, anisotropy);
             body.add(Layers.label(-range * 0.92, -range * 0.90, readout,
                     (box == null || nnInBox) ? new Color(60, 60, 60) : new Color(176, 32, 160)));
             body.add(Layers.legend(
-                    new String[] { "data", "near neighbors, area = tree votes", "closest (forest)", "cut box",
-                            "passage box", "stop box (shading only)", "exact k-NN ball, k = sqrt(n)",
-                            "density isolines" },
-                    new Color[] { new Color(120, 120, 120), NN_CLOUD, Layers.color(0), CUT_BOX, PASSAGE_BOX, STOP_BOX,
-                            KNN_BALL, ISO },
+                    new String[] { "data", "near neighbors, area = tree votes", "closest (forest)",
+                            "gap box (void, empty when inside)", "cut box", "passage box", "stop box (shading only)",
+                            "exact k-NN ball, k = sqrt(n)", "density isolines" },
+                    new Color[] { new Color(120, 120, 120), NN_CLOUD, Layers.color(0), GAP_BOX, CUT_BOX, PASSAGE_BOX,
+                            STOP_BOX, KNN_BALL, ISO },
                     new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.BOX,
-                            Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.LINE }));
+                            Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX,
+                            Layers.Swatch.LINE }));
 
             List<Layer> scene = new ArrayList<>(field);
             scene.addAll(body);
@@ -449,6 +522,46 @@ public class NearNeighborExample implements Example {
         path.lineTo(x1, y1);
         path.lineTo(x0, y1);
         path.closePath();
+    }
+
+    /**
+     * Fills each grid cell with the band its corner mean falls in. Reuses the grid
+     * already sampled to choose the levels, so it costs no density queries -- which
+     * is why the lines are drawn separately and adaptively rather than from these
+     * same cells.
+     */
+    private static Layer bandLayer(double[][] v, double lo, double span, double[] levels, Color color) {
+        double[] sorted = java.util.Arrays.copyOf(levels, levels.length);
+        java.util.Arrays.sort(sorted);
+        int grid = v.length;
+        double h = span / (grid - 1.0);
+        return (g, vp) -> {
+            for (int i = 0; i + 1 < grid; i++) {
+                for (int j = 0; j + 1 < grid; j++) {
+                    double m = 0.25 * (v[i][j] + v[i + 1][j] + v[i][j + 1] + v[i + 1][j + 1]);
+                    int band = 0;
+                    // A NaN node falls through as band 0 and is skipped, which is
+                    // what an off-support cell should do.
+                    while (band < sorted.length && m > sorted[band]) {
+                        band++;
+                    }
+                    if (band < BAND_FLOOR) {
+                        continue;
+                    }
+                    int x0 = (int) Math.round(vp.px(lo + h * i));
+                    int x1 = (int) Math.round(vp.px(lo + h * (i + 1)));
+                    int y0 = (int) Math.round(vp.py(lo + h * (j + 1)));
+                    int y1 = (int) Math.round(vp.py(lo + h * j));
+                    // Ramp over the painted bands only, so flooring does not also
+                    // throw away the contrast between the ones that survive.
+                    int span2 = Math.max(1, sorted.length - BAND_FLOOR);
+                    g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(),
+                            9 + 25 * (band - BAND_FLOOR) / span2));
+                    // +1 closes the hairline seam that rounding leaves between cells.
+                    g.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+                }
+            }
+        };
     }
 
     /**

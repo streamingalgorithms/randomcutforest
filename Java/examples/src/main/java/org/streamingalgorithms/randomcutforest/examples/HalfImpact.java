@@ -28,9 +28,33 @@ import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
-import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
+/**
+ * A ray swept through an annulus, with the <em>gap</em> box drawn against an
+ * isotropic nearest-neighbour square at every step.
+ *
+ * <p>
+ * The gap box is the empty margin between the probe and the points it merges
+ * with -- the cut box with the merged node's own spread subtracted -- so it is
+ * the void and nothing else. That makes it the right object for this picture:
+ * the nn-square asserts the void is a disc of radius nn, and the gap box says
+ * what the void actually is. Where the two disagree is the anisotropy, measured
+ * rather than assumed.
+ *
+ * <p>
+ * The box collapses to nothing while the probe is inside the wall, which is
+ * correct and is the frame that tells you the statistic is not merely a rescaled
+ * distance.
+ *
+ * <p>
+ * Two headings are swept because {@code getAnisotropy} is an axis-aligned
+ * reading: a ridge at 45 degrees inflates every axis equally and reports as
+ * isotropic. The ray-frame aspect below is measured in the ray's own frame and
+ * does not have that blind spot, so the two columns disagreeing is the point
+ * rather than a defect.
+ */
 public class HalfImpact implements Example {
 
     private static final double RING_RADIUS = 1.0;
@@ -91,6 +115,20 @@ public class HalfImpact implements Example {
     private static final double ARROW_LENGTH = 0.13;
     private static final Color ISO = new Color(214, 148, 34);
     private static final Color GRAD = new Color(120, 100, 70);
+
+    /**
+     * Shading under the isolines. Cool and neutral so it does not compete with the
+     * warm lines drawn over it, and floored: the levels come from a quantile band
+     * starting at CONTOUR_LO, so band 1 covers 1 - CONTOUR_LO of the canvas by
+     * construction -- here mostly the flat far field. Painting from BAND_FLOOR up
+     * puts the ink on the wall, which is what the eye is looking for. The field is
+     * static, so this costs nothing beyond the grid already sampled.
+     */
+    private static final Color BAND = new Color(70, 90, 120);
+    private static final int BAND_FLOOR = 2;
+
+    /** Steps between printed rows; 89 steps per pass is more than anyone reads. */
+    private static final int ROW_EVERY = 8;
 
     /**
      * Topo state used for the recording, held apart from the live toggle. The gate
@@ -189,8 +227,8 @@ public class HalfImpact implements Example {
                 int aspectCount = 0;
 
                 System.out.printf("%npass: heading %.0f deg, impact b = %.2f%n", ANGLES[a], b);
-                System.out.printf("%8s %9s %9s %9s %9s %9s %9s %9s%n", "t", "along", "across", "axis asp", "nn",
-                        "area/nn^2", "inflate", "top3");
+                System.out.printf("%8s %9s %9s %9s %9s %9s %9s %9s%n", "t", "along", "across", "ray asp", "gap asp",
+                        "cut asp", "nn", "along/2nn");
 
                 for (int step = 0; step <= STEPS; step++) {
                     double t = START_X + (END_X - START_X) * step / STEPS;
@@ -202,8 +240,8 @@ public class HalfImpact implements Example {
                         forest.update(p);
                     }
 
-                    AnisotropicDensityOutput out = forest.getAnisotropicDensity(probe);
-                    double[] box = out.isReliable() ? out.cutBox() : null;
+                    AnisotropicLocalGeometry out = forest.getAnisotropicDensity(probe);
+                    double[] box = out.isReliable() ? out.gapBox() : null;
 
                     // The impact frontier. Every tree returns the leaf its own random cuts
                     // routed the probe to, merged across trees by point with Neighbor.count
@@ -250,6 +288,20 @@ public class HalfImpact implements Example {
                         tracks.add(boxOutline(px, py, box, color));
                         aspectSum += out.getAnisotropy();
                         aspectCount++;
+
+                        if (step % ROW_EVERY == 0) {
+                            // Two aspects, deliberately. "gap asp" is the drawn box's
+                            // own axis ratio; "cut asp" is getAnisotropy, which reads
+                            // the cut box and is axis-aligned. "ray asp" is measured
+                            // in the ray's frame, so it is the one that survives the
+                            // 45 degree heading.
+                            double gw = box[0] + box[2], gh = box[1] + box[3];
+                            double gapAsp = (Math.min(gw, gh) > 0) ? Math.max(gw, gh) / Math.min(gw, gh) : 0;
+                            double rayAsp = (across > 0) ? along / across : 0;
+                            double base = 2 * nn;
+                            System.out.printf("%8.2f %9.4f %9.4f %9.2f %9.2f %9.2f %9.4f %9.2f%n", t, along, across,
+                                    rayAsp, gapAsp, out.getAnisotropy(), nn, (base > 0) ? along / base : 0);
+                        }
                     }
 
                     List<Layer> body = new ArrayList<>();
@@ -267,12 +319,17 @@ public class HalfImpact implements Example {
                             -range * 0.94, -range * 0.92, String
                                     .format("heading %.0f deg   b = %.2f   t = %+.2f   %s", ANGLES[a], b, t,
                                             (box == null) ? "no single scale"
-                                                    : String.format("cut %.3f x %.3f  aspect %.2f   nn-square %.3f",
-                                                            along, across, out.getAnisotropy(), 2 * nn)),
+                                                    : (along + across == 0)
+                                                      ? String.format("inside the wall, no gap   nn-square %.3f",
+                                                    2 * nn)
+                                                      : String.format(
+                                                    "gap %.3f x %.3f  ray aspect %.2f   nn-square %.3f",
+                                                    along, across,
+                                                    (across > 0) ? along / across : 0, 2 * nn)),
                             new Color(60, 60, 60)));
                     body.add(Layers.legend(
                             new String[] { "ring (data)", "density isolines", "directional density",
-                                    "leaves reached (area = tree votes)", "cut box (measured)",
+                                    "leaves reached (area = tree votes)", "gap box (measured void)",
                                     "nn-square (isotropic baseline)" },
                             new Color[] { new Color(140, 140, 140), ISO, GRAD, LEAF_CLOUD, color, NN_BOX },
                             new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.LINE, Layers.Swatch.LINE,
@@ -345,7 +402,11 @@ public class HalfImpact implements Example {
             System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
         }
 
-        List<Layer> out = new ArrayList<>(Contour.isolines(density, rho, lo, span, levels, ISO));
+        // Bands from the grid that already chose the levels, so they cost nothing,
+        // and they go in first so the isolines and arrows draw over them.
+        List<Layer> out = new ArrayList<>();
+        out.add(bandLayer(rho, lo, span, levels, BAND));
+        out.addAll(Contour.isolines(density, rho, lo, span, levels, ISO));
 
         // Same cells and levels the isolines walked. The saddle is the cell where four
         // crossings admit two pairings with DIFFERENT topology: one separates the high
@@ -414,7 +475,7 @@ public class HalfImpact implements Example {
                     f.update(q);
                 }
             }
-            AnisotropicDensityOutput out = f.getAnisotropicDensity(new float[] { (float) probeR, 0f });
+            AnisotropicLocalGeometry out = f.getAnisotropicDensity(new float[] { (float) probeR, 0f });
             double inner = RING_RADIUS - w / 2;
             double toInner = probeR - inner;
             // the probe sits at +x, so the inward reach is the high_x face
@@ -424,6 +485,42 @@ public class HalfImpact implements Example {
         }
         System.out.println("ratio > 1 means the box spans the wall and takes in the hollow centre;");
         System.out.println("ratio < 1 means the wall itself terminated it.\n");
+    }
+
+    /**
+     * Fills each grid cell with the band its corner mean falls in. Reuses the grid
+     * already sampled to choose the levels, so it costs no density queries.
+     */
+    private static Layer bandLayer(double[][] v, double lo, double span, double[] levels, Color color) {
+        double[] sorted = java.util.Arrays.copyOf(levels, levels.length);
+        java.util.Arrays.sort(sorted);
+        int grid = v.length;
+        double h = span / (grid - 1.0);
+        return (g, vp) -> {
+            for (int i = 0; i + 1 < grid; i++) {
+                for (int j = 0; j + 1 < grid; j++) {
+                    double m = 0.25 * (v[i][j] + v[i + 1][j] + v[i][j + 1] + v[i + 1][j + 1]);
+                    int band = 0;
+                    // A NaN node falls through as band 0 and is skipped, which is
+                    // what an off-support cell should do.
+                    while (band < sorted.length && m > sorted[band]) {
+                        band++;
+                    }
+                    if (band < BAND_FLOOR) {
+                        continue;
+                    }
+                    int x0 = (int) Math.round(vp.px(lo + h * i));
+                    int x1 = (int) Math.round(vp.px(lo + h * (i + 1)));
+                    int y0 = (int) Math.round(vp.py(lo + h * (j + 1)));
+                    int y1 = (int) Math.round(vp.py(lo + h * j));
+                    int span2 = Math.max(1, sorted.length - BAND_FLOOR);
+                    g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(),
+                            9 + 25 * (band - BAND_FLOOR) / span2));
+                    // +1 closes the hairline seam that rounding leaves between cells.
+                    g.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+                }
+            }
+        };
     }
 
     /** Distance from the box centre to its wall along a unit direction. */

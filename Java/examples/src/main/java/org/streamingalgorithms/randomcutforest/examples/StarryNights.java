@@ -32,7 +32,7 @@ import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
-import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 
 /**
@@ -438,7 +438,7 @@ public class StarryNights implements Example {
 
         boolean probe(RandomCutForest forest, double[] c) {
             probes++;
-            AnisotropicDensityOutput out = forest
+            AnisotropicLocalGeometry out = forest
                     .getAnisotropicDensity(new float[] { (float) c[0], (float) c[1], (float) c[2] });
             massSum += out.getSampleSize();
             if (!out.isReliable()) {

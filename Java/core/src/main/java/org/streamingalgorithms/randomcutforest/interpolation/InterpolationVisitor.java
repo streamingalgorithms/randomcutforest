@@ -131,8 +131,10 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
     private boolean pointEqualsLeaf;
     private double savedMass;
 
+    /** Raw per-face gap, taken before gap[] is overwritten with probabilities. */
+    protected final float[] rawGap;
     // float scratch, fully overwritten per node — never cleared
-    private final float[] gap; // expandedPoint gap -> prob, in place
+    protected final float[] gap; // expandedPoint gap -> prob, in place
     private final float[] distComp; // prob * (gap + oldRange)
 
     private double sumOfNewRange;
@@ -164,6 +166,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         this.foldedProbMass = new double[len];
         this.gap = new float[len];
         this.distComp = new float[len];
+        this.rawGap = new float[len];
         setDefaults();
     }
 
@@ -195,6 +198,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
         Arrays.fill(distances, 0.0);
         Arrays.fill(probMass, 0.0);
         Arrays.fill(growingBox, 0.0);
+        Arrays.fill(rawGap,0.0f);
         // folded*, foldedScore, foldedHeight deliberately NOT cleared
     }
 
@@ -264,7 +268,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             updateGrowingBox(small, node.expanded());
             S = computeGap(small, node.expanded(), 0);
         }
-
+        System.arraycopy(gap, 0, rawGap, 0, len);
         double probOfCut = (sumOfNewRange == 0.0) ? 0.0 : S / sumOfNewRange;
         if (probOfCut <= 0) {
             pointInsideBox = true;
@@ -300,6 +304,7 @@ public class InterpolationVisitor extends RFVisitor<InterpolationMeasure> {
             // range, so there is no face to select -- S_w is the whole of it.
             S = VectorSupport.weightedGapSum(gap, len, weights, 0);
         }
+        System.arraycopy(gap, 0, rawGap, 0, len);
         sumOfNewRange = S; // leaf rangeSum ≡ 0
         if (S <= 0) {
             savedMass = pointMass + leafNode.getMass();

@@ -962,12 +962,12 @@ public class RandomCutForest {
                 InterpolationMeasure::addToLeft, finisher));
     }
 
-    public AnisotropicDensityOutput getAnisotropicDensity(float[] point) {
+    public AnisotropicLocalGeometry getAnisotropicDensity(float[] point) {
         if (!isOutputReady()) {
-            return new AnisotropicDensityOutput(dimensions, sampleSize);
+            return new AnisotropicLocalGeometry(dimensions, sampleSize);
         }
         Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
-        return new AnisotropicDensityOutput(traverseForest(transformToShingledPoint(point), anisotropicFactory,
+        return new AnisotropicLocalGeometry(traverseForest(transformToShingledPoint(point), anisotropicFactory,
                 InterpolationMeasure::addToLeft, finisher));
     }
 

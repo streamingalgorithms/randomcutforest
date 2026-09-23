@@ -15,6 +15,7 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
+import static java.lang.Math.log;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
@@ -32,6 +33,8 @@ public class FirstPassageScales {
     private final double[] passageSum;
     private final double[] stopSum;
     private int treeCount;
+    private final double[] gapSum;   // Σ m over trees with positive width, per half-axis
+
 
     public FirstPassageScales(int dimensions) {
         checkArgument(dimensions > 0, "dimensions must be greater than 0");
@@ -40,6 +43,7 @@ public class FirstPassageScales {
         cutSum = new double[len];
         passageSum = new double[len];
         stopSum = new double[len];
+        gapSum = new double[len];
     }
 
     public FirstPassageScales(FirstPassageScales base) {
@@ -47,6 +51,7 @@ public class FirstPassageScales {
         System.arraycopy(base.cutSum, 0, cutSum, 0, len);
         System.arraycopy(base.passageSum, 0, passageSum, 0, len);
         System.arraycopy(base.stopSum, 0, stopSum, 0, len);
+        System.arraycopy(base.gapSum, 0, gapSum, 0, len);
         treeCount = base.treeCount;
     }
 
@@ -62,21 +67,30 @@ public class FirstPassageScales {
         Arrays.fill(cutSum, 0.0);
         Arrays.fill(passageSum, 0.0);
         Arrays.fill(stopSum, 0.0);
+        Arrays.fill(gapSum, 0.0);
         treeCount = 0;
     }
 
-    public void observeTree(double[] cut, double[] passage, double[] stop) {
-        checkArgument(cut.length == len && passage.length == len && stop.length == len,
-                "box lengths must equal 2 * dimensions");
+    public void observeTree(double[] cut, double[] passage, double[] stop, double[] gap, double mass) {
         for (int j = 0; j < len; j++) {
-            cutSum[j] += cut[j];
             passageSum[j] += passage[j];
             stopSum[j] += stop[j];
+            double weight = 1.0 / Math.pow(Math.max(1.0, mass), 1.0 / dimensions);
+            // Mass-weighted harmonic on the cut box. Both accumulators are sums, so
+            // addToLeft stays a plain add and the division stays at retrieval.
+            // A zero width is skipped rather than contributing 1/0: it would send
+            // the sum to infinity and zero that axis for the whole forest.
+            cutSum[j] += cut[j];
+            gapSum[j] += gap[j];
         }
         treeCount++;
     }
 
-    public double[] cutBox() {
+    public double[] gapBox() {
+        return perTree(gapSum);
+    }
+
+   public double[] cutBox() {
         return perTree(cutSum);
     }
 
@@ -86,18 +100,6 @@ public class FirstPassageScales {
 
     public double[] stopBox() {
         return perTree(stopSum);
-    }
-
-    public double cutLength(int face) {
-        return treeCount > 0 ? cutSum[face] / treeCount : 0.0;
-    }
-
-    public double passageLength(int face) {
-        return treeCount > 0 ? passageSum[face] / treeCount : 0.0;
-    }
-
-    public double stopLength(int face) {
-        return treeCount > 0 ? stopSum[face] / treeCount : 0.0;
     }
 
     private double[] perTree(double[] sum) {
@@ -110,7 +112,7 @@ public class FirstPassageScales {
 
     /** Compatibility name: volume of the averaged box, NOT mean per-tree volume. */
     public double meanVolume(boolean cut) {
-        return volume(cut ? cutSum : passageSum);
+        return volume( cut? cutSum:passageSum);
     }
 
     public double stopVolume() {
@@ -143,8 +145,45 @@ public class FirstPassageScales {
             left.cutSum[j] += right.cutSum[j];
             left.passageSum[j] += right.passageSum[j];
             left.stopSum[j] += right.stopSum[j];
+            left.gapSum[j] += right.gapSum[j];
         }
         left.treeCount += right.treeCount;
         return left;
+    }
+
+    public void addRatios(double[] out) {
+        if (out == null) {
+            return;
+        }
+        checkArgument(out.length == 3, "expected three ratios");
+        // Per query, the MEAN log ratio over the axes that have one, so the
+        // caller's divisor is the query count rather than an axis count it would
+        // have to track. treeCount cancels in every ratio, which is why the raw
+        // sums are used rather than the per-tree boxes.
+        double[] acc = new double[3];
+        int[] terms = new int[3];
+        for (int i = 0; i < dimensions; i++) {
+            double g = gapSum[i] + gapSum[i+dimensions];
+            double c = cutSum[i] + cutSum[i+dimensions];
+            double p = passageSum[i] + cutSum[i+dimensions];
+            double s = stopSum[i] + stopSum[i+dimensions];
+            if (c > 0 && g > 0) {
+                acc[0] += log(c / g);
+                terms[0]++;
+            }
+            if (p > 0 && c > 0) {
+                acc[1] += log(p / c);
+                terms[1]++;
+            }
+            if (s > 0 && p > 0) {
+                acc[2] += log(s / p);
+                terms[2]++;
+            }
+        }
+        for (int k = 0; k < 3; k++) {
+            if (terms[k] > 0) {
+                out[k] += acc[k] / terms[k];
+            }
+        }
     }
 }

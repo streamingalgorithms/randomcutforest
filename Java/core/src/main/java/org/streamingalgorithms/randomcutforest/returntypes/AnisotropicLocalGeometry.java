@@ -36,9 +36,9 @@ package org.streamingalgorithms.randomcutforest.returntypes;
  * axis and needs neither parameter nor sort: asking for all of them is asking
  * for each of them, and order does not affect a product.
  */
-public class AnisotropicDensityOutput extends DensityOutput {
+public class AnisotropicLocalGeometry extends DensityOutput {
 
-    public AnisotropicDensityOutput(int dimensions, double sampleSize) {
+    public AnisotropicLocalGeometry(int dimensions, double sampleSize) {
         super(dimensions, (int) sampleSize);
         this.scales = new FirstPassageScales(dimensions);
     }
@@ -48,7 +48,7 @@ public class AnisotropicDensityOutput extends DensityOutput {
      * accumulator seeded with a plain InterpolationMeasure; this constructor only
      * fixes the type at the end, exactly as DensityOutput does.
      */
-    public AnisotropicDensityOutput(InterpolationMeasure base) {
+    public AnisotropicLocalGeometry(InterpolationMeasure base) {
         super(base);
         if (this.scales == null) {
             // no anisotropic visitor ran, or every tree converged immediately
@@ -68,6 +68,10 @@ public class AnisotropicDensityOutput extends DensityOutput {
     /** Query-relative extents, high followed by low, averaged across trees. */
     public double[] cutBox() {
         return scales.cutBox();
+    }
+
+    public double[] gapBox() {
+        return scales.gapBox();
     }
 
     public double[] passageBox() {

@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicDensityOutput;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -77,6 +77,7 @@ public final class ClusterBoxes {
      * read from one buffered path.
      */
     public enum BoxKind {
+        GAP("the void between the query and the points it merges with"),
         /** P[separated] = 0.50, mass-bounded. The margin scale. */
         CUT("P[sep] 0.50, mass-bounded -- the margin scale"),
         /** P[separated] = 0.05, mass-bounded. The cover scale. */
@@ -241,14 +242,14 @@ public final class ClusterBoxes {
      * union.
      */
     public static List<Union> forClusters(RandomCutForest forest, List<ICluster<float[]>> summary, BoxKind kind,
-            boolean centered) {
+            double[] sumratios, boolean centered) {
         List<Union> out = new ArrayList<>();
         for (ICluster<float[]> cluster : summary) {
             List<float[]> queries = new ArrayList<>();
             for (Weighted<float[]> rep : cluster.getRepresentatives()) {
                 queries.add(rep.index);
             }
-            out.add(forQueries(forest, queries, kind, centered));
+            out.add(forQueries(forest, queries, kind, sumratios, centered));
         }
         return out;
     }
@@ -257,17 +258,18 @@ public final class ClusterBoxes {
      * A union of the boxes at an arbitrary set of query points.
      */
 
-    private static Union forQueries(RandomCutForest forest, List<float[]> queries, BoxKind kind, boolean centered) {
+    private static Union forQueries(RandomCutForest forest, List<float[]> queries,  BoxKind kind, double[] sumRatios, boolean centered) {
         List<double[]> origins = new ArrayList<>();
         List<double[]> los = new ArrayList<>();
         List<double[]> his = new ArrayList<>();
         double driftSum = 0.0;
         int driftTerms = 0;
         for (float[] query : queries) {
-            AnisotropicDensityOutput density = forest.getAnisotropicDensity(query);
+            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(query);
             if (!density.isReliable()) {
                 continue;
             }
+            density.getScales().addRatios(sumRatios);
             double[] box = boxOf(density, kind);
             int d = query.length;
             double[] o = new double[d];
@@ -305,7 +307,7 @@ public final class ClusterBoxes {
     /**
      * All three boxes at one set of queries, from one traversal each.
      */
-    private static Map<BoxKind, Union> forQueriesAll(RandomCutForest forest, List<float[]> queries, boolean centered) {
+    private static Map<BoxKind, Union> forQueriesAll(RandomCutForest forest, List<float[]> queries, double[] sumRatios, boolean centered) {
         BoxKind[] kinds = BoxKind.values();
         List<List<double[]>> origins = new ArrayList<>();
         List<List<double[]>> los = new ArrayList<>();
@@ -318,10 +320,11 @@ public final class ClusterBoxes {
         double driftSum = 0.0;
         int driftTerms = 0;
         for (float[] query : queries) {
-            AnisotropicDensityOutput density = forest.getAnisotropicDensity(query);
+            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(query);
             if (!density.isReliable()) {
                 continue;
             }
+            density.getScales().addRatios(sumRatios);
             int d = query.length;
             for (int k = 0; k < kinds.length; k++) {
                 double[] box = boxOf(density, kinds[k]);
@@ -410,11 +413,11 @@ public final class ClusterBoxes {
      *                   means every member
      */
     public static List<Union> forMembers(RandomCutForest forest, List<ICluster<float[]>> summary, float[][] points,
-            int perCluster, BoxKind kind, boolean centered, double coreQuantile) {
+            int perCluster, BoxKind kind, double[] sumRatios, boolean centered, double coreQuantile) {
         List<List<float[]>> queries = memberQueries(summary, points, perCluster, coreQuantile);
         List<Union> out = new ArrayList<>();
         for (List<float[]> q : queries) {
-            out.add(forQueries(forest, q, kind, centered));
+            out.add(forQueries(forest, q, kind, sumRatios, centered));
         }
         return out;
     }
@@ -424,14 +427,14 @@ public final class ClusterBoxes {
      * point.
      */
     public static Map<BoxKind, List<Union>> forMembersAll(RandomCutForest forest, List<ICluster<float[]>> summary,
-            float[][] points, int perCluster, boolean centered, double coreQuantile) {
+            float[][] points, int perCluster, double[] sumRatios, boolean centered, double coreQuantile) {
         List<List<float[]>> queries = memberQueries(summary, points, perCluster, coreQuantile);
         Map<BoxKind, List<Union>> out = new EnumMap<>(BoxKind.class);
         for (BoxKind kind : BoxKind.values()) {
             out.put(kind, new ArrayList<>());
         }
         for (List<float[]> q : queries) {
-            Map<BoxKind, Union> byKind = forQueriesAll(forest, q, centered);
+            Map<BoxKind, Union> byKind = forQueriesAll(forest, q, sumRatios, centered);
             for (BoxKind kind : BoxKind.values()) {
                 out.get(kind).add(byKind.get(kind));
             }
@@ -566,8 +569,10 @@ public final class ClusterBoxes {
      * Why centring is the default here, when {@code BoxLayer} argues for keeping
      * the drift.
      */
-    private static double[] boxOf(AnisotropicDensityOutput density, BoxKind kind) {
+    private static double[] boxOf(AnisotropicLocalGeometry density, BoxKind kind) {
         switch (kind) {
+            case GAP:
+                return density.gapBox();
         case CUT:
             return density.cutBox();
         case STOP:
