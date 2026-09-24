@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.GenericAnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.threshold.BasicThresholder;
@@ -88,7 +89,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
     // the global function used in clustering, can be changed dynamically (but
     // clustering would be controlled
     // automatically due to efficiency reasons)
-    protected BiFunction<P, P, Double> globalDistance;
+    protected ToDoubleBiFunction<P, P> globalDistance;
 
     public static Builder<?> builder() {
         return new Builder<>();
@@ -105,12 +106,12 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
         ignoreBelow = builder.ignoreBelow;
     }
 
-    protected GlobalLocalAnomalyDetector(Builder<?> builder, BiFunction<P, P, Double> distance) {
+    protected GlobalLocalAnomalyDetector(Builder<?> builder, ToDoubleBiFunction<P, P> distance) {
         this(builder);
         globalDistance = distance;
     }
 
-    public void setGlobalDistance(BiFunction<P, P, Double> dist) {
+    public void setGlobalDistance(ToDoubleBiFunction<P, P> dist) {
         globalDistance = dist;
     }
 
@@ -210,7 +211,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
      *         with corresponding scores (lowest score may not correspond to lowest
      *         distance) which can be used to investigate anomalous points further
      */
-    public GenericAnomalyDescriptor<P> process(P object, float weight, BiFunction<P, P, Double> localDistance,
+    public GenericAnomalyDescriptor<P> process(P object, float weight, ToDoubleBiFunction<P, P> localDistance,
             boolean considerOcclusion) {
         checkArgument(weight >= 0, "weight cannot be negative");
         // recompute clusters first; this enables easier merges and deserialization
@@ -277,11 +278,11 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
      *         representative. The scores are sorted from least anomalous to most
      *         anomalous.
      */
-    public List<Weighted<P>> score(P current, BiFunction<P, P, Double> localDistance, boolean considerOcclusion) {
+    public List<Weighted<P>> score(P current, ToDoubleBiFunction<P, P> localDistance, boolean considerOcclusion) {
         if (clusters == null) {
             return null;
         } else {
-            BiFunction<P, P, Double> local = (localDistance != null) ? localDistance : globalDistance;
+            ToDoubleBiFunction<P, P> local = (localDistance != null) ? localDistance : globalDistance;
             double totalWeight = clusters.stream().map(e -> e.getWeight()).reduce(0.0, Double::sum);
             ArrayList<Candidate> candidateList = new ArrayList<>();
             for (ICluster<P> cluster : clusters) {
@@ -290,7 +291,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
                 P closestInCluster = null;
                 for (Weighted<P> rep : cluster.getRepresentatives()) {
                     if (rep.weight > ignoreBelow * totalWeight) {
-                        double tempDist = local.apply(current, rep.index);
+                        double tempDist = local.applyAsDouble(current, rep.index);
                         if (tempDist < 0) {
                             throw new IllegalArgumentException(" distance cannot be negative ");
                         }
@@ -315,7 +316,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
             while (index < candidateList.size()) {
                 Candidate head = candidateList.get(index);
                 double dist = (localDistance == null) ? head.distance
-                        : globalDistance.apply(current, head.representative);
+                        : globalDistance.applyAsDouble(current, head.representative);
                 float tempMeasure = (head.averageRadiusOfCluster > 0.0)
                         ? min(FLOAT_MAX, (float) (dist / head.averageRadiusOfCluster))
                         : FLOAT_MAX;
@@ -323,7 +324,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
                 if (considerOcclusion) {
                     int consider = index + 1;
                     while (consider < candidateList.size()) {
-                        double occludeDistance = local.apply(head.representative,
+                        double occludeDistance = local.applyAsDouble(head.representative,
                                 candidateList.get(consider).representative);
                         double candidateDistance = candidateList.get(consider).distance;
                         if (occludeDistance < candidateDistance && candidateDistance > Math
@@ -354,7 +355,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
      * @param distance  the distance function of the new clustering
      */
     public GlobalLocalAnomalyDetector(GlobalLocalAnomalyDetector first, GlobalLocalAnomalyDetector second,
-            Builder<?> builder, boolean recluster, BiFunction<P, P, Double> distance) {
+            Builder<?> builder, boolean recluster, ToDoubleBiFunction<P, P> distance) {
         super(first, second, builder.getCapacity(), builder.getTimeDecay(), builder.getRandomSeed());
         thresholder = new BasicThresholder(builder.getTimeDecay(), builder.anomalyRate, false);
         thresholder.setAbsoluteThreshold(1.2);
@@ -391,7 +392,7 @@ public class GlobalLocalAnomalyDetector<P> extends StreamSampler<P> {
     }
 
     public List<ICluster<P>> getClusters(int maxAllowed, int initial, int stopAt, int representatives, double shrink,
-            BiFunction<P, P, Double> distance, List<ICluster<P>> previousClusters) {
+            ToDoubleBiFunction<P, P> distance, List<ICluster<P>> previousClusters) {
         BiFunction<P, Float, ICluster<P>> clusterInitializer = (a, b) -> GenericMultiCenter.initialize(a, b, shrink,
                 representatives);
         return Summarizer.summarize(objectList, maxAllowed, initial, stopAt, false, 0.8, distance, clusterInitializer,

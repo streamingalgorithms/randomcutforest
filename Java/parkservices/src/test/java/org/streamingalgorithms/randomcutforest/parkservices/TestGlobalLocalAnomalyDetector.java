@@ -40,7 +40,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Random;
-import java.util.function.BiFunction;
+import java.util.function.ToDoubleBiFunction;
 
 import org.junit.jupiter.api.Test;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
@@ -56,7 +56,7 @@ public class TestGlobalLocalAnomalyDetector {
     void testConstructor() {
         int reservoirSize = 2000;
         int stringSize = 70;
-        BiFunction<char[], char[], Double> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
+        ToDoubleBiFunction<char[], char[]> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
         GlobalLocalAnomalyDetector<char[]> reservoir = new GlobalLocalAnomalyDetector<>(
                 GlobalLocalAnomalyDetector.builder().randomSeed(42).numberOfRepresentatives(5)
                         .timeDecay(1.0 / reservoirSize).capacity(reservoirSize),
@@ -135,7 +135,7 @@ public class TestGlobalLocalAnomalyDetector {
 
         System.out.println("Injected " + numberOfInjected + " 'anomalies' in " + points.length);
 
-        BiFunction<char[], char[], Double> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
+        ToDoubleBiFunction<char[], char[]> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
         GlobalLocalAnomalyDetector<char[]> reservoir = GlobalLocalAnomalyDetector.builder().randomSeed(42)
                 .numberOfRepresentatives(5).timeDecay(1.0 / reservoirSize).capacity(reservoirSize).build();
         reservoir.setGlobalDistance(dist);
@@ -149,9 +149,9 @@ public class TestGlobalLocalAnomalyDetector {
             if (y % 200 == 100 && y > reservoirSize) {
                 char[] temp = points[y];
                 // check for malformed distance function, to the extent we can check efficiently
-                BiFunction<char[], char[], Double> badDistance = (a, b) -> -1.0;
+                ToDoubleBiFunction<char[], char[]> badDistance = (a, b) -> -1.0;
                 assertThrows(IllegalArgumentException.class, () -> reservoir.process(temp, 1.0f, badDistance, true));
-                BiFunction<char[], char[], Double> superBadDistance = (a, b) -> Double.MAX_VALUE;
+                ToDoubleBiFunction<char[], char[]> superBadDistance = (a, b) -> Double.MAX_VALUE;
                 assertThrows(IllegalArgumentException.class,
                         () -> reservoir.process(temp, 1.0f, superBadDistance, true));
             }

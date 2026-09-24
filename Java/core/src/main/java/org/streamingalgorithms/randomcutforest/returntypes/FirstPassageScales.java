@@ -164,7 +164,7 @@ public class FirstPassageScales {
         for (int i = 0; i < dimensions; i++) {
             double g = gapSum[i] + gapSum[i + dimensions];
             double c = cutSum[i] + cutSum[i + dimensions];
-            double p = passageSum[i] + cutSum[i + dimensions];
+            double p = passageSum[i] + passageSum[i + dimensions];
             double s = stopSum[i] + stopSum[i + dimensions];
             if (c > 0 && g > 0) {
                 acc[0] += log(c / g);

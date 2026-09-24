@@ -42,6 +42,7 @@ import static org.streamingalgorithms.randomcutforest.util.ArrayEncoder.moveAndP
 
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.MultiCenter;
@@ -1142,7 +1143,7 @@ public class PointStore implements IPointStore<Integer, float[]> {
      */
 
     public List<ICluster<float[]>> summarize(int maxAllowed, double shrinkage, int numberOfRepresentatives,
-            double separationRatio, BiFunction<float[], float[], Double> distance, List<ICluster<float[]>> previous) {
+            double separationRatio, ToDoubleBiFunction<float[], float[]> distance, List<ICluster<float[]>> previous) {
         int[] counts = getRefCount();
         ArrayList<Weighted<Integer>> refs = new ArrayList<>();
         for (int i = 0; i < counts.length; i++) {

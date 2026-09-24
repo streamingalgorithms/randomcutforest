@@ -17,8 +17,8 @@ package org.streamingalgorithms.randomcutforest.summarization;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -49,13 +49,13 @@ public interface ICluster<R> {
     double getWeight();
 
     // merge another cluster of same type
-    void absorb(ICluster<R> other, BiFunction<R, R, Double> distance);
+    void absorb(ICluster<R> other, ToDoubleBiFunction<R, R> distance);
 
     // distance of apoint from a cluster, has to be non-negative
-    double distance(R point, BiFunction<R, R, Double> distance);
+    double distance(R point, ToDoubleBiFunction<R, R> distance);
 
     // distance of another cluster from this cluster, has to be non negative
-    double distance(ICluster<R> other, BiFunction<R, R, Double> distance);
+    double distance(ICluster<R> other, ToDoubleBiFunction<R, R> distance);
 
     // all potential representativess of a cluster these are typically chosen to be
     // well scattered
@@ -70,7 +70,7 @@ public interface ICluster<R> {
     // linear combination
     // of the primary and secondary representatives, as in CURE
     // https://en.wikipedia.org/wiki/CURE_algorithm
-    default R primaryRepresentative(BiFunction<R, R, Double> distance) {
+    default R primaryRepresentative(ToDoubleBiFunction<R, R> distance) {
         return getRepresentatives().get(0).index;
     }
 
@@ -102,10 +102,10 @@ public interface ICluster<R> {
      * @return a measure of improvement (if any); this can be useful in the future
      *         as a part of the stopping condition
      */
-    double recompute(Function<Integer, R> getPoint, boolean force, BiFunction<R, R, Double> distance);
+    double recompute(Function<Integer, R> getPoint, boolean force, ToDoubleBiFunction<R, R> distance);
 
     // adding a point to a cluster, and possibly updates the extent measure and the
     // assigned points
-    void addPoint(int index, float weight, double dist, R point, BiFunction<R, R, Double> distance);
+    void addPoint(int index, float weight, double dist, R point, ToDoubleBiFunction<R, R> distance);
 
 }

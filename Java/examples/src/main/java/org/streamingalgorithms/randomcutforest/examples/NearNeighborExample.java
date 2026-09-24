@@ -226,7 +226,7 @@ public class NearNeighborExample implements Example {
                 Instant f0 = Instant.now();
                 double fieldLo = -range * 0.95;
                 double fieldSpan = 2 * range * 0.95;
-                Contour.Field density = (x, y) -> newForest.getAnisotropicDensity(new float[] { (float) x, (float) y })
+                Contour.Field density = (x, y) -> newForest.getAnisotropicGeometry(new float[] { (float) x, (float) y })
                         .passageDensity(0.001);
                 // .meanLogVolume();
 
@@ -249,7 +249,7 @@ public class NearNeighborExample implements Example {
                 if (ADAPTIVE_ISOLINES) {
                     AnisoContour.Probe probe = (x, y, extent) -> {
                         AnisotropicLocalGeometry o = newForest
-                                .getAnisotropicDensity(new float[] { (float) x, (float) y });
+                                .getAnisotropicGeometry(new float[] { (float) x, (float) y });
                         double[] b = o.cutBox();
                         extent[0] = 0.5 * (b[0] + b[2]);
                         extent[1] = 0.5 * (b[1] + b[3]);
@@ -318,7 +318,7 @@ public class NearNeighborExample implements Example {
             double anisotropy = 1.0;
             if (showBox) {
                 Instant b0 = Instant.now();
-                AnisotropicLocalGeometry out = newForest.getAnisotropicDensity(movingQuery);
+                AnisotropicLocalGeometry out = newForest.getAnisotropicGeometry(movingQuery);
                 boxNanos += Duration.between(b0, Instant.now()).toNanos();
                 if (out.isReliable()) {
                     box = out.cutBox();

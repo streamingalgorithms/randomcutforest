@@ -19,7 +19,7 @@ import static java.lang.Math.min;
 
 import java.util.List;
 import java.util.Random;
-import java.util.function.BiFunction;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.examples.Example;
 import org.streamingalgorithms.randomcutforest.parkservices.GlobalLocalAnomalyDetector;
@@ -84,7 +84,7 @@ public class StringGLADexample implements Example {
         System.out.println("Injected " + numberOfInjected + " 'anomalies' in " + points.length);
         int recluster = reservoirSize / 2;
 
-        BiFunction<char[], char[], Double> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
+        ToDoubleBiFunction<char[], char[]> dist = (a, b) -> toyD(a, b, stringSize / 2.0);
         GlobalLocalAnomalyDetector<char[]> reservoir = GlobalLocalAnomalyDetector.builder().randomSeed(42)
                 .numberOfRepresentatives(5).timeDecay(1.0 / reservoirSize).capacity(reservoirSize).build();
         reservoir.setGlobalDistance(dist);
@@ -105,7 +105,7 @@ public class StringGLADexample implements Example {
                     List<Weighted<char[]>> list = result.getRepresentativeList();
                     if (printFalsePos) {
                         System.out.println(result.getScore() + " " + injected[y] + " at " + y + " dist "
-                                + dist.apply(points[y], list.get(0).index) + " " + result.getThreshold());
+                                + dist.applyAsDouble(points[y], list.get(0).index) + " " + result.getThreshold());
                         printCharArray(list.get(0).index);
                         System.out.println();
                         printCharArray(points[y]);

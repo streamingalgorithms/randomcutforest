@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
@@ -53,15 +54,15 @@ public class Summarizer {
 
     public static int LENGTH_BOUND = 1000;
 
-    public static Double L1distance(float[] a, float[] b) {
+    public static double L1distance(float[] a, float[] b) {
         return VectorSupport.L1distance(a, b);
     }
 
-    public static Double L2distance(float[] a, float[] b) {
+    public static double L2distance(float[] a, float[] b) {
         return VectorSupport.L2distance(a, b);
     }
 
-    public static Double LInfinitydistance(float[] a, float[] b) {
+    public static double LInfinitydistance(float[] a, float[] b) {
         return VectorSupport.LInfinitydistance(a, b);
     }
 
@@ -77,7 +78,7 @@ public class Summarizer {
      *                        during the assignment of points does not seem to help
      */
     public static <R> void assignAndRecompute(List<Weighted<Integer>> sampledPoints, Function<Integer, R> getPoint,
-            List<ICluster<R>> clusters, BiFunction<R, R, Double> distance, boolean parallelEnabled) {
+            List<ICluster<R>> clusters, ToDoubleBiFunction<R, R> distance, boolean parallelEnabled) {
         checkArgument(clusters.size() > 0, " cannot be empty list of clusters");
         checkArgument(sampledPoints.size() > 0, " cannot be empty list of points");
 
@@ -184,7 +185,7 @@ public class Summarizer {
      * @return a list of clusters
      */
     public static <R> List<ICluster<R>> iterativeClustering(int maxAllowed, int initial, int stopAt,
-            List<Weighted<Integer>> refs, Function<Integer, R> getPoint, BiFunction<R, R, Double> distance,
+            List<Weighted<Integer>> refs, Function<Integer, R> getPoint, ToDoubleBiFunction<R, R> distance,
             BiFunction<R, Float, ICluster<R>> clusterInitializer, long seed, boolean parallelEnabled,
             boolean phase2GlobalReassign, double overlapParameter, List<ICluster<R>> previousClustering) {
 
@@ -336,7 +337,7 @@ public class Summarizer {
      *         true applications of summarization)
      */
     public static <R> List<ICluster<R>> summarize(List<Weighted<R>> points, int maxAllowed, int initial, int stopAt,
-            boolean phase2GlobalReassign, double overlapParameter, BiFunction<R, R, Double> distance,
+            boolean phase2GlobalReassign, double overlapParameter, ToDoubleBiFunction<R, R> distance,
             BiFunction<R, Float, ICluster<R>> clusterInitializer, long seed, boolean parallelEnabled,
             List<ICluster<R>> previousClustering) {
         checkArgument(maxAllowed < 100, "are you sure you want more elements in the summary?");
@@ -366,7 +367,7 @@ public class Summarizer {
     // same as above, specific for single centroid clustering of float[]
     // with an explicit stopping condition as well as a global reassignment option
     public static List<ICluster<float[]>> singleCentroidSummarize(List<Weighted<float[]>> points, int maxAllowed,
-            int initial, int stopAt, boolean phase2GlobalReassign, BiFunction<float[], float[], Double> distance,
+            int initial, int stopAt, boolean phase2GlobalReassign, ToDoubleBiFunction<float[], float[]> distance,
             long seed, boolean parallelEnabled, List<ICluster<float[]>> previousClustering) {
         return summarize(points, maxAllowed, initial, stopAt, phase2GlobalReassign, DEFAULT_SEPARATION_RATIO_FOR_MERGE,
                 distance, Center::initialize, seed, parallelEnabled, previousClustering);
@@ -391,7 +392,7 @@ public class Summarizer {
      *         true applications of summarization)
      */
     public static SampleSummary summarize(List<Weighted<float[]>> points, int maxAllowed, int initial,
-            boolean phase1reassign, BiFunction<float[], float[], Double> distance, long seed, boolean parallelEnabled,
+            boolean phase1reassign, ToDoubleBiFunction<float[], float[]> distance, long seed, boolean parallelEnabled,
             int numberOfReps, double shrinkage) {
         checkArgument(maxAllowed < 100, "are you sure you want more elements in the summary?");
         checkArgument(maxAllowed <= initial, "initial parameter should be at least maximum allowed in final result");
@@ -432,7 +433,7 @@ public class Summarizer {
     }
 
     public static SampleSummary summarize(List<Weighted<float[]>> points, int maxAllowed, int initial,
-            boolean phase1reassign, BiFunction<float[], float[], Double> distance, long seed, boolean parallelEnabled) {
+            boolean phase1reassign, ToDoubleBiFunction<float[], float[]> distance, long seed, boolean parallelEnabled) {
         return summarize(points, maxAllowed, initial, phase1reassign, distance, seed, parallelEnabled, 1, 0);
     }
 
@@ -452,7 +453,7 @@ public class Summarizer {
      * @return a list of centers with weights
      */
     public static SampleSummary summarize(float[][] points, int maxAllowed, int initial, boolean reassignPerStep,
-            BiFunction<float[], float[], Double> distance, long seed, Boolean parallelEnabled) {
+            ToDoubleBiFunction<float[], float[]> distance, long seed, Boolean parallelEnabled) {
         ArrayList<Weighted<float[]>> weighted = new ArrayList<>();
         for (float[] point : points) {
             weighted.add(new Weighted<>(point, 1.0f));
@@ -511,7 +512,7 @@ public class Summarizer {
      * @return a list of centers with weights
      */
     public static <R> List<ICluster<R>> multiSummarize(List<R> points, int maxAllowed, int initial, int stopAt,
-            boolean phase2GlobalReassign, double overlapParameter, BiFunction<R, R, Double> distance, long seed,
+            boolean phase2GlobalReassign, double overlapParameter, ToDoubleBiFunction<R, R> distance, long seed,
             Boolean parallelEnabled, double shrinkage, int numberOfRepresentatives) {
 
         ArrayList<Weighted<R>> weighted = new ArrayList<>();
@@ -523,7 +524,7 @@ public class Summarizer {
     }
 
     public static <R> List<ICluster<R>> multiSummarizeWeighted(List<Weighted<R>> points, int maxAllowed, int initial,
-            int stopAt, boolean phase2GlobalReassign, double overlapParameter, BiFunction<R, R, Double> distance,
+            int stopAt, boolean phase2GlobalReassign, double overlapParameter, ToDoubleBiFunction<R, R> distance,
             long seed, boolean parallelEnabled, double shrinkage, int numberOfRepresentatives) {
         BiFunction<R, Float, ICluster<R>> clusterInitializer = (a, b) -> GenericMultiCenter.initialize(a, b, shrinkage,
                 numberOfRepresentatives);
@@ -533,7 +534,7 @@ public class Summarizer {
 
     // same as above, different input
     public static <R> List<ICluster<R>> multiSummarize(R[] points, int maxAllowed, int initial, int stopAt,
-            boolean phase2GlobalReassign, double overlapParameter, BiFunction<R, R, Double> distance, long seed,
+            boolean phase2GlobalReassign, double overlapParameter, ToDoubleBiFunction<R, R> distance, long seed,
             Boolean parallelEnabled, double shrinkage, int numberOfRepresentatives) {
 
         ArrayList<Weighted<R>> weighted = new ArrayList<>();

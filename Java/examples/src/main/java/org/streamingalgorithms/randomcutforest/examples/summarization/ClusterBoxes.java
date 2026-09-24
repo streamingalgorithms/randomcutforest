@@ -34,7 +34,7 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * <p>
  * A representative plus a radius is a sphere; what the forest knows around a
  * point is an anisotropic box, read off the first-passage distribution of the
- * random cuts ({@link RandomCutForest#getAnisotropicDensity}). So a cluster is
+ * random cuts ({@link RandomCutForest#getAnisotropicGeometry}). So a cluster is
  * U_c = union over query points q of B(q), a measurable set: volume says how
  * much space it claims, intersection with another cluster's union says whether
  * the two are separated as measures, and a census says what fraction of the
@@ -266,7 +266,7 @@ public final class ClusterBoxes {
         double driftSum = 0.0;
         int driftTerms = 0;
         for (float[] query : queries) {
-            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(query);
+            AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(query);
             if (!density.isReliable()) {
                 continue;
             }
@@ -322,7 +322,7 @@ public final class ClusterBoxes {
         double driftSum = 0.0;
         int driftTerms = 0;
         for (float[] query : queries) {
-            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(query);
+            AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(query);
             if (!density.isReliable()) {
                 continue;
             }

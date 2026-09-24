@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Tag;
@@ -160,8 +161,8 @@ public class SampleSummaryTest {
         float[] newPoint = new float[newDimensions];
         Arrays.fill(newPoint, 1.01f);
         list.get(0).absorb(clusterInitializer.apply(newPoint, 1f), Summarizer::L2distance);
-        BiFunction<float[], float[], Double> badDistance = mock();
-        when(badDistance.apply(any(), any())).thenReturn(-1.0);
+        ToDoubleBiFunction<float[], float[]> badDistance = mock();
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class,
                 () -> Summarizer.assignAndRecompute(refs, getPoint, list, badDistance, false));
     }
@@ -175,32 +176,32 @@ public class SampleSummaryTest {
         };
         ICluster<float[]> newCluster = clusterInitializer.apply(new float[1], 1f);
         float[] newPoint = new float[] { 1 };
-        BiFunction<float[], float[], Double> badDistance = mock();
-        when(badDistance.apply(any(), any())).thenReturn(-1.0);
+        ToDoubleBiFunction<float[], float[]> badDistance = mock();
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0);
         ICluster<float[]> cluster = clusterInitializer.apply(new float[1], 1.0f);
         ICluster<float[]> another = clusterInitializer.apply(new float[1], 1.0f);
         assertThrows(IllegalArgumentException.class, () -> cluster.absorb(another, badDistance));
-        when(badDistance.apply(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> cluster.distance(new float[1], badDistance));
         assertThrows(IllegalArgumentException.class, () -> cluster.absorb(another, badDistance));
 
         newCluster.absorb(clusterInitializer.apply(newPoint, 1f), Summarizer::L2distance);
-        when(badDistance.apply(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster.absorb(another, badDistance));
 
         ICluster<float[]> newCluster2 = clusterInitializer.apply(new float[1], 1f);
         newCluster2.absorb(clusterInitializer.apply(newPoint, 1f), Summarizer::L2distance);
-        when(badDistance.apply(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0)
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0)
                 .thenReturn(1.0);
         newCluster2.absorb(clusterInitializer.apply(newPoint, 1f), badDistance);
-        when(badDistance.apply(any(), any())).thenReturn(1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster2.distance(new float[1], badDistance));
         another.absorb(clusterInitializer.apply(newPoint, 1f), Summarizer::L2distance);
-        when(badDistance.apply(any(), any())).thenReturn(-1.0).thenReturn(1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster2.distance(another, badDistance));
         // error at a different location
         assertThrows(IllegalArgumentException.class, () -> newCluster2.distance(another, badDistance));
-        when(badDistance.apply(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0)
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0)
                 .thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0).thenReturn(1.0)
                 .thenReturn(1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster2.absorb(another, badDistance));
@@ -212,7 +213,7 @@ public class SampleSummaryTest {
         assertEquals(newCluster3.recompute(getPoint, true, Summarizer::L2distance), 0);
 
         ICluster<float[]> newCluster4 = MultiCenter.initialize(new float[1], 1f, 0, 1);
-        when(badDistance.apply(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
         newCluster4.getAssignedPoints().add(new Weighted<>(1, 1.0f));
         assertThrows(IllegalArgumentException.class, () -> newCluster4.recompute(getPoint, true, badDistance));
         assertThrows(IllegalArgumentException.class, () -> newCluster4.absorb(newCluster3, badDistance));
@@ -225,19 +226,19 @@ public class SampleSummaryTest {
         Function<Integer, float[]> getPoint = (i) -> {
             return new float[1];
         };
-        BiFunction<float[], float[], Double> badDistance = mock();
+        ToDoubleBiFunction<float[], float[]> badDistance = mock();
         ICluster<float[]> newCluster5 = Center.initialize(new float[newDimensions], 0f);
         assertEquals(newCluster5.extentMeasure(), newCluster5.averageRadius());
         assertEquals(newCluster5.recompute(getPoint, true, Summarizer::L2distance), 0);
         newCluster5.getAssignedPoints().add(new Weighted<>(1, 1.0f));
         assertEquals(newCluster5.recompute(getPoint, true, Summarizer::L2distance), 0);
-        when(badDistance.apply(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster5.distance(new float[1], badDistance));
 
         ICluster<float[]> newCluster6 = Center.initialize(new float[newDimensions], 10f);
         newCluster6.getAssignedPoints().add(new Weighted<>(1, 1.0f));
         newCluster6.getAssignedPoints().add(new Weighted<>(1, 1.0f));
-        when(badDistance.apply(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster6.absorb(newCluster5, badDistance));
         assertThrows(IllegalArgumentException.class, () -> newCluster6.recompute(getPoint, true, badDistance));
         ICluster<float[]> multiCenter1 = MultiCenter.initialize(new float[] { 1 }, 5.0f, 0.8, 2);
@@ -249,13 +250,13 @@ public class SampleSummaryTest {
         ICluster<float[]> newCluster7 = Center.initialize(new float[newDimensions], -10f);
         newCluster7.getAssignedPoints().add(new Weighted<>(1, 1.0f));
         newCluster7.getAssignedPoints().add(new Weighted<>(1, 1.0f));
-        when(badDistance.apply(any(), any())).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster7.recompute(getPoint, true, badDistance));
 
         ICluster<float[]> newCluster8 = Center.initialize(new float[newDimensions], 1.9f);
         newCluster8.getAssignedPoints().add(new Weighted<>(1, 1.0f));
         newCluster8.getAssignedPoints().add(new Weighted<>(1, 1.0f));
-        when(badDistance.apply(any(), any())).thenReturn(-1.0);
+        when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0);
         assertThrows(IllegalArgumentException.class, () -> newCluster8.recompute(getPoint, true, badDistance));
     }
 
@@ -290,7 +291,7 @@ public class SampleSummaryTest {
 
     @ParameterizedTest
     @MethodSource("generateArguments")
-    public void SummaryTest(BiFunction<float[], float[], Double> distance) {
+    public void SummaryTest(ToDoubleBiFunction<float[], float[]> distance) {
 
         int over = 0;
         int under = 0;
@@ -319,7 +320,7 @@ public class SampleSummaryTest {
 
     @ParameterizedTest
     @MethodSource("generateArguments")
-    public void ParallelTest(BiFunction<float[], float[], Double> distance) {
+    public void ParallelTest(ToDoubleBiFunction<float[], float[]> distance) {
 
         long seed = new Random().nextLong();
         Random random = new Random(seed);
@@ -420,7 +421,7 @@ public class SampleSummaryTest {
         }
     }
 
-    public float[][] getData(int dataSize, int newDimensions, int seed, BiFunction<float[], float[], Double> distance) {
+    public float[][] getData(int dataSize, int newDimensions, int seed, ToDoubleBiFunction<float[], float[]> distance) {
         baseMu = 0.0;
         baseSigma = 1.0;
         anomalyMu = 0.0;
@@ -437,7 +438,7 @@ public class SampleSummaryTest {
         float[] allZero = new float[newDimensions];
         float[] sigma = new float[newDimensions];
         Arrays.fill(sigma, 1f);
-        double scale = distance.apply(allZero, sigma);
+        double scale = distance.applyAsDouble(allZero, sigma);
 
         for (int i = 0; i < dataSize; i++) {
             // shrink, shift at random
@@ -460,9 +461,9 @@ public class SampleSummaryTest {
     }
 
     private static Stream<Arguments> generateArguments() {
-        return Stream.of(Arguments.of((BiFunction<float[], float[], Double>) Summarizer::L1distance),
-                Arguments.of((BiFunction<float[], float[], Double>) Summarizer::L2distance),
-                Arguments.of((BiFunction<float[], float[], Double>) Summarizer::LInfinitydistance));
+        return Stream.of(Arguments.of((ToDoubleBiFunction<float[], float[]>) Summarizer::L1distance),
+                Arguments.of((ToDoubleBiFunction<float[], float[]>) Summarizer::L2distance),
+                Arguments.of((ToDoubleBiFunction<float[], float[]>) Summarizer::LInfinitydistance));
     }
 
 }

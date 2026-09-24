@@ -63,7 +63,7 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * The same forest supplies both, but not the same part of it, and that is what
  * makes the comparison worth drawing. {@code summarize} reaches the point store
  * and runs CURE over the surviving points weighted by their reference counts;
- * It uses the sampler.{@link RandomCutForest#getAnisotropicDensity} is the
+ * It uses the sampler.{@link RandomCutForest#getAnisotropicGeometry} is the
  * opposite: it is nothing but tree geometry, a walk up the cuts.
  *
  * <p>
@@ -326,7 +326,7 @@ public class Summarization implements Example {
             List<ICluster<float[]>> summary = newForest.summarize(2 * numberOfBlades + 2, 0.05, 5, 0.5,
                     VectorSupport::L2distance, oldSummary);
             summarizeNanos += Duration.between(s0, Instant.now()).toNanos();
-            System.out.println(summary.get(0).getClass().getSimpleName());
+
             // The same forest that produced the clustering also carries the measure
             // around it: one anisotropic box per representative, so each cluster is a
             // union of boxes. In two dimensions the boxes project to themselves, so
@@ -690,7 +690,7 @@ public class Summarization implements Example {
             boolean centered) {
         List<double[][]> polys = new ArrayList<>();
         for (float[] q : points) {
-            AnisotropicLocalGeometry density = forest.getAnisotropicDensity(q);
+            AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(q);
             if (!density.isReliable()) {
                 continue;
             }

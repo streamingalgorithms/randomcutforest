@@ -36,6 +36,7 @@ import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 import java.util.stream.Collector;
 
 import org.streamingalgorithms.randomcutforest.anomalydetection.*;
@@ -950,7 +951,7 @@ public class RandomCutForest {
      * @param point The point where the density estimate is made.
      * @return A density estimate.
      */
-
+    @Deprecated
     public DensityOutput getSimpleDensity(float[] point) {
         if (!isOutputReady()) {
             return new DensityOutput(dimensions, sampleSize);
@@ -962,7 +963,16 @@ public class RandomCutForest {
                 InterpolationMeasure::addToLeft, finisher));
     }
 
-    public AnisotropicLocalGeometry getAnisotropicDensity(float[] point) {
+    /**
+     * Returns the anisotropic geomerty around the query point, which can be used to
+     * compute the anisotropic density that provides local scales for each half
+     * dimension, that can be used to infer density and first passage times of a
+     * walk
+     * 
+     * @param point query point
+     * @return a AnisotropicLocalGeometry structure for the current tree
+     */
+    public AnisotropicLocalGeometry getAnisotropicGeometry(float[] point) {
         if (!isOutputReady()) {
             return new AnisotropicLocalGeometry(dimensions, sampleSize);
         }
@@ -1375,7 +1385,7 @@ public class RandomCutForest {
      * @return a list of clusters
      */
     public List<ICluster<float[]>> summarize(int maxAllowed, double shrinkage, int numberOfRepresentatives,
-            double separationRatio, BiFunction<float[], float[], Double> distance, List<ICluster<float[]>> previous) {
+            double separationRatio, ToDoubleBiFunction<float[], float[]> distance, List<ICluster<float[]>> previous) {
         return stateCoordinator.getStore().summarize(maxAllowed, shrinkage, numberOfRepresentatives, separationRatio,
                 distance, previous);
     }

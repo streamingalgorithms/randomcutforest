@@ -240,7 +240,7 @@ public class HalfImpact implements Example {
                         forest.update(p);
                     }
 
-                    AnisotropicLocalGeometry out = forest.getAnisotropicDensity(probe);
+                    AnisotropicLocalGeometry out = forest.getAnisotropicGeometry(probe);
                     double[] box = out.isReliable() ? out.gapBox() : null;
 
                     // The impact frontier. Every tree returns the leaf its own random cuts
@@ -385,7 +385,7 @@ public class HalfImpact implements Example {
         // the half crossing and everything drawn on it should come from that one
         // scale rule. Mixing contours from the all-levels mean with boxes from
         // the crossing would put two different estimators in one picture.
-        Contour.Field density = (x, y) -> forest.getAnisotropicDensity(new float[] { (float) x, (float) y })
+        Contour.Field density = (x, y) -> forest.getAnisotropicGeometry(new float[] { (float) x, (float) y })
                 .passageDensity(0.001);
 
         double[][] rho = Contour.sample(density, lo, span, FIELD_GRID);
@@ -421,7 +421,7 @@ public class HalfImpact implements Example {
                 // whose magnitude is the asymmetry of the neighbourhood rather than a
                 // constant. Arrows are therefore SHORT where opposing faces balance,
                 // which is honest: there is no gradient there to point along.
-                double[] g = forest.getAnisotropicDensity(new float[] { (float) x, (float) y }).getDensityGradient();
+                double[] g = forest.getAnisotropicGeometry(new float[] { (float) x, (float) y }).getDensityGradient();
                 double n = Math.hypot(g[0], g[1]);
                 if (n > 0) {
                     origins.add(new double[] { x, y });
@@ -471,7 +471,7 @@ public class HalfImpact implements Example {
                     f.update(q);
                 }
             }
-            AnisotropicLocalGeometry out = f.getAnisotropicDensity(new float[] { (float) probeR, 0f });
+            AnisotropicLocalGeometry out = f.getAnisotropicGeometry(new float[] { (float) probeR, 0f });
             double inner = RING_RADIUS - w / 2;
             double toInner = probeR - inner;
             // the probe sits at +x, so the inward reach is the high_x face

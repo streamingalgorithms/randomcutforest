@@ -16,7 +16,7 @@
 package org.streamingalgorithms.randomcutforest.store;
 
 import java.util.List;
-import java.util.function.BiFunction;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 
@@ -96,6 +96,6 @@ public interface IPointStoreView<Point> {
      */
 
     List<ICluster<float[]>> summarize(int maxAllowed, double shrinkage, int numberOfRepresentatives,
-            double separationRatio, BiFunction<float[], float[], Double> distance, List<ICluster<float[]>> previous);
+            double separationRatio, ToDoubleBiFunction<float[], float[]> distance, List<ICluster<float[]>> previous);
 
 }

@@ -20,8 +20,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -83,13 +83,13 @@ public class GenericMultiCenter<R> implements ICluster<R> {
     // adds a point; only the index to keep space bounds lower
     // note that the weight may not be the entire weight of a point in case of a
     // "soft" assignment
-    public void addPoint(int index, float weight, double dist, R point, BiFunction<R, R, Double> distance) {
+    public void addPoint(int index, float weight, double dist, R point, ToDoubleBiFunction<R, R> distance) {
         // accounting for the closest representative, if there are more than one
         Weighted<R> closest = representatives.get(0);
         if (representatives.size() > 1) {
-            double newDist = distance.apply(point, representatives.get(0).index);
+            double newDist = distance.applyAsDouble(point, representatives.get(0).index);
             for (int i = 1; i < representatives.size(); i++) {
-                double t = distance.apply(point, representatives.get(i).index);
+                double t = distance.applyAsDouble(point, representatives.get(i).index);
                 if (t < newDist) {
                     newDist = t;
                     closest = representatives.get(i);
@@ -128,12 +128,12 @@ public class GenericMultiCenter<R> implements ICluster<R> {
 
     // reassignment may not be meaningful for generic types, without additional
     // information
-    public double recompute(Function<Integer, R> getPoint, boolean flag, BiFunction<R, R, Double> distanceFunction) {
+    public double recompute(Function<Integer, R> getPoint, boolean flag, ToDoubleBiFunction<R, R> distanceFunction) {
         return 0;
     }
 
     // merges a center into another
-    public void absorb(ICluster<R> other, BiFunction<R, R, Double> distance) {
+    public void absorb(ICluster<R> other, ToDoubleBiFunction<R, R> distance) {
         List<Weighted<R>> savedRepresentatives = this.representatives;
         savedRepresentatives.addAll(other.getRepresentatives());
         this.representatives = new ArrayList<>();
@@ -161,13 +161,12 @@ public class GenericMultiCenter<R> implements ICluster<R> {
             int farthestIndex = Integer.MAX_VALUE;
             for (int j = 0; j < savedRepresentatives.size(); j++) {
                 if (savedRepresentatives.get(j).weight > weight / (2 * numberOfRepresentatives)) {
-                    double newWeightedDist = distance.apply(this.representatives.get(0).index,
+                    double newWeightedDist = distance.applyAsDouble(this.representatives.get(0).index,
                             savedRepresentatives.get(j).index) * savedRepresentatives.get(j).weight;
                     checkArgument(newWeightedDist >= 0, " weights or distances cannot be negative");
                     for (int i = 1; i < this.representatives.size(); i++) {
-                        newWeightedDist = min(newWeightedDist,
-                                distance.apply(this.representatives.get(i).index, savedRepresentatives.get(j).index))
-                                * savedRepresentatives.get(j).weight;
+                        newWeightedDist = min(newWeightedDist, distance.applyAsDouble(this.representatives.get(i).index,
+                                savedRepresentatives.get(j).index)) * savedRepresentatives.get(j).weight;
                         checkArgument(newWeightedDist >= 0, " weights or distances cannot be negative");
                     }
                     if (newWeightedDist > farthestWeightedDistance) {
@@ -185,12 +184,12 @@ public class GenericMultiCenter<R> implements ICluster<R> {
 
         // absorb the remainder into existing representatives
         for (Weighted<R> representative : savedRepresentatives) {
-            double dist = distance.apply(representative.index, this.representatives.get(0).index);
+            double dist = distance.applyAsDouble(representative.index, this.representatives.get(0).index);
             checkArgument(dist >= 0, "distance cannot be negative");
             double minDist = dist;
             int minIndex = 0;
             for (int i = 1; i < this.representatives.size(); i++) {
-                double newDist = distance.apply(this.representatives.get(i).index, representative.index);
+                double newDist = distance.applyAsDouble(this.representatives.get(i).index, representative.index);
                 checkArgument(newDist >= 0, "distance cannot be negative");
                 if (newDist < minDist) {
                     minDist = newDist;
@@ -203,27 +202,27 @@ public class GenericMultiCenter<R> implements ICluster<R> {
     }
 
     @Override
-    public double distance(R point, BiFunction<R, R, Double> distanceFunction) {
-        double dist = distanceFunction.apply(this.representatives.get(0).index, point);
+    public double distance(R point, ToDoubleBiFunction<R, R> distanceFunction) {
+        double dist = distanceFunction.applyAsDouble(this.representatives.get(0).index, point);
         checkArgument(dist >= 0, "distance cannot be negative");
         double newDist = dist;
         for (int i = 1; i < this.representatives.size(); i++) {
-            newDist = min(newDist, distanceFunction.apply(this.representatives.get(i).index, point));
+            newDist = min(newDist, distanceFunction.applyAsDouble(this.representatives.get(i).index, point));
             checkArgument(newDist >= 0, "distance cannot be negative");
         }
         return (1 - shrinkage) * newDist + shrinkage * dist;
     }
 
     @Override
-    public double distance(ICluster<R> other, BiFunction<R, R, Double> distanceFunction) {
+    public double distance(ICluster<R> other, ToDoubleBiFunction<R, R> distanceFunction) {
         List<Weighted<R>> representatives = other.getRepresentatives();
-        double dist = distanceFunction.apply(this.representatives.get(0).index, representatives.get(0).index);
+        double dist = distanceFunction.applyAsDouble(this.representatives.get(0).index, representatives.get(0).index);
         checkArgument(dist >= 0, "distance cannot be negative");
         double newDist = dist;
         for (int i = 1; i < this.representatives.size(); i++) {
             for (int j = 1; j < representatives.size(); j++) {
-                newDist = min(newDist,
-                        distanceFunction.apply(this.representatives.get(i).index, representatives.get(j).index));
+                newDist = min(newDist, distanceFunction.applyAsDouble(this.representatives.get(i).index,
+                        representatives.get(j).index));
                 checkArgument(newDist >= 0, "distance cannot be negative");
             }
         }

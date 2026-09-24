@@ -21,8 +21,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -55,7 +55,7 @@ public class Center implements ICluster<float[]> {
     // note that the weight may not be the entire weight of a point in case of a
     // "soft" assignment
     public void addPoint(int index, float weight, double dist, float[] point,
-            BiFunction<float[], float[], Double> distance) {
+            ToDoubleBiFunction<float[], float[]> distance) {
         assignedPoints.add(new Weighted<>(index, weight));
         this.weight += weight;
         this.sumOfRadius += weight * dist;
@@ -87,7 +87,7 @@ public class Center implements ICluster<float[]> {
     // unlikely to
     // provide robust convergence
     public double recompute(Function<Integer, float[]> getPoint, boolean approx,
-            BiFunction<float[], float[], Double> distance) {
+            ToDoubleBiFunction<float[], float[]> distance) {
         if (assignedPoints.size() == 0 || weight == 0.0) {
             Arrays.fill(representative, 0); // zero out values
             return 0;
@@ -116,7 +116,7 @@ public class Center implements ICluster<float[]> {
             representative[index] = getPoint.apply(assignedPoints.get(position).index)[index];
         }
         for (int j = 0; j < assignedPoints.size(); j++) {
-            double addTerm = distance.apply(representative, getPoint.apply(assignedPoints.get(j).index))
+            double addTerm = distance.applyAsDouble(representative, getPoint.apply(assignedPoints.get(j).index))
                     * assignedPoints.get(j).weight;
             checkArgument(addTerm >= 0, "distances or weights cannot be negative");
             sumOfRadius += addTerm;
@@ -134,12 +134,12 @@ public class Center implements ICluster<float[]> {
     // this can be followed by a reassignment step; however the merger uses a
     // sigmoid based weightage
     // for robustness
-    public void absorb(ICluster<float[]> other, BiFunction<float[], float[], Double> distance) {
+    public void absorb(ICluster<float[]> other, ToDoubleBiFunction<float[], float[]> distance) {
         List<Weighted<float[]>> representatives = other.getRepresentatives();
         float[] closest = representatives.get(0).index;
         double dist = Double.MAX_VALUE;
         for (Weighted<float[]> e : representatives) {
-            double t = distance.apply(e.index, representative);
+            double t = distance.applyAsDouble(e.index, representative);
             checkArgument(t >= 0, "distances cannot be negative");
             if (t < dist) {
                 dist = t;
@@ -161,19 +161,19 @@ public class Center implements ICluster<float[]> {
         other.reset();
     }
 
-    public double distance(float[] point, BiFunction<float[], float[], Double> distance) {
-        double t = distance.apply(point, representative);
+    public double distance(float[] point, ToDoubleBiFunction<float[], float[]> distance) {
+        double t = distance.applyAsDouble(point, representative);
         checkArgument(t >= 0, "distance cannot be negative");
         return t;
     }
 
     @Override
-    public double distance(ICluster<float[]> other, BiFunction<float[], float[], Double> distance) {
+    public double distance(ICluster<float[]> other, ToDoubleBiFunction<float[], float[]> distance) {
         return other.distance(representative, distance);
     }
 
     @Override
-    public float[] primaryRepresentative(BiFunction<float[], float[], Double> distance) {
+    public float[] primaryRepresentative(ToDoubleBiFunction<float[], float[]> distance) {
         return Arrays.copyOf(representative, representative.length);
     }
 

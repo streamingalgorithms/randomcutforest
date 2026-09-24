@@ -439,7 +439,7 @@ public class StarryNights implements Example {
         boolean probe(RandomCutForest forest, double[] c) {
             probes++;
             AnisotropicLocalGeometry out = forest
-                    .getAnisotropicDensity(new float[] { (float) c[0], (float) c[1], (float) c[2] });
+                    .getAnisotropicGeometry(new float[] { (float) c[0], (float) c[1], (float) c[2] });
             massSum += out.getSampleSize();
             if (!out.isReliable()) {
                 flat++;

@@ -19,8 +19,8 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.ToDoubleBiFunction;
 
 import org.streamingalgorithms.randomcutforest.util.Weighted;
 
@@ -42,7 +42,7 @@ public class MultiCenter extends GenericMultiCenter<float[]> {
     }
 
     public void addPoint(int index, float weight, double dist, float[] point,
-            BiFunction<float[], float[], Double> distance) {
+            ToDoubleBiFunction<float[], float[]> distance) {
         super.addPoint(index, weight, dist, point, distance);
         assignedPoints.add(new Weighted<>(index, weight));
     }
@@ -58,7 +58,7 @@ public class MultiCenter extends GenericMultiCenter<float[]> {
     // unlikely to
     // provide robust convergence
     public double recompute(Function<Integer, float[]> getPoint, boolean force,
-            BiFunction<float[], float[], Double> distanceFunction) {
+            ToDoubleBiFunction<float[], float[]> distanceFunction) {
         if (assignedPoints.size() == 0 || weight == 0.0 || !force) {
             return 0;
         }
