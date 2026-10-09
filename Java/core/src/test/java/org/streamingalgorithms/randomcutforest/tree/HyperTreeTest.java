@@ -371,11 +371,11 @@ public class HyperTreeTest {
         assert (testScore.sumCenterScore > 1.5 * testScore.sumLeftScore);
         assert (testScore.sumCenterScore > 1.5 * testScore.sumRightScore);
 
-        assert (testScore.sumCenterDisp > 5 * testScore.sumLeftDisp);
-        assert (testScore.sumCenterDisp > 5 * testScore.sumRightDisp);
+        assert (testScore.sumCenterDisp > 10 * testScore.sumLeftDisp);
+        assert (testScore.sumCenterDisp > 10 * testScore.sumRightDisp);
 
-        assert (1.4 * testScore.sumCenterHeight < testScore.sumLeftHeight);
-        assert (1.4 * testScore.sumCenterHeight < testScore.sumRightHeight);
+        assert (1.5 * testScore.sumCenterHeight < testScore.sumLeftHeight);
+        assert (1.5 * testScore.sumCenterHeight < testScore.sumRightHeight);
     }
 
     public void simulateGTFLAlpha(TestScores testScore, boolean flag, double gaugeOrAlpha) {

@@ -233,9 +233,10 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         double breakPoint = factor * range;
 
         for (int i = 0; i < dimension; i++) {
-            double gap = (union)
+            double raw = box.values[i + box.offset] + box.values[i + box.offset + dimension];
+            double gap = union
                     ? max(point[i], box.values[i + box.offset]) + max(-point[i], box.values[i + box.offset + dimension])
-                    : box.values[i + box.offset] + box.values[i + box.offset + dimension];
+                    : (oracle != null) ? oracle[i] : raw;
             // the invariant we must maintain is that if the float values
             // are not the same then the gap must be non-zeor
             // double gap = maxValue - minValue;
@@ -246,7 +247,8 @@ public class RandomCutTree implements ITree<Integer, float[]> {
                     minValue = min(minValue, point[i]);
                     maxValue = max(maxValue, point[i]);
                 }
-                float cutValue = (float) (minValue + breakPoint);
+                double offset = (oracle == null) ? breakPoint : breakPoint / gap * raw;
+                float cutValue = (float) (minValue + offset);
 
                 // Random cuts have to take a value in the half-open interval [minValue,
                 // maxValue) to ensure that a

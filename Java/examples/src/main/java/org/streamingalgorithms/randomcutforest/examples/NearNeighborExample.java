@@ -28,6 +28,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Yinyang;
@@ -45,25 +47,24 @@ import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
  * is contained in CUT is contained in PASSAGE is contained in STOP. The gap box
  * is therefore invisible whenever the query sits inside the data, which is the
  * correct reading rather than a missing layer.
+ *
+ * <p>
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
+ * hides the data, <b>t</b> the isolines drawn through the cut, and <b>c</b>
+ * cycles the boxes: all four nested, then GAP, CUT, PASSAGE and STOP alone,
+ * then none. The readout along the bottom stays on the cut box whatever is
+ * drawn.
  */
 public class NearNeighborExample implements Example {
 
     /**
-     * Density isolines. Unlike HalfImpact the data rotates every frame, so the
-     * field cannot be precomputed and every contour costs a grid of density
-     * queries. At The anisotropic walk costs roughly ten times a plain density
-     * query, since it buffers the path and takes four crossings, so the grid
-     * dropped to 36 and the refresh to every third frame when the field moved onto
-     * it. At roughly 0.2 ms each a 48 by 48 grid is about half a second a frame, so
-     * the grid is coarse and FIELD_EVERY lets the field be refreshed less often
-     * than the probe moves. The data turns 2 degrees a frame, so reusing a field
-     * for three frames lags it by six degrees.
+     * Isolines drawn through the cut, from every LINE_STRIDE-th point of a frame,
+     * asked before it is inserted; see {@link CutIsolines}. That is one walk per
+     * reference point, about what the old grid of density probes cost every third
+     * frame, so the lines now follow every frame.
      */
-    private static final int FIELD_GRID = 36;
-    private static final int FIELD_EVERY = 3;
-    private static final int CONTOURS = 5;
-    private static final double CONTOUR_LO = 0.45;
-    private static final double CONTOUR_HI = 0.97;
+    private static final int LINE_STRIDE = 2;
+    private static final int FIELD_GRID = 120;
     private static final Color ISO = new Color(214, 148, 34);
     /**
      * The half crossing, the minimal object; same kind of thing as the nn-square.
@@ -78,37 +79,14 @@ public class NearNeighborExample implements Example {
      */
     private static final Color GAP_BOX = new Color(214, 39, 40);
 
-    /**
-     * Adaptive march for the isolines, off by default.
-     *
-     * <p>
-     * It refines a cell when the cell is wide relative to the estimator's own
-     * half-extent, which resolves the field faithfully but is the wrong criterion
-     * for a contour: the box is small in the dense interior, where the field is
-     * flat, and large out toward the sparse boundary, which is where the level sets
-     * actually are. So the budget goes to the interior and the contours end up
-     * drawn on unrefined seed cells -- coarser than the uniform grid that chose the
-     * levels, and visibly more angular. Its T-junctions add breaks at depth
-     * boundaries, and one-axis bisection leaves long thin cells whose long edge
-     * carries the interpolation error.
-     *
-     * <p>
-     * The filamenting that motivated it was the volume annihilation on a vanishing
-     * axis, which is fixed, so the uniform grid is the better default now. Flip to
-     * see the difference; cost is about five probes per seed cell plus two per
-     * split, on top of the grid.
-     */
-    private static final boolean ADAPTIVE_ISOLINES = false;
-    private static final int ANISO_SEED = 16;
-    private static final int ANISO_DEPTH = 2;
-    private static final double ANISO_COVER = 2.0;
+    /** What the c key steps through, then none; index 0 draws all four nested. */
+    private static final String[] BOXES = { "ALL", "GAP", "CUT", "PASSAGE", "STOP" };
 
     /**
      * Shading. Cool and neutral so it does not compete with the warm isolines drawn
-     * over it, and floored: the levels come from a quantile band starting at
-     * CONTOUR_LO, so band 1 covers 1 - CONTOUR_LO of the canvas by construction --
-     * more than half of it empty space. Painting from band BAND_FLOOR up puts the
-     * ink where the density actually is.
+     * over it, and floored: painting from band BAND_FLOOR up starts inside the line
+     * that holds three quarters of the mass, which is where the density actually
+     * is.
      */
     private static final Color BAND = new Color(70, 90, 120);
     private static final int BAND_FLOOR = 2;
@@ -129,14 +107,6 @@ public class NearNeighborExample implements Example {
      */
     private static final double NN_MIN_R = 1.5;
     private static final double NN_SCALE_R = 5.0;
-    /**
-     * Levels for the isolines. Null derives them from this grid's own quantile band
-     * and prints them on the first field refresh; paste those values back in here
-     * to compare two grids. A quantile is taken over whatever node set was sampled,
-     * so derived levels are not comparable across resolutions.
-     */
-    private static final double[] FIXED_LEVELS = null;
-
     /** Topo state for the recording, kept apart from the live toggle. */
     private static final boolean GIF_TOPO = true;
 
@@ -187,15 +157,20 @@ public class NearNeighborExample implements Example {
                 : Plot2D.offscreen(range);
         GifWriter gif = saveGif ? new GifWriter(new File("dynamic_near_neighbor.gif"), gifDelayMs, true) : null;
 
-        // Gated from inside the layer, so a repaint alone honours the toggle while
-        // paused. The recording gets its own list rather than a flag flipped around
-        // renderImage: plot.render calls repaint, which is asynchronous, so the EDT
-        // could paint inside such a window and the field would flicker back on.
-        java.util.concurrent.atomic.AtomicBoolean topo = new java.util.concurrent.atomic.AtomicBoolean(true);
-        List<Layer> rawField = new ArrayList<>();
-        List<Layer> field = new ArrayList<>();
-        plot.bindKey(KeyEvent.VK_T, "nn.topo", () -> topo.set(!topo.get()));
-        System.out.println("keys: space pauses, right arrow steps, t toggles the isolines");
+        AtomicBoolean topo = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_T, "nn.isolines", () -> topo.set(!topo.get()));
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "nn.data", () -> showData.set(!showData.get()));
+        // BOXES in order, then none (-1); the boxes and the legend read it when drawing
+        AtomicInteger boxes = new AtomicInteger(0);
+        plot.bindKey(KeyEvent.VK_C, "nn.boxes",
+                () -> boxes.set(boxes.get() == BOXES.length - 1 ? -1 : boxes.get() + 1));
+        System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
+                + "c cycles the boxes (ALL/GAP/CUT/PASSAGE/STOP/none)");
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.TOP_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(topo::get))
+                .add("c", "boxes", () -> boxes.get() < 0 ? "off" : BOXES[boxes.get()]);
 
         Instant start = Instant.now();
         long fieldNanos = 0;
@@ -206,11 +181,18 @@ public class NearNeighborExample implements Example {
 
         for (int degree = 0; degree < 360; degree += 2) {
             float[][] bg = new float[data.length][2];
+            CutIsolines lines = new CutIsolines(-range * 0.95, 2 * range * 0.95, FIELD_GRID, ISO).bands(BAND,
+                    BAND_FLOOR);
             int n = 0;
             for (var datum : data) {
                 float[] transformed = rotateClockWise(datum, -2 * PI * degree / 360);
                 bg[n][0] = transformed[0];
                 bg[n][1] = transformed[1];
+                if (n % LINE_STRIDE == 0) {
+                    Instant f0 = Instant.now();
+                    lines.add(transformed, newForest.getAnisotropicGeometry(transformed).cutSpread());
+                    fieldNanos += Duration.between(f0, Instant.now()).toNanos();
+                }
                 n++;
                 if (printFile) {
                     file.append(transformed[0] + " " + transformed[1] + "\n");
@@ -222,55 +204,12 @@ public class NearNeighborExample implements Example {
                 file.append("\n");
             }
 
-            if (frame % FIELD_EVERY == 0) {
-                Instant f0 = Instant.now();
-                double fieldLo = -range * 0.95;
-                double fieldSpan = 2 * range * 0.95;
-                Contour.Field density = (x, y) -> newForest.getAnisotropicGeometry(new float[] { (float) x, (float) y })
-                        .passageDensity(0.001);
-                // .meanLogVolume();
-
-                // Sampled once and reused for the isolines, so this is the same
-                // FIELD_GRID^2 queries as before; only the level choice moved out.
-                double[][] v = Contour.sample(density, fieldLo, fieldSpan, FIELD_GRID);
-                double[] levels = (FIXED_LEVELS != null) ? FIXED_LEVELS
-                        : Contour.quantileLevels(v, CONTOURS, CONTOUR_LO, CONTOUR_HI);
-                if (frame == 0 && FIXED_LEVELS == null) {
-                    System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
-                }
-                // Bands from the uniform grid that already chose the levels -- no
-                // extra queries -- and the lines from the adaptive march, which
-                // refines where the estimator says its own box is small. Swap the
-                // AnisoContour call for
-                // Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO)
-                // to put the lines back on the free grid and keep the shading.
-                rawField = new ArrayList<>();
-                rawField.add(bandLayer(v, fieldLo, fieldSpan, levels, BAND));
-                if (ADAPTIVE_ISOLINES) {
-                    AnisoContour.Probe probe = (x, y, extent) -> {
-                        AnisotropicLocalGeometry o = newForest
-                                .getAnisotropicGeometry(new float[] { (float) x, (float) y });
-                        double[] b = o.cutBox();
-                        extent[0] = 0.5 * (b[0] + b[2]);
-                        extent[1] = 0.5 * (b[1] + b[3]);
-                        return o.passageDensity(0.001);
-                    };
-                    rawField.addAll(AnisoContour.isolines(probe, fieldLo, fieldSpan, ANISO_SEED, ANISO_DEPTH,
-                            ANISO_COVER, levels, ISO));
-                } else {
-                    rawField.addAll(Contour.isolines(density, v, fieldLo, fieldSpan, levels, ISO));
-                }
-
-                field = new ArrayList<>();
-                for (Layer inner : rawField) {
-                    field.add((g, vp) -> {
-                        if (topo.get()) {
-                            inner.draw(g, vp);
-                        }
-                    });
-                }
-                fieldNanos += Duration.between(f0, Instant.now()).toNanos();
-            }
+            // Gated from inside the layer, so a repaint alone honours the toggle while
+            // paused. The recording gets its own list rather than a flag flipped around
+            // renderImage: plot.render calls repaint, which is asynchronous, so the EDT
+            // could paint inside such a window and the field would flicker back on.
+            List<Layer> rawField = List.of(lines);
+            List<Layer> field = List.of(Layers.when(topo::get, lines));
 
             float[] movingQuery = rotateClockWise(queryPoint, -3 * PI * degree / 360);
 
@@ -377,7 +316,7 @@ public class NearNeighborExample implements Example {
             }
 
             List<Layer> body = new ArrayList<>();
-            body.add(Layers.dots(bg, new Color(120, 120, 120), 2.2));
+            body.add(Layers.when(showData::get, Layers.dots(bg, new Color(120, 120, 120), 2.2)));
             // A circle, not a square: the classical k-NN region is a ball, and drawing
             // it as a square would quietly change its volume by 4/pi and flatter the
             // comparison.
@@ -387,13 +326,18 @@ public class NearNeighborExample implements Example {
                 // and the nesting already reads from the stacked alpha. Drawn
                 // outermost first so every box stays visible: STOP, PASSAGE, CUT,
                 // then the gap on top.
-                body.add(boxFill(movingQuery[0], movingQuery[1], stopBox, STOP_BOX, 35, false));
-                body.add(boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, false));
-                body.add(boxFill(movingQuery[0], movingQuery[1], box, CUT_BOX, 50, false));
+                // Each one gated by the c key, read when drawing.
+                body.add(Layers.when(() -> shows(boxes.get(), 4),
+                        boxFill(movingQuery[0], movingQuery[1], stopBox, STOP_BOX, 35, false)));
+                body.add(Layers.when(() -> shows(boxes.get(), 3),
+                        boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, false)));
+                body.add(Layers.when(() -> shows(boxes.get(), 2),
+                        boxFill(movingQuery[0], movingQuery[1], box, CUT_BOX, 50, false)));
                 // One-sided by construction -- only the faces pointing at the data
                 // carry a gap -- and identically zero when the query is interior.
                 // A zero-area rectangle there is the statistic working.
-                body.add(boxFill(movingQuery[0], movingQuery[1], gapBox, GAP_BOX, 90, false));
+                body.add(Layers.when(() -> shows(boxes.get(), 1),
+                        boxFill(movingQuery[0], movingQuery[1], gapBox, GAP_BOX, 90, false)));
             }
             // The cloud of leaves the traversals actually reached, above the box fills
             // and below the arrow and the winner. Area encodes the vote, so the shape of
@@ -435,18 +379,11 @@ public class NearNeighborExample implements Example {
                             inBox, areaBox, densBox, kNN, Math.PI * kRadius * kRadius, kDensity, anisotropy);
             body.add(Layers.label(-range * 0.92, -range * 0.90, readout,
                     (box == null || nnInBox) ? new Color(60, 60, 60) : new Color(176, 32, 160)));
-            body.add(Layers.legend(
-                    new String[] { "data", "near neighbors, area = tree votes", "closest (forest)",
-                            "gap box (void, empty when inside)", "cut box", "passage box", "stop box (shading only)",
-                            "exact k-NN ball, k = sqrt(n)", "density isolines" },
-                    new Color[] { new Color(120, 120, 120), NN_CLOUD, Layers.color(0), GAP_BOX, CUT_BOX, PASSAGE_BOX,
-                            STOP_BOX, KNN_BALL, ISO },
-                    new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.DOTS, Layers.Swatch.BOX,
-                            Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX,
-                            Layers.Swatch.LINE }));
+            body.add((g, vp) -> legend(boxes.get()).draw(g, vp));
 
             List<Layer> scene = new ArrayList<>(field);
             scene.addAll(body);
+            scene.add(keys);
 
             if (livePlot) {
                 plot.render(scene);
@@ -524,44 +461,37 @@ public class NearNeighborExample implements Example {
         path.closePath();
     }
 
+    /** Whether the c key's choice draws the box at this index of BOXES. */
+    private static boolean shows(int selected, int box) {
+        return selected == 0 || selected == box;
+    }
+
     /**
-     * Fills each grid cell with the band its corner mean falls in. Reuses the grid
-     * already sampled to choose the levels, so it costs no density queries -- which
-     * is why the lines are drawn separately and adaptively rather than from these
-     * same cells.
+     * The key; the box rows follow the c key, so no row names a box that is not
+     * drawn.
      */
-    private static Layer bandLayer(double[][] v, double lo, double span, double[] levels, Color color) {
-        double[] sorted = java.util.Arrays.copyOf(levels, levels.length);
-        java.util.Arrays.sort(sorted);
-        int grid = v.length;
-        double h = span / (grid - 1.0);
-        return (g, vp) -> {
-            for (int i = 0; i + 1 < grid; i++) {
-                for (int j = 0; j + 1 < grid; j++) {
-                    double m = 0.25 * (v[i][j] + v[i + 1][j] + v[i][j + 1] + v[i + 1][j + 1]);
-                    int band = 0;
-                    // A NaN node falls through as band 0 and is skipped, which is
-                    // what an off-support cell should do.
-                    while (band < sorted.length && m > sorted[band]) {
-                        band++;
-                    }
-                    if (band < BAND_FLOOR) {
-                        continue;
-                    }
-                    int x0 = (int) Math.round(vp.px(lo + h * i));
-                    int x1 = (int) Math.round(vp.px(lo + h * (i + 1)));
-                    int y0 = (int) Math.round(vp.py(lo + h * (j + 1)));
-                    int y1 = (int) Math.round(vp.py(lo + h * j));
-                    // Ramp over the painted bands only, so flooring does not also
-                    // throw away the contrast between the ones that survive.
-                    int span2 = Math.max(1, sorted.length - BAND_FLOOR);
-                    g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(),
-                            9 + 25 * (band - BAND_FLOOR) / span2));
-                    // +1 closes the hairline seam that rounding leaves between cells.
-                    g.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-                }
+    private static Layer legend(int selected) {
+        List<String> labels = new ArrayList<>(List.of("data", "near neighbors, area = tree votes", "closest (forest)"));
+        List<Color> colors = new ArrayList<>(List.of(new Color(120, 120, 120), NN_CLOUD, Layers.color(0)));
+        String[] names = { null, "gap box (void, empty when inside)", "cut box", "passage box",
+                "stop box (shading only)" };
+        Color[] boxColors = { null, GAP_BOX, CUT_BOX, PASSAGE_BOX, STOP_BOX };
+        for (int b = 1; b < names.length; b++) {
+            if (shows(selected, b)) {
+                labels.add(names[b]);
+                colors.add(boxColors[b]);
             }
-        };
+        }
+        labels.add("exact k-NN ball, k = sqrt(n)");
+        colors.add(KNN_BALL);
+        labels.add("isolines through the cut");
+        colors.add(ISO);
+        Layers.Swatch[] swatches = new Layers.Swatch[labels.size()];
+        for (int i = 0; i < swatches.length; i++) {
+            swatches[i] = (i < 3) ? Layers.Swatch.DOTS
+                    : (i == swatches.length - 1) ? Layers.Swatch.LINE : Layers.Swatch.BOX;
+        }
+        return Layers.legend(labels.toArray(new String[0]), colors.toArray(new Color[0]), swatches);
     }
 
     /**

@@ -24,7 +24,9 @@ import java.util.Arrays;
 /**
  * Three recorded boxes, summed across trees. The visitor chooses the crossings;
  * this class only stores and merges outputs. All extents use double[2*d], high
- * followed by low, and all three boxes divide by the same tree count.
+ * followed by low, and all three boxes divide by the same tree count. For the
+ * cut box it also keeps the second moments of each tree's box centre, so the
+ * spread of that centre across trees survives the merge.
  */
 public class FirstPassageScales {
     private final int dimensions;
@@ -34,6 +36,9 @@ public class FirstPassageScales {
     private final double[] stopSum;
     private int treeCount;
     private final double[] gapSum; // Σ m over trees with positive width, per half-axis
+    // Σ over trees of c_i c_j for i <= j, packed by rows, where c is the offset
+    // from the query to the centre of that tree's cut box
+    private final double[] cutCenterProducts;
 
     public FirstPassageScales(int dimensions) {
         checkArgument(dimensions > 0, "dimensions must be greater than 0");
@@ -43,6 +48,7 @@ public class FirstPassageScales {
         passageSum = new double[len];
         stopSum = new double[len];
         gapSum = new double[len];
+        cutCenterProducts = new double[dimensions * (dimensions + 1) / 2];
     }
 
     public FirstPassageScales(FirstPassageScales base) {
@@ -51,6 +57,7 @@ public class FirstPassageScales {
         System.arraycopy(base.passageSum, 0, passageSum, 0, len);
         System.arraycopy(base.stopSum, 0, stopSum, 0, len);
         System.arraycopy(base.gapSum, 0, gapSum, 0, len);
+        System.arraycopy(base.cutCenterProducts, 0, cutCenterProducts, 0, cutCenterProducts.length);
         treeCount = base.treeCount;
     }
 
@@ -67,6 +74,7 @@ public class FirstPassageScales {
         Arrays.fill(passageSum, 0.0);
         Arrays.fill(stopSum, 0.0);
         Arrays.fill(gapSum, 0.0);
+        Arrays.fill(cutCenterProducts, 0.0);
         treeCount = 0;
     }
 
@@ -74,15 +82,46 @@ public class FirstPassageScales {
         for (int j = 0; j < len; j++) {
             passageSum[j] += passage[j];
             stopSum[j] += stop[j];
-            double weight = 1.0 / Math.pow(Math.max(1.0, mass), 1.0 / dimensions);
-            // Mass-weighted harmonic on the cut box. Both accumulators are sums, so
-            // addToLeft stays a plain add and the division stays at retrieval.
-            // A zero width is skipped rather than contributing 1/0: it would send
-            // the sum to infinity and zero that axis for the whole forest.
             cutSum[j] += cut[j];
             gapSum[j] += gap[j];
         }
+        // The cut box reaches cut[i] toward minus i and cut[i + d] toward plus i, so
+        // its centre sits at half their difference from the query.
+        int k = 0;
+        for (int i = 0; i < dimensions; i++) {
+            double ci = 0.5 * (cut[i + dimensions] - cut[i]);
+            for (int j = i; j < dimensions; j++) {
+                cutCenterProducts[k++] += ci * 0.5 * (cut[j + dimensions] - cut[j]);
+            }
+        }
         treeCount++;
+    }
+
+    /**
+     * Covariance across trees of the cut box's centre, as a d by d matrix: how far
+     * the trees disagree about where the cut box sits. The mean of that centre is
+     * the centre of {@link #cutBox()}. Zero for a single tree.
+     */
+    public double[][] cutSpread() {
+        double[][] out = new double[dimensions][dimensions];
+        if (treeCount == 0) {
+            return out;
+        }
+        double[] mean = new double[dimensions];
+        for (int i = 0; i < dimensions; i++) {
+            mean[i] = 0.5 * (cutSum[i + dimensions] - cutSum[i]) / treeCount;
+        }
+        int k = 0;
+        for (int i = 0; i < dimensions; i++) {
+            for (int j = i; j < dimensions; j++) {
+                double value = cutCenterProducts[k++] / treeCount - mean[i] * mean[j];
+                out[i][j] = value;
+                out[j][i] = value;
+            }
+            // the difference of two moments can round just below zero
+            out[i][i] = Math.max(0.0, out[i][i]);
+        }
+        return out;
     }
 
     public double[] gapBox() {
@@ -145,6 +184,9 @@ public class FirstPassageScales {
             left.passageSum[j] += right.passageSum[j];
             left.stopSum[j] += right.stopSum[j];
             left.gapSum[j] += right.gapSum[j];
+        }
+        for (int k = 0; k < left.cutCenterProducts.length; k++) {
+            left.cutCenterProducts[k] += right.cutCenterProducts[k];
         }
         left.treeCount += right.treeCount;
         return left;

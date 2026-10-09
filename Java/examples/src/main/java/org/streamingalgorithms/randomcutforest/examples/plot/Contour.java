@@ -131,6 +131,45 @@ public final class Contour {
     }
 
     /**
+     * The levels at which the region above each holds the given share of the
+     * field's total over the sampled grid -- for a density, the lines that hold 95%
+     * or 50% of the mass. Unlike a quantile of the nodes this does not depend on
+     * how much of the grid is empty, so it does not move when the data takes up
+     * more or less of the picture. Read off the nodes: sorted from the top, a level
+     * is the node at which the running sum first reaches its share.
+     *
+     * @param v      sampled grid, as returned by {@link #sample}; non-negative
+     * @param shares the share inside each line, each in (0, 1]
+     * @return one level per share, in the order given
+     */
+    public static double[] massLevels(double[][] v, double... shares) {
+        int n = 0;
+        for (double[] row : v) {
+            n += row.length;
+        }
+        double[] values = new double[n];
+        double total = 0;
+        int k = 0;
+        for (double[] row : v) {
+            for (double x : row) {
+                values[k++] = x;
+                total += x;
+            }
+        }
+        Arrays.sort(values);
+        double[] levels = new double[shares.length];
+        for (int s = 0; s < shares.length; s++) {
+            double running = 0;
+            int i = n - 1;
+            while (i > 0 && running + values[i] < shares[s] * total) {
+                running += values[i--];
+            }
+            levels[s] = values[i];
+        }
+        return levels;
+    }
+
+    /**
      * Isolines at explicit levels on an already sampled grid. The field is still
      * needed: ambiguous cells are resolved by measuring the centre rather than
      * averaging the corners. Levels are drawn darkest-highest regardless of the

@@ -16,19 +16,24 @@
 package org.streamingalgorithms.randomcutforest.examples;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.plot.Arrow3DLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Axes3DLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Box3DLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.BoxLayer;
+import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -47,13 +52,13 @@ import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
  * for: shingle lags, sensor channels, anything where the axes mean something.
  *
  * <p>
- * <b>What should happen.</b> Both structures are curves — Archimedean spiral
- * arms, and a (7,2) torus knot — so the support is one-dimensional inside an
- * ambient three. The local exponent should therefore come back near 1, not near
- * 3, and the extent boxes should be long along the local tangent and thin
- * across it. That is a far less forgiving target than the flow example offered:
- * an exponent near 3 would mean the estimator is reporting the ambient
- * dimension and has learned nothing about the support.
+ * <b>What should happen.</b> Away from the galaxy's bulge both structures are
+ * curves — logarithmic spiral arms, and a (7,2) torus knot — so the support is
+ * one-dimensional inside an ambient three. The local exponent should therefore
+ * come back near 1, not near 3, and the extent boxes should be long along the
+ * local tangent and thin across it. That is a far less forgiving target than
+ * the flow example offered: an exponent near 3 would mean the estimator is
+ * reporting the ambient dimension and has learned nothing about the support.
  *
  * <p>
  * The knot also stress-tests the anisotropy in a way the spirals do not. Its
@@ -63,6 +68,12 @@ import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
  * should read closer to isotropic. That failure is expected and is the point:
  * it is the same 45-degree blindness the rotating example measures, made
  * visible as a spatial pattern rather than a time series.
+ *
+ * <p>
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
+ * hides the data, <b>t</b> the isolines drawn through the cut -- each point's
+ * three-dimensional spread seen through the camera -- and <b>c</b> cycles the
+ * boxes drawn at the probes (GAP, CUT, PASSAGE, STOP, then off).
  */
 public class StarryNights implements Example {
 
@@ -170,6 +181,18 @@ public class StarryNights implements Example {
     private static final Color GALAXY = new Color(26, 148, 138);
     private static final Color COMET = new Color(36, 84, 214);
 
+    /**
+     * Every LINE_STRIDE-th arrival joins the isolines' reference before it is
+     * inserted, and the lines are drawn in the camera's plane; see
+     * {@link CutIsolines}. Warm, like everything else the forest concludes.
+     */
+    private static final int LINE_STRIDE = 8;
+    private static final int LINE_GRID = 120;
+    private static final Color LINES = new Color(150, 60, 170);
+
+    /** The boxes the c key steps through, in the order the probes store them. */
+    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "STOP" };
+
     public static void main(String[] args) throws Exception {
         new StarryNights().run();
     }
@@ -218,6 +241,20 @@ public class StarryNights implements Example {
         Camera camera = new Camera(EYE, TARGET, FOV_DEGREES);
         Plot2D plot = livePlot ? Plot2D.open("Starry Nights — 3D extent boxes", VIEW_RANGE, 860)
                 : Plot2D.offscreen(VIEW_RANGE);
+        // Gated when drawing, so every key works on a paused frame.
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "starry.data", () -> showData.set(!showData.get()));
+        AtomicBoolean showLines = new AtomicBoolean(false);
+        plot.bindKey(KeyEvent.VK_T, "starry.isolines", () -> showLines.set(!showLines.get()));
+        AtomicInteger boxKind = new AtomicInteger(2); // PASSAGE; -1 is off
+        plot.bindKey(KeyEvent.VK_C, "starry.boxes",
+                () -> boxKind.set(boxKind.get() == KINDS.length - 1 ? -1 : boxKind.get() + 1));
+        System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
+                + "c cycles the boxes (GAP/CUT/PASSAGE/STOP/off)");
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))
+                .add("c", "probe boxes", () -> boxKind.get() < 0 ? "off" : KINDS[boxKind.get()]);
         GifWriter gif = saveGif ? new GifWriter(new File("starry_nights.gif"), 50, true) : null;
 
         Instant start = Instant.now();
@@ -234,6 +271,7 @@ public class StarryNights implements Example {
 
             List<float[]> discPoints = new ArrayList<>();
             List<float[]> ballPoints = new ArrayList<>();
+            CutIsolines lines = new CutIsolines(-VIEW_RANGE * 0.95, 2 * VIEW_RANGE * 0.95, LINE_GRID, LINES);
             // Phase advances per POINT across the interval, not per frame. Emitting a
             // whole frame at one phase put twenty discrete copies of the arm into the
             // decay window -- ghosts, not a smear -- and no amount of reordering fixes
@@ -258,6 +296,13 @@ public class StarryNights implements Example {
                     discPoints.add(p);
                     source = SOURCE_GALAXY;
                 }
+                if (i % LINE_STRIDE == 1) {
+                    double[] seen = camera.project(p[0], p[1], p[2]);
+                    if (seen != null) {
+                        double[][] rows = camera.jacobian(p[0], p[1], p[2]);
+                        lines.add(seen[0], seen[1], forest.getAnisotropicGeometry(p).cutSpread(), rows[0], rows[1]);
+                    }
+                }
                 forest.update(p);
                 // Probes are placed in the same pass, from the data itself: a point
                 // already within the cover radius of a probe is represented and is
@@ -279,7 +324,7 @@ public class StarryNights implements Example {
             }
             List<double[]> probeOrigins = new ArrayList<>(wake.origins);
             probeOrigins.addAll(arms.origins);
-            List<double[]> probeBoxes = new ArrayList<>(wake.boxes);
+            List<double[][]> probeBoxes = new ArrayList<>(wake.boxes);
             probeBoxes.addAll(arms.boxes);
             List<Double> shade = new ArrayList<>(wake.shade);
             shade.addAll(arms.shade);
@@ -334,20 +379,25 @@ public class StarryNights implements Example {
             // The cover guarantees probes are at least its radius apart, so that IS the
             // pitch. Nothing is inferred from pairwise distances any more, and a pair
             // that happens to land close together can no longer shrink every glyph.
+            // One glyph scale per kind of box, each set by its own longest box, so the c
+            // key compares shapes rather than sizes: a gap box is far smaller than a stop
+            // box, and on a common scale it would vanish.
             double pitch = (net.radius() > 0) ? net.radius() : 2 * PROBE_EXTENT / PROBE_BUDGET;
-            double longest = 0;
-            for (double[] b : probeBoxes) {
-                for (double v : b) {
-                    longest = Math.max(longest, v);
+            double[][][] boxArrays = new double[KINDS.length][probeBoxes.size()][];
+            for (int kind = 0; kind < KINDS.length; kind++) {
+                double longest = 0;
+                for (double[][] b : probeBoxes) {
+                    for (double v : b[kind]) {
+                        longest = Math.max(longest, v);
+                    }
                 }
-            }
-            double glyph = (longest > 0) ? 0.9 * pitch / longest : 0.0;
-            double[][] boxArray = new double[probeBoxes.size()][];
-            for (int i = 0; i < probeBoxes.size(); i++) {
-                double[] b = probeBoxes.get(i);
-                boxArray[i] = new double[6];
-                for (int k = 0; k < 6; k++) {
-                    boxArray[i][k] = b[k] * glyph;
+                double glyph = (longest > 0) ? 0.9 * pitch / longest : 0.0;
+                for (int i = 0; i < probeBoxes.size(); i++) {
+                    double[] b = probeBoxes.get(i)[kind];
+                    boxArrays[kind][i] = new double[6];
+                    for (int k = 0; k < 6; k++) {
+                        boxArrays[kind][i][k] = b[k] * glyph;
+                    }
                 }
             }
 
@@ -357,33 +407,26 @@ public class StarryNights implements Example {
             // memory on screen dressed as data, which is the one thing the colour split
             // exists to prevent. The boxes SHOULD look larger than the visible points:
             // they are inference over a window the data no longer shows.
-            scene.add(Layers.dots(project(camera, discPoints), GALAXY, 1.5));
-            scene.add(Layers.dots(project(camera, ballPoints), COMET, 1.6));
+            scene.add(Layers.when(showData::get, Layers.dots(project(camera, discPoints), GALAXY, 1.5)));
+            scene.add(Layers.when(showData::get, Layers.dots(project(camera, ballPoints), COMET, 1.6)));
+            scene.add(Layers.when(showLines::get, lines));
             scene.add(new Axes3DLayer(camera::project, PROBE_EXTENT, new Color(90, 90, 110)));
             if (SHOW_FIELD) {
                 scene.add(new Arrow3DLayer(fieldOrigins.toArray(new double[0][]), fieldDeltas.toArray(new double[0][]),
                         new Color(70, 70, 70), 1.1f).withProjector(camera::project));
             }
-            scene.add(new Box3DLayer(probeOrigins.toArray(new double[0][]), boxArray, toArray(shade), toArray(fill),
-                    camera::project, EYE, 0.30f));
-            // The arrow row is dropped with the arrows themselves: a legend entry for a
-            // layer that is not in the scene is a caption for something the reader
-            // cannot find.
-            List<String> labels = new ArrayList<>(
-                    List.of("DATA  galaxy arms", "DATA  comet, fading = decaying out", "MODEL  3D extent box",
-                            "MODEL  anisotropic", String.format("MODEL  alpha %.1f filamentary", ALPHA_LO),
-                            String.format("MODEL  alpha %.1f space filling", ALPHA_HI)));
-            List<Color> colors = new ArrayList<>(List.of(GALAXY, COMET, BoxLayer.outlineColor(0.0),
-                    BoxLayer.outlineColor(1.0), BoxLayer.fillColor(0.0, 1.0f), BoxLayer.fillColor(1.0, 1.0f)));
-            List<Layers.Swatch> swatches = new ArrayList<>(List.of(Layers.Swatch.DOTS, Layers.Swatch.DOTS,
-                    Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX));
-            if (SHOW_FIELD) {
-                labels.add("MODEL  toward higher density");
-                colors.add(new Color(70, 70, 70));
-                swatches.add(Layers.Swatch.LINE);
+            for (int kind = 0; kind < KINDS.length; kind++) {
+                int drawnKind = kind;
+                scene.add(Layers.when(() -> boxKind.get() == drawnKind,
+                        new Box3DLayer(probeOrigins.toArray(new double[0][]), boxArrays[kind], toArray(shade),
+                                toArray(fill), camera::project, EYE, 0.30f)));
             }
-            scene.add(Layers.legend(labels.toArray(new String[0]), colors.toArray(new Color[0]),
-                    swatches.toArray(new Layers.Swatch[0])));
+            // The legend is chosen when drawing, so it names the box c has selected and
+            // drops rows for layers the keys have hidden: a legend entry for a layer
+            // that is not in the scene is a caption for something the reader cannot
+            // find.
+            scene.add((g, vp) -> legend(boxKind.get(), showLines.get()).draw(g, vp));
+            scene.add(keys);
 
             if (livePlot) {
                 plot.render(scene);
@@ -428,7 +471,8 @@ public class StarryNights implements Example {
      */
     private static final class ProbeSet {
         final List<double[]> origins = new ArrayList<>();
-        final List<double[]> boxes = new ArrayList<>();
+        /** Per probe, its boxes in KINDS order. */
+        final List<double[][]> boxes = new ArrayList<>();
         final List<Double> shade = new ArrayList<>();
         final List<Double> fill = new ArrayList<>();
 
@@ -448,7 +492,7 @@ public class StarryNights implements Example {
             drawn++;
 
             origins.add(c);
-            boxes.add(out.passageBox());
+            boxes.add(new double[][] { out.gapBox(), out.cutBox(), out.passageBox(), out.stopBox() });
             shade.add(Math.min(1.0, log2(out.getAnisotropy()) / 3.0));
             fill.add(-1.0);
             return true;
@@ -471,6 +515,37 @@ public class StarryNights implements Example {
         String range() {
             return (fitted > 0) ? String.format("[%.2f, %.2f]", alphaMin, alphaMax) : "[-, -]";
         }
+    }
+
+    /**
+     * The key for the box c has selected (-1 is none), with the isolines when
+     * shown.
+     */
+    private static Layer legend(int kind, boolean lines) {
+        List<String> labels = new ArrayList<>(
+                List.of("DATA  galaxy: bulge and three arms", "DATA  comet, fading = decaying out"));
+        List<Color> colors = new ArrayList<>(List.of(GALAXY, COMET));
+        List<Layers.Swatch> swatches = new ArrayList<>(List.of(Layers.Swatch.DOTS, Layers.Swatch.DOTS));
+        if (kind >= 0) {
+            labels.addAll(List.of("MODEL  3D " + KINDS[kind].toLowerCase() + " box, as a glyph", "MODEL  anisotropic",
+                    String.format("MODEL  alpha %.1f filamentary", ALPHA_LO),
+                    String.format("MODEL  alpha %.1f space filling", ALPHA_HI)));
+            colors.addAll(List.of(BoxLayer.outlineColor(0.0), BoxLayer.outlineColor(1.0), BoxLayer.fillColor(0.0, 1.0f),
+                    BoxLayer.fillColor(1.0, 1.0f)));
+            swatches.addAll(List.of(Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX, Layers.Swatch.BOX));
+        }
+        if (lines) {
+            labels.add("MODEL  isolines through the cut");
+            colors.add(LINES);
+            swatches.add(Layers.Swatch.LINE);
+        }
+        if (SHOW_FIELD) {
+            labels.add("MODEL  toward higher density");
+            colors.add(new Color(70, 70, 70));
+            swatches.add(Layers.Swatch.LINE);
+        }
+        return Layers.legend(labels.toArray(new String[0]), colors.toArray(new Color[0]),
+                swatches.toArray(new Layers.Swatch[0]));
     }
 
     private static double[] toArray(List<Double> list) {
@@ -538,6 +613,24 @@ public class StarryNights implements Example {
             return new double[] { scale * vx / depth, scale * vy / depth };
         }
 
+        /**
+         * The two rows of the projection's derivative at a point in front of the
+         * camera: how a small step in the world moves the point on the plot. A 3D
+         * spread S is seen as J S J'.
+         */
+        double[][] jacobian(double x, double y, double z) {
+            double dx = x - eye[0], dy = y - eye[1], dz = z - eye[2];
+            double depth = dx * f[0] + dy * f[1] + dz * f[2];
+            double vx = dx * s[0] + dy * s[1] + dz * s[2];
+            double vy = dx * u[0] + dy * u[1] + dz * u[2];
+            double[][] rows = new double[2][3];
+            for (int i = 0; i < 3; i++) {
+                rows[0][i] = scale * (s[i] * depth - vx * f[i]) / (depth * depth);
+                rows[1][i] = scale * (u[i] * depth - vy * f[i]) / (depth * depth);
+            }
+            return rows;
+        }
+
         private static void cross(double[] a, double[] b, double[] out) {
             out[0] = a[1] * b[2] - a[2] * b[1];
             out[1] = a[2] * b[0] - a[0] * b[2];
@@ -555,17 +648,22 @@ public class StarryNights implements Example {
     }
 
     /**
-     * One galaxy in the x-y plane: three rope-like arms curling outward, each built
-     * from discrete clumps rather than a uniformly filled tube.
+     * One galaxy in the x-y plane: a bulge, and three rope-like arms curling out of
+     * it, each built from discrete clumps rather than a uniformly filled tube.
+     *
+     * <p>
+     * <b>Slowly connected.</b> The arms do not touch one another. Each joins the
+     * bulge through a neck -- the arm's own spiral carried inward, thin and sparse
+     * -- so any path from one arm to the next runs through two necks and the bulge.
+     * Something spreading along the data, a colour say, runs down an arm quickly
+     * and leaks into its neighbours slowly, and the necks are where to watch it.
      *
      * <p>
      * <b>Why a logarithmic spiral.</b> r = R0 * exp(b * theta) has a constant pitch
      * angle, which is what makes real arms look like ropes trailing outward, and r
-     * grows without bound so the arms genuinely reach out. The cochleoid r = a *
-     * sin(theta)/theta does the opposite: it starts at r = a as theta goes to zero
-     * and decays like a/theta, monotonically down to zero at theta = pi, so three
-     * copies at 120 degrees give an inward rosette of petals rather than outward
-     * arms. Swap {@link #armRadius} if the petal shape is wanted anyway.
+     * grows without bound so the arms genuinely reach out. Three quarters of a turn
+     * each keeps the three apart: at more than a turn they interleave, and from the
+     * camera three arms read as two.
      *
      * <p>
      * <b>Why clumps.</b> A uniformly filled tube at this point density is a smear
@@ -576,19 +674,32 @@ public class StarryNights implements Example {
      */
     static final class DiscGalaxy {
         static final int ARMS = 3;
-        private static final double TURNS = 1.15;
+        private static final double TURNS = 0.6;
         private static final double THETA_MAX = TURNS * 2 * Math.PI;
-        private static final double R_INNER = 0.20;
+        private static final double R_INNER = 0.34;
         private static final double R_OUTER = 1.55;
         /** Growth rate fixed by the two radii, so the arm reaches R_OUTER exactly. */
         private static final double B = Math.log(R_OUTER / R_INNER) / THETA_MAX;
 
-        static final int CLUMPS_PER_ARM = 14;
-        static final int POINTS_PER_CLUMP = 42;
-        private static final double CLUMP_RADIUS = 0.085;
-        static final int STRAND_SAMPLES = 220;
-        private static final double STRAND_RADIUS = 0.030;
-        static final int POINTS = ARMS * (CLUMPS_PER_ARM * POINTS_PER_CLUMP + STRAND_SAMPLES);
+        static final int CLUMPS_PER_ARM = 12;
+        private static final double CLUMP_RADIUS = 0.095;
+        private static final double STRAND_RADIUS = 0.05;
+
+        /** The bulge: a flattened ball at the centre, and the bulk of the disc. */
+        private static final double BULGE_RADIUS = 0.2;
+        /**
+         * The neck: the arm's spiral carried inward from R_INNER to the bulge, at
+         * NECK_RADIUS across. Its share is what sets how slowly the arms connect.
+         */
+        private static final double NECK_RADIUS = 0.022;
+        private static final double THETA_NECK = Math.log(0.8 * BULGE_RADIUS / R_INNER) / B;
+
+        /** Shares of the galaxy's points; the clumps take the rest. */
+        private static final double BULGE_SHARE = 0.16;
+        private static final double NECK_SHARE = 0.025;
+        private static final double STRAND_SHARE = 0.30;
+
+        static final int POINTS = 3600;
 
         /** Turns of the whole galaxy over the entire run. Slow on purpose. */
         private static final double TURNS_PER_RUN = 0.35;
@@ -599,7 +710,7 @@ public class StarryNights implements Example {
             this.random = new Random(seed * 31 + 7);
         }
 
-        /** Logarithmic spiral; replace with a * sin(t)/t for a cochleoid. */
+        /** Logarithmic spiral; negative theta carries it inward, through the neck. */
         private static double armRadius(double theta) {
             return R_INNER * Math.exp(B * theta);
         }
@@ -618,35 +729,48 @@ public class StarryNights implements Example {
          * angle. Continuous, so probes can sit between clumps as well as on them.
          */
         double[] armAt(double t, int arm, double f) {
-            double theta = THETA_MAX * f;
+            return centreline(t, arm, THETA_MAX * f);
+        }
+
+        private static double[] centreline(double t, int arm, double theta) {
             double r = armRadius(theta);
             double ang = theta + spinPhase(t) + 2 * Math.PI * arm / ARMS;
             return new double[] { r * Math.cos(ang), r * Math.sin(ang), 0.0 };
         }
 
         /**
-         * The i-th galaxy point of a frame. Stateless: the arrival number picks the arm
-         * and the feature, so consecutive arrivals land on different arms and different
-         * stations and points expire uniformly across the disc. Nothing needs
-         * shuffling, because nothing was ever emitted in spatial blocks.
+         * One galaxy point. The arrival number picks the arm, so consecutive arrivals
+         * land on different arms, and the feature is drawn at random, so arrival order
+         * carries no spatial pattern and points expire uniformly across the disc.
          */
         float[] sample(double phase, int i) {
             int arm = i % ARMS;
-            int k = i / ARMS;
-            if (k % 4 == 0) {
-                return strandSample(phase, arm, (k / 4) % STRAND_SAMPLES);
+            double u = random.nextDouble();
+            if (u < BULGE_SHARE) {
+                return bulgeSample();
             }
-            return clumpSample(phase, arm, k % CLUMPS_PER_ARM);
+            if (u < BULGE_SHARE + NECK_SHARE) {
+                return tubeSample(phase, arm, THETA_NECK * random.nextDouble(), NECK_RADIUS);
+            }
+            if (u < BULGE_SHARE + NECK_SHARE + STRAND_SHARE) {
+                double theta = THETA_MAX * random.nextDouble();
+                return tubeSample(phase, arm, theta, STRAND_RADIUS * (0.6 + 0.8 * theta / THETA_MAX));
+            }
+            return clumpSample(phase, arm, random.nextInt(CLUMPS_PER_ARM));
         }
 
-        /** One strand point on the given arm, at strand station `index`. */
-        float[] strandSample(double t, int arm, int index) {
-            double theta = THETA_MAX * index / (double) STRAND_SAMPLES;
-            double r = armRadius(theta);
-            double ang = theta + spinPhase(t) + 2 * Math.PI * arm / ARMS;
-            double jitter = STRAND_RADIUS * (0.6 + 0.8 * theta / THETA_MAX);
-            return new float[] { (float) (r * Math.cos(ang) + jitter * (2 * random.nextDouble() - 1)),
-                    (float) (r * Math.sin(ang) + jitter * (2 * random.nextDouble() - 1)),
+        /** The bulge, uniform in a ball flattened to a third of its width. */
+        private float[] bulgeSample() {
+            double[] b = unitBall();
+            return new float[] { (float) (BULGE_RADIUS * b[0]), (float) (BULGE_RADIUS * b[1]),
+                    (float) (0.35 * BULGE_RADIUS * b[2]) };
+        }
+
+        /** One point jittered about the centreline of an arm at spiral angle theta. */
+        private float[] tubeSample(double t, int arm, double theta, double jitter) {
+            double[] c = centreline(t, arm, theta);
+            return new float[] { (float) (c[0] + jitter * (2 * random.nextDouble() - 1)),
+                    (float) (c[1] + jitter * (2 * random.nextDouble() - 1)),
                     (float) (0.4 * jitter * (2 * random.nextDouble() - 1)) };
         }
 
@@ -655,14 +779,20 @@ public class StarryNights implements Example {
             double[] c = clumpCentre(t, arm, k);
             // clumps farther out are looser, as the arm stretches
             double spread = CLUMP_RADIUS * (0.6 + 0.9 * k / (double) CLUMPS_PER_ARM);
+            double[] b = unitBall();
+            return new float[] { (float) (c[0] + spread * b[0]), (float) (c[1] + spread * b[1]),
+                    (float) (c[2] + 0.45 * spread * b[2]) };
+        }
+
+        /** Uniform in the unit ball, by rejection. */
+        private double[] unitBall() {
             double x, y, z;
             do {
                 x = 2 * random.nextDouble() - 1;
                 y = 2 * random.nextDouble() - 1;
                 z = 2 * random.nextDouble() - 1;
             } while (x * x + y * y + z * z > 1);
-            return new float[] { (float) (c[0] + spread * x), (float) (c[1] + spread * y),
-                    (float) (c[2] + 0.45 * spread * z) };
+            return new double[] { x, y, z };
         }
     }
 

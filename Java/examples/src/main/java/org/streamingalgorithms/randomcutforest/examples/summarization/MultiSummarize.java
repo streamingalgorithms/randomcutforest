@@ -36,6 +36,8 @@ import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.Example;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Clusters;
 import org.streamingalgorithms.randomcutforest.examples.plot.BoxUnionLayer;
+import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -57,7 +59,10 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * with a maximum of 5*d potential clusters, and yet the example often finds the
  * true 2*d clusters.
  *
- * See {@link ClusterBoxes}. Press <b>t</b> to show or hide the boxes.
+ * See {@link ClusterBoxes}. Keys: <b>d</b> shows or hides the data, <b>t</b>
+ * the isolines drawn through the cut, and <b>c</b> cycles the scale the boxes
+ * are read at (GAP, CUT, PASSAGE, STOP, then off); <b>space</b> pauses the tour
+ * and <b>right arrow</b> steps it.
  *
  * <p>
  * The step from one centroid to several was motivated by a sphere being too
@@ -284,10 +289,21 @@ public class MultiSummarize implements Example {
         }
         System.out.println("  read the right-hand end: still falling means the budget, flat means the data");
 
+        // The isolines' reference: a stride of the data, each point with the
+        // forest's cut spread, asked once because nothing moves. These points were
+        // inserted, but a tree holds 256 of 200000, so a given point sits in about
+        // one tree in eight hundred.
+        float[][] linePoints = stride(points, LINE_POINTS);
+        double[][][] lineSpreads = new double[linePoints.length][][];
+        for (int i = 0; i < linePoints.length; i++) {
+            lineSpreads[i] = forest.getAnisotropicGeometry(linePoints[i]).cutSpread();
+        }
+
         boolean showProjection = true;
         if (showProjection) {
             // plotProjection(points, summary, newDimensions);
-            plotTourLive(points, summary, drawByKind, censusByKind, newDimensions, random.nextLong());
+            plotTourLive(points, summary, drawByKind, censusByKind, linePoints, lineSpreads, newDimensions,
+                    random.nextLong());
             // plotTour(points, summary, newDimensions, random.nextLong());
         }
     }
@@ -315,6 +331,15 @@ public class MultiSummarize implements Example {
     private static final int MEMBER_QUERIES = 240;
 
     private static final int COVER_DRAW_QUERIES = 24;
+
+    /**
+     * Reference points for the isolines, and the grid they are drawn on. Each tour
+     * step sees every point's spread through the current plane; see
+     * {@link CutIsolines}.
+     */
+    private static final int LINE_POINTS = 1500;
+    private static final int LINE_GRID = 120;
+    private static final Color LINES = new Color(150, 60, 170);
 
     /** Points used for the reference census; the census is quadratic. */
     private static final int CENSUS_POINTS = 5000;
@@ -497,7 +522,8 @@ public class MultiSummarize implements Example {
 
     private void plotTourLive(float[][] points, List<ICluster<float[]>> summary,
             Map<ClusterBoxes.BoxKind, List<ClusterBoxes.Union>> drawByKind,
-            Map<ClusterBoxes.BoxKind, int[]> censusByKind, int dim, long seed) {
+            Map<ClusterBoxes.BoxKind, int[]> censusByKind, float[][] linePoints, double[][][] lineSpreads, int dim,
+            long seed) {
         int k = summary.size();
         // Same stride the startup census uses, so the c key's figure and the
         // reference figure are taken against the same points and differ only in
@@ -578,18 +604,29 @@ public class MultiSummarize implements Example {
             for (float[] p : sample)
                 maxAbs = Math.max(maxAbs, Math.abs(dot(w, p)));
         }
-        Plot2D plot = Plot2D.open("RCF grand tour  (" + dim + " dims, k=" + k + ")", maxAbs * 1.05, 820);
+        double range = maxAbs * 1.05;
+        Plot2D plot = Plot2D.open("RCF grand tour  (" + dim + " dims, k=" + k + ")", range, 820);
 
         // Gated inside the layer rather than around the scene build, so a bare
         // repaint honours the key; see BoxUnionLayer.
-        AtomicBoolean showBoxes = new AtomicBoolean(true);
-        plot.bindKey(KeyEvent.VK_T, "multisummarize.boxes", () -> showBoxes.set(!showBoxes.get()));
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "multisummarize.data", () -> showData.set(!showData.get()));
+        AtomicBoolean showLines = new AtomicBoolean(false);
+        plot.bindKey(KeyEvent.VK_T, "multisummarize.isolines", () -> showLines.set(!showLines.get()));
 
+        // The scales in order, then off.
+        AtomicBoolean showBoxes = new AtomicBoolean(true);
         AtomicReference<ClusterBoxes.BoxKind> kind = new AtomicReference<>(DRAWN_KIND);
         AtomicReference<List<ClusterBoxes.Union>> drawn = new AtomicReference<>(drawByKind.get(DRAWN_KIND));
         plot.bindKey(KeyEvent.VK_C, "multisummarize.boxkind", () -> {
             ClusterBoxes.BoxKind[] all = ClusterBoxes.BoxKind.values();
-            ClusterBoxes.BoxKind next = all[(kind.get().ordinal() + 1) % all.length];
+            if (showBoxes.get() && kind.get().ordinal() == all.length - 1) {
+                showBoxes.set(false);
+                System.out.println("boxes -> off");
+                return;
+            }
+            ClusterBoxes.BoxKind next = showBoxes.get() ? all[kind.get().ordinal() + 1] : all[0];
+            showBoxes.set(true);
             kind.set(next);
             drawn.set(drawByKind.get(next));
             int boxes = drawn.get().stream().mapToInt(ClusterBoxes.Union::size).sum();
@@ -613,8 +650,12 @@ public class MultiSummarize implements Example {
                     100 * t[ClusterBoxes.REACH_OWN] / nb, 100 * t[ClusterBoxes.REACH_AMBIGUOUS] / nb,
                     100 * t[ClusterBoxes.REACH_OTHER_ONLY] / nb, 100 * t[ClusterBoxes.REACH_NONE] / nb);
         });
-        System.out.println("keys: space pauses, right arrow steps, t toggles the density boxes, "
-                + "c cycles the scale (CUT/PASSAGE/STOP) and prints reach for it");
+        System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
+                + "c cycles the scale (GAP/CUT/PASSAGE/STOP/off) and prints reach for it");
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))
+                .add("c", "cluster boxes", () -> showBoxes.get() ? kind.get().toString() : "off");
 
         Thread tour = new Thread(() -> {
             double[] u = randUnit(dim, rnd), v = randUnit(dim, rnd);
@@ -633,8 +674,15 @@ public class MultiSummarize implements Example {
                             mov[i] = cs * moving[i] + sn * w[i];
                         double[] uu = rotateV ? u : mov;
                         double[] vv = rotateV ? mov : v;
-                        plot.render(buildScene(sample, groups, reps, repCluster, centroid, clusterColor, k, uu, vv,
-                                drawn.get(), showBoxes));
+                        List<Layer> scene = buildScene(sample, groups, reps, repCluster, centroid, clusterColor, k, uu,
+                                vv, drawn.get(), showBoxes, showData);
+                        CutIsolines lines = new CutIsolines(-range * 0.95, 2 * range * 0.95, LINE_GRID, LINES);
+                        for (int r = 0; r < linePoints.length; r++) {
+                            lines.add(dot(uu, linePoints[r]), dot(vv, linePoints[r]), lineSpreads[r], uu, vv);
+                        }
+                        scene.add(Layers.when(showLines::get, lines));
+                        scene.add(keys);
+                        plot.render(scene);
                         plot.awaitResume();
                         Thread.sleep(25);
                     }
@@ -674,7 +722,7 @@ public class MultiSummarize implements Example {
 
     private List<Layer> buildScene(float[][] sample, int[][] groups, List<float[]> reps, List<Integer> repCluster,
             double[][] centroid, Color[] clusterColor, int k, double[] u, double[] v, List<ClusterBoxes.Union> unions,
-            AtomicBoolean showBoxes) {
+            AtomicBoolean showBoxes, AtomicBoolean showData) {
         List<Layer> scene = new ArrayList<>();
 
         // First, so the boxes sit behind the data. The shadow of an axis-parallel box
@@ -703,7 +751,7 @@ public class MultiSummarize implements Example {
             float[][] xy = new float[g.length][];
             for (int m = 0; m < g.length; m++)
                 xy[m] = new float[] { (float) dot(u, sample[g[m]]), (float) dot(v, sample[g[m]]) };
-            scene.add(Layers.dots(xy, clusterColor[c], 1.6));
+            scene.add(Layers.when(showData::get, Layers.dots(xy, clusterColor[c], 1.6)));
         }
         for (int c = 0; c < k; c++) {
             double cx = 0, cy = 0;

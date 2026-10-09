@@ -56,6 +56,15 @@ public class AnisotropicLocalGeometry extends InterpolationMeasure {
         return scales.cutBox();
     }
 
+    /**
+     * Covariance across trees of the cut box's centre, d by d. The mean of that
+     * centre, the centre of {@link #cutBox()}, says where the trees place the
+     * query's cut box; this says how far they disagree, and in which directions.
+     */
+    public double[][] cutSpread() {
+        return scales.cutSpread();
+    }
+
     public double[] gapBox() {
         return scales.gapBox();
     }

@@ -24,6 +24,7 @@ import java.awt.Stroke;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
 import java.util.Arrays;
+import java.util.function.BooleanSupplier;
 
 /** Factory methods for the common layer types, plus a categorical palette. */
 public final class Layers {
@@ -45,6 +46,19 @@ public final class Layers {
 
     public static Color color(int i) {
         return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length];
+    }
+
+    /**
+     * Draws the layer only while the flag is up. The flag is read when painting, so
+     * a key that flips it takes effect on a paused frame, where the render loop is
+     * blocked and will not rebuild the scene.
+     */
+    public static Layer when(BooleanSupplier show, Layer layer) {
+        return (g, vp) -> {
+            if (show.getAsBoolean()) {
+                layer.draw(g, vp);
+            }
+        };
     }
 
     /** Uniform dots — e.g. the raw background cloud. */

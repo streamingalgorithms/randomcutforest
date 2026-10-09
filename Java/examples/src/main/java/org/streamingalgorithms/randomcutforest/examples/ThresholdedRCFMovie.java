@@ -20,14 +20,17 @@ import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDim
 
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.event.KeyEvent;
 import java.awt.geom.Ellipse2D;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -185,6 +188,12 @@ public class ThresholdedRCFMovie implements Example {
                 ? Plot2D.openRect("Thresholded Multi Dimensional", xmin, xmax, ymin, ymax, widthPx, heightPx)
                 : Plot2D.offscreenRect(xmin, xmax, ymin, ymax);
         GifWriter gif = new GifWriter(new File(outputFile), gifDelayMs, true);
+        // d shows or hides the data, read when drawing; space pauses and right arrow
+        // steps, as in every Plot2D window
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "movie.data", () -> showData.set(!showData.get()));
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_RIGHT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get));
 
         CorrectionMode[] tokens = CorrectionMode.values();
         Layer legend = legendFor(tokens);
@@ -196,10 +205,11 @@ public class ThresholdedRCFMovie implements Example {
             List<Layer> scene = new ArrayList<>();
 
             // everything observed so far -- the annulus fills in as it runs
-            scene.add(Layers.dots(head(xy, t + 1), new Color(212, 212, 212), 1.8));
+            scene.add(Layers.when(showData::get, Layers.dots(head(xy, t + 1), new Color(212, 212, 212), 1.8)));
 
             // one revolution of history, so the travel around the ring is visible
-            scene.add(Layers.polyline(trail(xy, t - tailLength + 1, t), new Color(130, 130, 130), false, 0, 1.3f));
+            scene.add(Layers.when(showData::get,
+                    Layers.polyline(trail(xy, t - tailLength + 1, t), new Color(130, 130, 130), false, 0, 1.3f)));
 
             // suppressed timestamps, coloured by token
             for (CorrectionMode token : tokens) {
@@ -263,11 +273,14 @@ public class ThresholdedRCFMovie implements Example {
             }
 
             // current observation
-            scene.add(Layers.dots(new float[][] { xy[t] }, Color.BLACK, 5.0));
+            scene.add(Layers.when(showData::get, Layers.dots(new float[][] { xy[t] }, Color.BLACK, 5.0)));
 
             scene.add(Layers.label(xmin + 0.02 * (xmax - xmin), ymax - 0.04 * (ymax - ymin),
                     status(t, score, grade, mode, relative, expected), new Color(40, 40, 40)));
             scene.add(legend);
+            if (livePlot) {
+                scene.add(keys); // the recording has no keys to press
+            }
 
             if (livePlot) {
                 plot.render(scene);
@@ -279,6 +292,7 @@ public class ThresholdedRCFMovie implements Example {
                     gif.writeFrame(plot.renderImage(widthPx, heightPx, scene));
                 }
             }
+            plot.awaitResume(); // after the gif, so pausing leaves the recording continuous
         }
 
         gif.close();

@@ -35,6 +35,7 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -45,7 +46,9 @@ import org.streamingalgorithms.randomcutforest.examples.Example;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Fan;
 import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.examples.plot.BoxUnionLayer;
+import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -73,13 +76,15 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * boxes are drawn exactly, not projected.
  *
  * <p>
- * Keys: <b>space</b> pauses and <b>right arrow</b> steps one frame, <b>t</b>
- * shows or hides the boxes, <b>c</b> cycles the scale the boxes are read at
- * (CUT, PASSAGE, STOP), <b>k</b> turns centring on and off, and <b>s</b> writes
- * the current frame to a png. All of them work while paused, and both the png
- * and the gif record whatever the toggles say at the moment the frame is
- * written -- the layers consult their gates at draw time, so a recording made
- * while toggling shows the toggling.
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps one frame, <b>d</b>
+ * shows or hides the data, <b>t</b> the isolines drawn through the cut,
+ * <b>c</b> cycles the scale the boxes are read at (GAP, CUT, PASSAGE, STOP,
+ * then off), <b>a</b> shows or hides the anomaly boxes, <b>k</b> turns centring
+ * on and off, and <b>s</b> writes the current frame to a png. The card in the
+ * corner lists them. All of them work while paused -- a new scale is read from
+ * the next frame -- and both the png and the gif record whatever the toggles
+ * say at the moment the frame is written: the layers consult their gates at
+ * draw time, so a recording made while toggling shows the toggling.
  */
 public class Summarization implements Example {
 
@@ -103,6 +108,15 @@ public class Summarization implements Example {
      *
      */
     private static final ClusterBoxes.BoxKind DRAWN_KIND = ClusterBoxes.BoxKind.PASSAGE;
+
+    /**
+     * Starting state of the t key, and every how many arrivals a point joins the
+     * isolines' reference -- before it is inserted. See {@link CutIsolines}.
+     */
+    private static final boolean SHOW_LINES = false;
+    private static final int LINE_STRIDE = 3;
+    private static final int LINE_GRID = 150;
+    private static final Color LINES = new Color(150, 60, 170);
 
     /**
      * Starting state of the k key -- shows the symmetrized box.
@@ -249,17 +263,29 @@ public class Summarization implements Example {
         int[] oldColors = null;
 
         // Gated inside the layer, so a repaint alone honours the toggle while paused.
-        AtomicBoolean showBoxes = new AtomicBoolean(true);
-        plot.bindKey(KeyEvent.VK_T, "summarization.boxes", () -> showBoxes.set(!showBoxes.get()));
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "summarization.data", () -> showData.set(!showData.get()));
+        AtomicBoolean showLines = new AtomicBoolean(SHOW_LINES);
+        plot.bindKey(KeyEvent.VK_T, "summarization.isolines", () -> showLines.set(!showLines.get()));
         AtomicBoolean showAnomaly = new AtomicBoolean(true);
         plot.bindKey(KeyEvent.VK_A, "summarization.anomaly", () -> showAnomaly.set(!showAnomaly.get()));
 
+        // The scales in order, then off. Off hides the boxes at once; a scale is
+        // read from the next frame, and the numbers keep the last one.
+        AtomicBoolean showBoxes = new AtomicBoolean(true);
         AtomicReference<ClusterBoxes.BoxKind> drawnKind = new AtomicReference<>(DRAWN_KIND);
         plot.bindKey(KeyEvent.VK_C, "summarization.boxkind", () -> {
             ClusterBoxes.BoxKind[] all = ClusterBoxes.BoxKind.values();
-            ClusterBoxes.BoxKind next = all[(drawnKind.get().ordinal() + 1) % all.length];
-            drawnKind.set(next);
-            System.out.println("scale -> " + next + " (" + next.blurb() + ")");
+            if (!showBoxes.get()) {
+                showBoxes.set(true);
+                drawnKind.set(all[0]);
+            } else if (drawnKind.get().ordinal() == all.length - 1) {
+                showBoxes.set(false);
+            } else {
+                drawnKind.set(all[drawnKind.get().ordinal() + 1]);
+            }
+            System.out.println(showBoxes.get() ? "scale -> " + drawnKind.get() + " (" + drawnKind.get().blurb() + ")"
+                    : "boxes -> off");
         });
 
         AtomicBoolean centered = new AtomicBoolean(CENTER_BOXES);
@@ -285,8 +311,14 @@ public class Summarization implements Example {
                 System.out.println("screenshot failed: " + e.getMessage());
             }
         });
-        System.out.println("keys: space pauses, right arrow steps, t toggles the boxes, "
-                + "c cycles the scale (CUT/PASSAGE/STOP), k toggles centring, s writes a png");
+        System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
+                + "c cycles the scale (GAP/CUT/PASSAGE/STOP/off), a the anomaly boxes, k centring, s writes a png");
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))
+                .add("c", "cluster boxes", () -> showBoxes.get() ? drawnKind.get().toString() : "off")
+                .add("a", "anomaly boxes", KeysLayer.onOff(showAnomaly::get))
+                .add("k", "centred boxes", KeysLayer.onOff(centered::get)).add("s", "save png", null);
         System.out.printf("drawing %.0f%% of the boxes; every printed figure uses all of them%n", 100 * DRAW_FRACTION);
 
         int count = 0, sum = 0, over = 0, under = 0;
@@ -297,6 +329,7 @@ public class Summarization implements Example {
         for (int degree = 0; degree < 360; degree += 1) {
             float[][] bg = new float[data.length][2];
             List<float[]> anomalyPts = new ArrayList<>(); // (a) per frame
+            CutIsolines lines = new CutIsolines(-range * 0.95, 2 * range * 0.95, LINE_GRID, LINES);
             int n = 0;
 
             Instant u0 = Instant.now();
@@ -304,6 +337,9 @@ public class Summarization implements Example {
                 float[] vec = rotateClockWise(datum, -2 * PI * degree / 360);
                 bg[n][0] = vec[0];
                 bg[n][1] = vec[1];
+                if (n % LINE_STRIDE == 0) {
+                    lines.add(vec, newForest.getAnisotropicGeometry(vec).cutSpread());
+                }
                 n++;
                 if (printFile) {
                     file.append(vec[0] + " " + vec[1] + "\n");
@@ -447,8 +483,9 @@ public class Summarization implements Example {
                     unclaimed[ui++] = bg[i];
                 }
             }
-            scene.add(Layers.dots(claimed, CLAIMED, 1.6));
-            scene.add(Layers.dots(unclaimed, UNCLAIMED, 2.4));
+            scene.add(Layers.when(showData::get, Layers.dots(claimed, CLAIMED, 1.6)));
+            scene.add(Layers.when(showData::get, Layers.dots(unclaimed, UNCLAIMED, 2.4)));
+            scene.add(Layers.when(showLines::get, lines));
             for (int i = 0; i < summary.size(); i++) {
                 double weight = summary.get(i).getWeight();
                 List<double[]> rp = new ArrayList<>();
@@ -477,7 +514,8 @@ public class Summarization implements Example {
                 scene.add(Layers.polyline(ring, col, true, 55, 1.6f));
                 scene.add(Layers.weightedDots(ring, w, col, 3.0, 13.0));
             }
-            scene.add(new LegendLayer(() -> frameKind.toString(), anomalyPts::size));
+            scene.add(new LegendLayer(() -> frameKind.toString(), anomalyPts::size, showLines::get));
+            scene.add(keys);
             if (printFile) {
                 file.append("\n");
                 file.append("\n");
@@ -716,18 +754,24 @@ public class Summarization implements Example {
     private static final class LegendLayer implements Layer {
         private final Supplier<String> scale;
         private final IntSupplier anomalies;
+        private final BooleanSupplier lines;
 
-        LegendLayer(Supplier<String> scale, IntSupplier anomalies) {
+        LegendLayer(Supplier<String> scale, IntSupplier anomalies, BooleanSupplier lines) {
             this.scale = scale;
             this.anomalies = anomalies;
+            this.lines = lines;
         }
 
         @Override
         public void draw(Graphics2D g, Plot2D.Viewport vp) {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             String[] text = { "cluster cover  (" + scale.get() + ")", "anomaly  (GAP, " + anomalies.getAsInt() + ")",
-                    "covered by a cluster", "claimed by none" };
-            Color[] swatch = { PALETTE[0], ANOMALY, CLAIMED, UNCLAIMED };
+                    "covered by a cluster", "claimed by none", "isolines through the cut" };
+            Color[] swatch = { PALETTE[0], ANOMALY, CLAIMED, UNCLAIMED, LINES };
+            if (!lines.getAsBoolean()) {
+                // no caption for a layer that is not on screen
+                text = Arrays.copyOf(text, 4);
+            }
             g.setFont(g.getFont().deriveFont(Font.PLAIN, 12f));
             FontMetrics fm = g.getFontMetrics();
             int pad = 9, sw = 13, gap = 7, line = fm.getHeight() + 4;
@@ -752,6 +796,9 @@ public class Summarization implements Example {
                 if (i < 2) {
                     g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), i == 0 ? 55 : 75));
                     g.fillRect(x + pad, ty + 2, sw, sw);
+                } else if (i == 4) {
+                    g.setColor(c);
+                    g.drawLine(x + pad, ty + 2 + sw / 2, x + pad + sw, ty + 2 + sw / 2);
                 } else {
                     g.setColor(c);
                     g.fillOval(x + pad + 3, ty + 5, sw - 6, sw - 6);

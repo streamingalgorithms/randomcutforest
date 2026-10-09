@@ -53,9 +53,9 @@ import org.streamingalgorithms.randomcutforest.tree.ITree;
  *
  * Geometry is copied from growingBox at each level and never reconstructed from
  * probability-weighted lengths. Outputs are averaged equally across trees by
- * scales.
+ * scales, which also keep how far the trees' cut boxes disagree.
  */
-public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
+public class AnisotropicLocalVisitor extends InterpolationVisitor {
 
     /** Separation probability at which cutBox is read. */
     public static final double P_CUT = 0.5;
@@ -90,7 +90,7 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
     private final FirstPassageScales foldedScales;
     private FirstPassageScales pending;
 
-    AnisotropicDisplacementVisitor(int dimension, double pointMass, boolean centerOfMass, double massTargetExponent) {
+    AnisotropicLocalVisitor(int dimension, double pointMass, boolean centerOfMass, double massTargetExponent) {
         super(dimension, pointMass, centerOfMass);
         this.massTargetExponent = massTargetExponent;
         cutBox = new double[len];
@@ -105,7 +105,7 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
         foldedScales = new FirstPassageScales(dimension);
     }
 
-    public AnisotropicDisplacementVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass,
+    public AnisotropicLocalVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass,
             double massTargetExponent) {
         this(pointToScore.length, pointMass, centerOfMass, massTargetExponent);
         this.treeMass = treeMass;
@@ -297,13 +297,13 @@ public class AnisotropicDisplacementVisitor extends InterpolationVisitor {
 
             @Override
             public IRFVisitor<InterpolationMeasure> newReusableVisitor(float[] point) {
-                return new AnisotropicDisplacementVisitor(point.length, pointMass, centerOfMass, massTargetExponent);
+                return new AnisotropicLocalVisitor(point.length, pointMass, centerOfMass, massTargetExponent);
             }
 
             @Override
             public Visitor<InterpolationMeasure> newVisitor(ITree<?, ?> tree, float[] point) {
-                return new AnisotropicDisplacementVisitor(tree.projectToTree(point), tree.getMass(), pointMass,
-                        centerOfMass, massTargetExponent);
+                return new AnisotropicLocalVisitor(tree.projectToTree(point), tree.getMass(), pointMass, centerOfMass,
+                        massTargetExponent);
             }
         };
     }

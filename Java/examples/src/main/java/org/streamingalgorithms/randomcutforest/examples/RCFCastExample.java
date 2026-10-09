@@ -19,6 +19,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
@@ -27,11 +28,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -111,6 +114,12 @@ public class RCFCastExample implements Example {
                 : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
 
         GifWriter gif = saveGif ? new GifWriter(new File("rcf_cast.gif"), gifDelayMs, true) : null;
+        // d shows or hides the data, read when drawing; space pauses and right arrow
+        // steps, as in every Plot2D window
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "rcfcast.data", () -> showData.set(!showData.get()));
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_RIGHT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get));
 
         // the full data series (dim vizDim) — static background, computed once
         double[][] dataLine = new double[N][2];
@@ -162,7 +171,7 @@ public class RCFCastExample implements Example {
             // scene.add(Layers.hline(0, cGuide));
             // scene.add(Layers.hline(80, cGuide));
             // scene.add(Layers.hline(100, cGuide));
-            scene.add(Layers.polyline(dataLine, cData, false, 0, 1.0f));
+            scene.add(Layers.when(showData::get, Layers.polyline(dataLine, cData, false, 0, 1.0f)));
 
             // past: observed error distribution + interval accuracy %
             float[] eUp = result.getObservedErrorDistribution().upper;
@@ -210,6 +219,7 @@ public class RCFCastExample implements Example {
                     new Color[] { cData, cForecast, cForecast.brighter(), cPast, cAcc },
                     new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.LINE, Layers.Swatch.BOX, Layers.Swatch.BOX,
                             Layers.Swatch.LINE }));
+            scene.add(keys);
 
             if (livePlot) {
                 javax.swing.SwingUtilities.invokeLater(() -> {
@@ -228,6 +238,7 @@ public class RCFCastExample implements Example {
             if (saveGif) {
                 gif.writeFrame(plot.renderImage(1000, 560, scene));
             }
+            plot.awaitResume(); // after the gif, so pausing leaves the recording continuous
 
             if (current % 128 == 0) {
                 System.out.printf("[t=%4d] total %d ms | process %.3f ms/step%n", current,

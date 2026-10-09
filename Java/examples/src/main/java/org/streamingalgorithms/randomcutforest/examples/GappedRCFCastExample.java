@@ -19,6 +19,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
@@ -28,9 +29,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -197,6 +200,12 @@ public class GappedRCFCastExample implements Example {
                 ? Plot2D.openRect("Gapped RCFCaster — freeze + impute", 0, N + forecastHorizon, ymin, ymax, 1100, 620)
                 : Plot2D.offscreenRect(0, N + forecastHorizon, ymin, ymax);
         GifWriter gif = saveGif ? new GifWriter(new File("gapped_rcf_cast.gif"), gifDelayMs, true) : null;
+        // d shows or hides the data, read when drawing; space pauses and right arrow
+        // steps, as in every Plot2D window
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "gappedcast.data", () -> showData.set(!showData.get()));
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_RIGHT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get));
 
         Color cData = Color.BLACK;
         // bright red: the withheld series is the one thing here the model never
@@ -290,10 +299,10 @@ public class GappedRCFCastExample implements Example {
 
             // what the model consumed, and what it never saw
             for (double[][] seg : seenRuns) {
-                scene.add(Layers.polyline(seg, cData, false, 0, 1.0f));
+                scene.add(Layers.when(showData::get, Layers.polyline(seg, cData, false, 0, 1.0f)));
             }
             for (double[][] seg : withheldRuns) {
-                scene.add(Layers.dashedPolyline(seg, cWithheld, 1.0f, dash));
+                scene.add(Layers.when(showData::get, Layers.dashedPolyline(seg, cWithheld, 1.0f, dash)));
             }
             scene.add(Layers.dots(imputedPts.toArray(new float[0][]), cImputed, 3.5));
 
@@ -339,6 +348,7 @@ public class GappedRCFCastExample implements Example {
                     new Layers.Swatch[] { Layers.Swatch.LINE, Layers.Swatch.DASHED, Layers.Swatch.BOX,
                             Layers.Swatch.BOX, Layers.Swatch.LINE, Layers.Swatch.BOX, Layers.Swatch.BOX,
                             Layers.Swatch.DOTS, Layers.Swatch.LINE }));
+            scene.add(keys);
 
             if (livePlot) {
                 javax.swing.SwingUtilities.invokeLater(() -> {
@@ -352,6 +362,7 @@ public class GappedRCFCastExample implements Example {
             if (saveGif) {
                 gif.writeFrame(plot.renderImage(1000, 560, scene));
             }
+            plot.awaitResume(); // after the gif, so pausing leaves the recording continuous
 
             if (current % 128 == 0 && lastObserved > 0) {
                 System.out.printf("[t=%4d] total %d ms | process %.3f ms/observed-step%n", current,

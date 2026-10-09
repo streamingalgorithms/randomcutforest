@@ -19,6 +19,7 @@ import static java.lang.Math.PI;
 import static org.streamingalgorithms.randomcutforest.examples.datasets.Fan.rotateClockWise;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -26,16 +27,31 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Yinyang;
+import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
 import org.streamingalgorithms.randomcutforest.returntypes.DensityOutput;
 
+/**
+ * Density at the data, coloured, with the directional density as arrows.
+ *
+ * <p>
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
+ * hides the data, and <b>t</b> the isolines drawn through the cut, from every
+ * third point of a frame asked before it is inserted; see {@link CutIsolines}.
+ */
 public class DensityExample implements Example {
+
+    private static final int LINE_STRIDE = 3;
+    private static final int LINE_GRID = 120;
+    private static final Color LINES = new Color(150, 60, 170);
 
     public static void main(String[] args) throws Exception {
         new DensityExample().run();
@@ -77,13 +93,27 @@ public class DensityExample implements Example {
                 : Plot2D.offscreen(range);
         GifWriter gif = saveGif ? new GifWriter(new File("dynamic_density.gif"), gifDelayMs, true) : null;
 
+        // Read when drawing, so both keys work on a paused frame.
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "density.data", () -> showData.set(!showData.get()));
+        AtomicBoolean showLines = new AtomicBoolean(false);
+        plot.bindKey(KeyEvent.VK_T, "density.isolines", () -> showLines.set(!showLines.get()));
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get));
+
         Instant start = Instant.now();
         long densityNanos = 0;
         int frame = 0;
 
         for (int degree = 0; degree < 360; degree += 2) {
-            for (float[] datum : data) {
-                newForest.update(rotateClockWise(datum, -2 * PI * degree / 360));
+            CutIsolines lines = new CutIsolines(-range * 0.95, 2 * range * 0.95, LINE_GRID, LINES);
+            for (int i = 0; i < data.length; i++) {
+                float[] p = rotateClockWise(data[i], -2 * PI * degree / 360);
+                if (i % LINE_STRIDE == 0) {
+                    lines.add(p, newForest.getAnisotropicGeometry(p).cutSpread());
+                }
+                newForest.update(p);
             }
 
             // density at each rotated data point
@@ -130,9 +160,11 @@ public class DensityExample implements Example {
             }
 
             List<Layer> scene = new ArrayList<>();
-            scene.add(Layers.scalarDots(pts, dens, 3.0));
+            scene.add(Layers.when(showData::get, Layers.scalarDots(pts, dens, 3.0)));
+            scene.add(Layers.when(showLines::get, lines));
             scene.add(Layers.arrows(go.toArray(new double[0][]), gd.toArray(new double[0][]), new Color(70, 70, 70),
                     1.2f));
+            scene.add(keys);
 
             if (livePlot) {
                 plot.render(scene);
@@ -143,6 +175,7 @@ public class DensityExample implements Example {
             if (saveGif && frame % gifEvery == 0) {
                 gif.writeFrame(plot.renderImage(gifSizePx, gifSizePx, scene));
             }
+            plot.awaitResume(); // after the gif, so pausing leaves the recording continuous
 
             if (++frame % reportEvery == 0) {
                 System.out.printf("[%3d deg] total %d ms | density %.2f ms/frame%n", degree,

@@ -707,6 +707,34 @@ public class RandomCutTreeTest {
 
     }
 
+    @Test
+    public void testRandomCutFollowsOracle() {
+        // sides 1 and 8, but the oracle gives the two dimensions chances 3:1
+        ArrayBox box = new ArrayBox(new float[] { 0, 0 }, new float[] { 1, 8 });
+        double[] oracle = new double[] { 3, 1 };
+        Cut cut = new Cut(0, 0);
+        tree.randomCut(0.5, null, box, oracle, false, cut); // 2 of 4: dimension 0, 2/3 along its side
+        assertEquals(0, cut.getDimension());
+        assertEquals(2.0 / 3, cut.getValue(), 1e-6);
+        tree.randomCut(0.9, null, box, oracle, false, cut); // 3.6 of 4: dimension 1, 0.6 along its side
+        assertEquals(1, cut.getDimension());
+        assertEquals(4.8, cut.getValue(), 1e-6);
+    }
+
+    @Test
+    public void testRandomCutOfUnion() {
+        // box [0,1]^2 and the point (4, 0.5): the union has sides 4 and 1
+        ArrayBox box = new ArrayBox(new float[] { 0, 0 }, new float[] { 1, 1 });
+        float[] point = new float[] { 4, 0.5f };
+        Cut cut = new Cut(0, 0);
+        tree.randomCut(0.5, point, box, null, true, cut); // 2.5 of 5: dimension 0 at 2.5, separating the point
+        assertEquals(0, cut.getDimension());
+        assertEquals(2.5, cut.getValue(), 1e-6);
+        tree.randomCut(0.9, point, box, null, true, cut); // 4.5 of 5: dimension 1, halfway along its side
+        assertEquals(1, cut.getDimension());
+        assertEquals(0.5, cut.getValue(), 1e-6);
+    }
+
     // the following are tested directly since they are unreachable
     @Test
     public void traverseTest() {

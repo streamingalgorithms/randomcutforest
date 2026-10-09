@@ -21,14 +21,22 @@ import java.io.File;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntSupplier;
+import java.util.stream.Collectors;
 
+import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
-import org.streamingalgorithms.randomcutforest.examples.plot.Contour;
+import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
+import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
+import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
@@ -54,6 +62,13 @@ import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
  * isotropic. The ray-frame aspect below is measured in the ray's own frame and
  * does not have that blind spot, so the two columns disagreeing is the point
  * rather than a defect.
+ *
+ * <p>
+ * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
+ * hides the ring, <b>t</b> the isolines drawn through the cut, <b>c</b> cycles
+ * the box drawn along the ray (GAP, CUT, PASSAGE, STOP, then off) and <b>e</b>
+ * shows or hides the tree ensemble behind it. The printed tables stay on the
+ * gap box whatever is drawn.
  */
 public class HalfImpact implements Example {
 
@@ -90,27 +105,8 @@ public class HalfImpact implements Example {
     private static final double LEAF_MIN_R = 1.4;
     private static final double LEAF_SCALE_R = 4.0;
 
-    /** Scalar density field: grid resolution, contour count, arrow lattice. */
+    /** Isolines: grid resolution and arrow lattice; see {@link CutIsolines}. */
     private static final int FIELD_GRID = 130;
-    private static final int CONTOURS = 6;
-    /**
-     * Quantile band the contour levels are drawn from. The lowest levels are the
-     * risky ones: most of the grid is far field, where the density is small and
-     * nearly flat, so a percent or two of Monte-Carlo variation across the trees
-     * moves a contour a long way and can close it into a loop. Raising CONTOUR_LO
-     * lifts the lowest contour out of that noise floor; more trees lowers the noise
-     * itself.
-     */
-    private static final double CONTOUR_LO = 0.35;
-    private static final double CONTOUR_HI = 0.97;
-    /**
-     * Levels for the isolines. Null derives them from this grid's own quantile band
-     * and prints them; paste those values back in here to compare two grids. A
-     * quantile is taken over whatever node set was sampled, so derived levels move
-     * with the resolution even when the field does not, and two grids deriving
-     * their own levels cannot be compared at all.
-     */
-    private static final double[] FIXED_LEVELS = null;
     private static final int ARROW_GRID = 15;
     private static final double ARROW_LENGTH = 0.13;
     private static final Color ISO = new Color(214, 148, 34);
@@ -118,11 +114,9 @@ public class HalfImpact implements Example {
 
     /**
      * Shading under the isolines. Cool and neutral so it does not compete with the
-     * warm lines drawn over it, and floored: the levels come from a quantile band
-     * starting at CONTOUR_LO, so band 1 covers 1 - CONTOUR_LO of the canvas by
-     * construction -- here mostly the flat far field. Painting from BAND_FLOOR up
-     * puts the ink on the wall, which is what the eye is looking for. The field is
-     * static, so this costs nothing beyond the grid already sampled.
+     * warm lines drawn over it, and floored: painting from BAND_FLOOR up starts
+     * inside the line that holds three quarters of the mass, which puts the ink on
+     * the wall. It costs nothing beyond the grid the lines are drawn from.
      */
     private static final Color BAND = new Color(70, 90, 120);
     private static final int BAND_FLOOR = 2;
@@ -142,6 +136,24 @@ public class HalfImpact implements Example {
     private static final double START_X = -2.2;
     private static final double END_X = 2.2;
     private static final int STEPS = 88;
+
+    // ------------------------------------------------------------------
+    // Additions: the ensemble behind the box, toggled live with e.
+    // ------------------------------------------------------------------
+
+    /**
+     * Draw every tree's box as a faint outline, the lead from the probe to the mean
+     * box centre, and the one-standard-deviation ellipse of the box centres. The
+     * averaged box is the mean of this cloud; the cloud is the swing.
+     */
+    private static final boolean GIF_SWING = true;
+    private static final Color LEAD = new Color(30, 30, 30);
+
+    /**
+     * The boxes the c key steps through, in the order of the averaged geometry's
+     * accessors.
+     */
+    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "STOP" };
 
     public static void main(String[] args) throws Exception {
         new HalfImpact().run();
@@ -177,10 +189,9 @@ public class HalfImpact implements Example {
         Plot2D plot = livePlot ? Plot2D.open("Half Impact - cut box along a ray", range, 860) : Plot2D.offscreen(range);
         GifWriter gif = saveGif ? new GifWriter(new File("half_impact.gif"), 60, true) : null;
 
-        // The ring never moves, so the density field is fixed for the whole run and is
-        // built once. Only the probe moves. Recomputing it per frame would be 17000
-        // queries a frame; this is 17000 once. The forest is primed first, since the
-        // step loop is what normally feeds it.
+        // The ring never moves, so the isolines are fixed for the whole run and are
+        // drawn once. Only the probe moves. The forest is primed first, since the step
+        // loop is what normally feeds it.
         for (int warm = 0; warm < 3; warm++) {
             for (float[] q : ring) {
                 forest.update(q);
@@ -190,23 +201,40 @@ public class HalfImpact implements Example {
         // The render loop blocks in awaitResume while paused, so a flag consulted at
         // scene-build time would not respond until the next step; a layer that checks
         // the flag when it draws responds to a bare repaint.
-        java.util.concurrent.atomic.AtomicBoolean topo = new java.util.concurrent.atomic.AtomicBoolean(true);
-        List<Layer> raw = densityField(forest, range);
+        AtomicBoolean topo = new AtomicBoolean(true);
+        List<Layer> raw = densityField(forest, range, randomSeed);
         List<Layer> field = new ArrayList<>();
         for (Layer inner : raw) {
-            field.add((g, vp) -> {
-                if (topo.get()) {
-                    inner.draw(g, vp);
-                }
-            });
+            field.add(Layers.when(topo::get, inner));
         }
         // The recording gets its own list rather than a temporarily flipped flag.
         // plot.render calls repaint, which is asynchronous, so the EDT can paint at
         // any moment -- including inside a window where the flag had been flipped for
         // the GIF. That is what made the isolines reappear a frame after pressing t.
         List<Layer> gifField = GIF_TOPO ? raw : List.of();
-        plot.bindKey(KeyEvent.VK_T, "halfimpact.topo", () -> topo.set(!topo.get()));
-        System.out.println("keys: space pauses, right arrow steps, t toggles the topo map");
+        plot.bindKey(KeyEvent.VK_T, "halfimpact.isolines", () -> topo.set(!topo.get()));
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "halfimpact.data", () -> showData.set(!showData.get()));
+        // The boxes in KINDS order, then off (-1). Everything that depends on the
+        // choice reads it when drawing, so it takes effect on a paused frame.
+        AtomicInteger boxKind = new AtomicInteger(0);
+        plot.bindKey(KeyEvent.VK_C, "halfimpact.boxkind",
+                () -> boxKind.set(boxKind.get() == KINDS.length - 1 ? -1 : boxKind.get() + 1));
+
+        // Additions: the ensemble toggle, gated at draw time like the isolines, and the
+        // per-tree factory behind it. The ensemble reuses the forest's own anisotropic
+        // visitor, so every faint box is exactly one tree's share of the averaged box
+        // drawn below.
+        AtomicBoolean swingOn = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_E, "halfimpact.swing", () -> swingOn.set(!swingOn.get()));
+        System.out.println("keys: space pauses, right arrow steps, d toggles the ring, t the isolines, "
+                + "c cycles the box (GAP/CUT/PASSAGE/STOP/off), e the tree ensemble");
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.TOP_LEFT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "ring", KeysLayer.onOff(showData::get))
+                .add("t", "isolines through the cut", KeysLayer.onOff(topo::get))
+                .add("c", "box along the ray", () -> boxKind.get() < 0 ? "off" : KINDS[boxKind.get()])
+                .add("e", "tree ensemble", KeysLayer.onOff(swingOn::get));
+        IVisitorFactory<InterpolationMeasure> perTreeBox = AnisotropicLocalVisitor.reusableFactory(1.0, true);
 
         List<Layer> tracks = new ArrayList<>();
         Instant start = Instant.now();
@@ -225,6 +253,8 @@ public class HalfImpact implements Example {
                 tracks.clear();
                 double aspectSum = 0;
                 int aspectCount = 0;
+                // Additions: one row of the ensemble per printed step.
+                List<String> swingRows = new ArrayList<>();
 
                 System.out.printf("%npass: heading %.0f deg, impact b = %.2f%n", ANGLES[a], b);
                 System.out.printf("%8s %9s %9s %9s %9s %9s %9s %9s%n", "t", "along", "across", "ray asp", "gap asp",
@@ -241,7 +271,19 @@ public class HalfImpact implements Example {
                     }
 
                     AnisotropicLocalGeometry out = forest.getAnisotropicGeometry(probe);
-                    double[] box = out.isReliable() ? out.gapBox() : null;
+                    // Every box c can draw, off the one walk; the tables read the gap box.
+                    double[][] boxes = out.isReliable()
+                            ? new double[][] { out.gapBox(), out.cutBox(), out.passageBox(), out.stopBox() }
+                            : null;
+                    double[] box = (boxes == null) ? null : boxes[0];
+
+                    // Additions: the per-tree boxes behind the averaged ones.
+                    Swing swing = Swing.of(forest.traverseForest(probe, perTreeBox, Collectors.toList()));
+                    if (step % ROW_EVERY == 0) {
+                        double[] gap = swing.moments(0);
+                        swingRows.add(String.format("%8.2f %9.4f %9.4f %9d", t, Swing.lead(gap), Swing.spread(gap),
+                                swing.boxes.size()));
+                    }
 
                     // The impact frontier. Every tree returns the leaf its own random cuts
                     // routed the probe to, merged across trees by point with Neighbor.count
@@ -284,8 +326,13 @@ public class HalfImpact implements Example {
                         // extents; for the diagonal pass they do not.
                         along = reach(box, ux, uy) + reach(box, -ux, -uy);
                         across = reach(box, nx, ny) + reach(box, -nx, -ny);
-                        tracks.add(boxOutline(px, py, new double[] { nn, nn, nn, nn }, NN_BOX));
-                        tracks.add(boxOutline(px, py, box, color));
+                        tracks.add(Layers.when(() -> boxKind.get() >= 0,
+                                boxOutline(px, py, new double[] { nn, nn, nn, nn }, NN_BOX)));
+                        for (int k = 0; k < boxes.length; k++) {
+                            int drawnKind = k;
+                            tracks.add(
+                                    Layers.when(() -> boxKind.get() == drawnKind, boxOutline(px, py, boxes[k], color)));
+                        }
                         aspectSum += out.getAnisotropy();
                         aspectCount++;
 
@@ -305,7 +352,7 @@ public class HalfImpact implements Example {
                     }
 
                     List<Layer> body = new ArrayList<>();
-                    body.add(Layers.dots(ring, new Color(140, 140, 140), 1.6));
+                    body.add(Layers.when(showData::get, Layers.dots(ring, new Color(140, 140, 140), 1.6)));
                     body.add(Layers.dashedPolyline(
                             new double[][] { { START_X * ux + b * nx, START_X * uy + b * ny },
                                     { END_X * ux + b * nx, END_X * uy + b * ny } },
@@ -315,24 +362,26 @@ public class HalfImpact implements Example {
                     body.add(Layers.weightedDots(leafXy, leafWeight, LEAF_CLOUD, LEAF_MIN_R, LEAF_SCALE_R));
                     body.addAll(tracks);
                     body.add(Layers.dots(new float[][] { probe }, Color.BLACK, 4));
-                    body.add(Layers.label(-range * 0.94, -range * 0.92,
-                            String.format("heading %.0f deg   b = %.2f   t = %+.2f   %s", ANGLES[a], b, t,
-                                    (box == null) ? "no single scale"
-                                            : (along + across == 0)
-                                                    ? String.format("inside the wall, no gap   nn-square %.3f", 2 * nn)
-                                                    : String.format("gap %.3f x %.3f  ray aspect %.2f   nn-square %.3f",
-                                                            along, across, (across > 0) ? along / across : 0, 2 * nn)),
-                            new Color(60, 60, 60)));
-                    body.add(Layers.legend(
-                            new String[] { "ring (data)", "density isolines", "directional density",
-                                    "leaves reached (area = tree votes)", "gap box (measured void)",
-                                    "nn-square (isotropic baseline)" },
-                            new Color[] { new Color(140, 140, 140), ISO, GRAD, LEAF_CLOUD, color, NN_BOX },
-                            new Layers.Swatch[] { Layers.Swatch.DOTS, Layers.Swatch.LINE, Layers.Swatch.LINE,
-                                    Layers.Swatch.DOTS, Layers.Swatch.BOX, Layers.Swatch.BOX }));
+                    // The readout and the legend name the box c has selected, so both are
+                    // chosen when drawing; one readout per box, and the last for none.
+                    String[] readouts = new String[KINDS.length + 1];
+                    for (int k = 0; k <= KINDS.length; k++) {
+                        readouts[k] = String.format("heading %.0f deg   b = %.2f   t = %+.2f   ", ANGLES[a], b, t)
+                                + readout(boxes, (k < KINDS.length) ? k : -1, nn, ux, uy, nx, ny);
+                    }
+                    body.add((g, vp) -> Layers
+                            .label(-range * 0.94, -range * 0.92,
+                                    readouts[(boxKind.get() < 0) ? KINDS.length : boxKind.get()], new Color(60, 60, 60))
+                            .draw(g, vp));
+                    body.add((g, vp) -> legend(boxKind.get(), swingOn.get(), color).draw(g, vp));
 
                     List<Layer> scene = new ArrayList<>(field);
                     scene.addAll(body);
+
+                    // Additions, drawn over the existing scene.
+                    Layer ensemble = swing.layer(px, py, color, boxKind::get);
+                    scene.add(Layers.when(swingOn::get, ensemble));
+                    scene.add(keys);
 
                     if (livePlot) {
                         plot.render(scene);
@@ -340,6 +389,9 @@ public class HalfImpact implements Example {
                     if (saveGif) {
                         List<Layer> gifScene = new ArrayList<>(gifField);
                         gifScene.addAll(body);
+                        if (GIF_SWING) {
+                            gifScene.add(ensemble);
+                        }
                         gif.writeFrame(plot.renderImage(gifSizePx, gifSizePx, gifScene));
                     }
                     if (livePlot) {
@@ -350,6 +402,14 @@ public class HalfImpact implements Example {
                     }
                 }
                 meanAspect[a][pass] = (aspectCount > 0) ? aspectSum / aspectCount : 0;
+
+                // Additions: the ensemble along this ray, on the gap box. lead is the mean
+                // offset of the box centres from the probe, swing their spread across trees.
+                System.out.printf("%nensemble, heading %.0f deg, b = %.2f%n", ANGLES[a], b);
+                System.out.printf("%8s %9s %9s %9s%n", "t", "lead", "swing", "trees");
+                for (String row : swingRows) {
+                    System.out.println(row);
+                }
             }
         }
 
@@ -374,44 +434,24 @@ public class HalfImpact implements Example {
     }
 
     /**
-     * The scalar density field as isolines, plus the directional density as arrows.
+     * The isolines drawn through the cut, shaded between the levels, plus the
+     * directional density as arrows.
      *
+     * <p>
+     * The isolines' reference is a fresh draw from the same annulus rather than the
+     * ring itself: the ring has been fed to the forest over and over, and a sample
+     * the forest has not been told about is the honest one to ask. The ring is
+     * static, so this is done once.
      */
-    private static List<Layer> densityField(RandomCutForest forest, double range) {
-        System.out.println("building the static density field...");
+    private static List<Layer> densityField(RandomCutForest forest, double range, long seed) {
+        System.out.println("building the static isolines...");
         double lo = -range * 0.95, span = 2 * range * 0.95;
-
-        // passageDensity, not the inherited getDensity: this example is named for
-        // the half crossing and everything drawn on it should come from that one
-        // scale rule. Mixing contours from the all-levels mean with boxes from
-        // the crossing would put two different estimators in one picture.
-        Contour.Field density = (x, y) -> forest.getAnisotropicGeometry(new float[] { (float) x, (float) y })
-                .passageDensity(0.001);
-
-        double[][] rho = Contour.sample(density, lo, span, FIELD_GRID);
-        // Levels at quantiles of the sampled field, not evenly spaced. The density
-        // spans orders of magnitude between the hollow interior and the wall, so even
-        // spacing would stack every contour on the wall.
-        double[] levels = (FIXED_LEVELS != null) ? FIXED_LEVELS
-                : Contour.quantileLevels(rho, CONTOURS, CONTOUR_LO, CONTOUR_HI);
-        if (FIXED_LEVELS == null) {
-            System.out.println("levels @ grid " + FIELD_GRID + ": " + java.util.Arrays.toString(levels));
+        CutIsolines lines = new CutIsolines(lo, span, FIELD_GRID, ISO).bands(BAND, BAND_FLOOR);
+        for (float[] p : annulus(RING_THICKNESS, seed + 1)) {
+            lines.add(p, forest.getAnisotropicGeometry(p).cutSpread());
         }
-
-        // Bands from the grid that already chose the levels, so they cost nothing,
-        // and they go in first so the isolines and arrows draw over them.
         List<Layer> out = new ArrayList<>();
-        out.add(bandLayer(rho, lo, span, levels, BAND));
-        out.addAll(Contour.isolines(density, rho, lo, span, levels, ISO));
-
-        // Same cells and levels the isolines walked. The saddle is the cell where four
-        // crossings admit two pairings with DIFFERENT topology: one separates the high
-        // corners, the other joins them. The textbook asymptotic decider takes the
-        // bilinear value at the centre, the mean of the corners, which assumes the
-        // field is bilinear inside the cell. It is not: this field comes from
-        // axis-aligned boxes and L1 geometry and can be queried anywhere, so Contour
-        // measures the centre instead. This counts how often that mattered.
-        int[] audit = Contour.saddleAudit(density, rho, lo, span, levels);
+        out.add(lines);
 
         List<double[]> origins = new ArrayList<>(), deltas = new ArrayList<>();
         for (int i = 0; i < ARROW_GRID; i++) {
@@ -430,12 +470,6 @@ public class HalfImpact implements Example {
             }
         }
         out.add(Layers.arrows(origins.toArray(new double[0][]), deltas.toArray(new double[0][]), GRAD, 1.0f));
-        System.out.printf(
-                "ambiguous saddle cells %d, of which the measured centre disagrees with the "
-                        + "bilinear guess in %d (%.1f%%)%n",
-                audit[0], audit[1], (audit[0] > 0) ? 100.0 * audit[1] / audit[0] : 0.0);
-        System.out.println("a high disagreement rate means the grid does not resolve the field, and any");
-        System.out.println("contour topology read off it -- including closed loops -- is unreliable.\n");
         return out;
     }
 
@@ -483,47 +517,58 @@ public class HalfImpact implements Example {
         System.out.println("ratio < 1 means the wall itself terminated it.\n");
     }
 
-    /**
-     * Fills each grid cell with the band its corner mean falls in. Reuses the grid
-     * already sampled to choose the levels, so it costs no density queries.
-     */
-    private static Layer bandLayer(double[][] v, double lo, double span, double[] levels, Color color) {
-        double[] sorted = java.util.Arrays.copyOf(levels, levels.length);
-        java.util.Arrays.sort(sorted);
-        int grid = v.length;
-        double h = span / (grid - 1.0);
-        return (g, vp) -> {
-            for (int i = 0; i + 1 < grid; i++) {
-                for (int j = 0; j + 1 < grid; j++) {
-                    double m = 0.25 * (v[i][j] + v[i + 1][j] + v[i][j + 1] + v[i + 1][j + 1]);
-                    int band = 0;
-                    // A NaN node falls through as band 0 and is skipped, which is
-                    // what an off-support cell should do.
-                    while (band < sorted.length && m > sorted[band]) {
-                        band++;
-                    }
-                    if (band < BAND_FLOOR) {
-                        continue;
-                    }
-                    int x0 = (int) Math.round(vp.px(lo + h * i));
-                    int x1 = (int) Math.round(vp.px(lo + h * (i + 1)));
-                    int y0 = (int) Math.round(vp.py(lo + h * (j + 1)));
-                    int y1 = (int) Math.round(vp.py(lo + h * j));
-                    int span2 = Math.max(1, sorted.length - BAND_FLOOR);
-                    g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(),
-                            9 + 25 * (band - BAND_FLOOR) / span2));
-                    // +1 closes the hairline seam that rounding leaves between cells.
-                    g.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-                }
-            }
-        };
-    }
-
     /** Distance from the box centre to its wall along a unit direction. */
     private static double reach(double[] box, double ux, double uy) {
         double tx = (ux == 0) ? Double.MAX_VALUE : ((ux > 0) ? box[2] : box[0]) / Math.abs(ux);
         double ty = (uy == 0) ? Double.MAX_VALUE : ((uy > 0) ? box[3] : box[1]) / Math.abs(uy);
         return Math.min(tx, ty);
+    }
+
+    /**
+     * The readout along the bottom for the box c has selected, measured in the
+     * ray's own frame: reach along the ray and across it, as ray-box intersections,
+     * so the diagonal pass is not read in x and y. kind -1 is off.
+     */
+    private static String readout(double[][] boxes, int kind, double nn, double ux, double uy, double nx, double ny) {
+        if (boxes == null) {
+            return "no single scale";
+        }
+        if (kind < 0) {
+            return "";
+        }
+        double[] box = boxes[kind];
+        double along = reach(box, ux, uy) + reach(box, -ux, -uy);
+        double across = reach(box, nx, ny) + reach(box, -nx, -ny);
+        String name = KINDS[kind].toLowerCase();
+        if (along + across == 0) {
+            return String.format("inside the wall, no %s   nn-square %.3f", name, 2 * nn);
+        }
+        return String.format("%s %.3f x %.3f  ray aspect %.2f   nn-square %.3f", name, along, across,
+                (across > 0) ? along / across : 0, 2 * nn);
+    }
+
+    /** The key; its box rows name the box c has selected and go when c is off. */
+    private static Layer legend(int kind, boolean ensemble, Color track) {
+        List<String> labels = new ArrayList<>(List.of("ring (data)", "isolines through the cut", "directional density",
+                "leaves reached (area = tree votes)"));
+        List<Color> colors = new ArrayList<>(List.of(new Color(140, 140, 140), ISO, GRAD, LEAF_CLOUD));
+        List<Layers.Swatch> swatches = new ArrayList<>(
+                List.of(Layers.Swatch.DOTS, Layers.Swatch.LINE, Layers.Swatch.LINE, Layers.Swatch.DOTS));
+        if (kind >= 0) {
+            labels.add((kind == 0) ? "gap box (measured void)" : KINDS[kind].toLowerCase() + " box");
+            colors.add(track);
+            swatches.add(Layers.Swatch.BOX);
+            labels.add("nn-square (isotropic baseline)");
+            colors.add(NN_BOX);
+            swatches.add(Layers.Swatch.BOX);
+            if (ensemble) {
+                labels.add("each tree's box, lead and swing");
+                colors.add(LEAD);
+                swatches.add(Layers.Swatch.LINE);
+            }
+        }
+        return Layers.legend(labels.toArray(new String[0]), colors.toArray(new Color[0]),
+                swatches.toArray(new Layers.Swatch[0]));
     }
 
     /** One box as a closed outline, drawn at true scale in data units. */
@@ -533,5 +578,129 @@ public class HalfImpact implements Example {
         double x0 = x - box[0], x1 = x + box[2], y0 = y - box[1], y1 = y + box[3];
         return Layers.polyline(new double[][] { { x0, y0 }, { x1, y0 }, { x1, y1 }, { x0, y1 }, { x0, y0 } },
                 new Color(color.getRed(), color.getGreen(), color.getBlue(), 90), true, 0, 1.0f);
+    }
+
+    // ------------------------------------------------------------------
+    // Additions: the ensemble.
+    // ------------------------------------------------------------------
+
+    /**
+     * The ensemble behind the averaged box: every tree's boxes, centred on the
+     * probe exactly as boxOutline draws them, the mean offset of a box's centres
+     * from the probe (the lead), and the covariance of those centres (the swing).
+     *
+     * <p>
+     * Far from the data every tree separates the probe high up, against faces that
+     * nested boxes share, so the trees agree and the lead is long. Close in,
+     * nesting shortens the lead. Where the trees disagree about the level at which
+     * the probe is cut off, the centres scatter: that scatter, not the averaged
+     * box, is the uncertainty under the ensemble.
+     */
+    static final class Swing {
+        /** Per tree, its boxes in KINDS order. */
+        final List<double[][]> boxes = new ArrayList<>();
+
+        static Swing of(List<InterpolationMeasure> perTree) {
+            Swing s = new Swing();
+            for (InterpolationMeasure m : perTree) {
+                AnisotropicLocalGeometry one = new AnisotropicLocalGeometry(m);
+                if (one.getScales().getTreeCount() > 0) {
+                    s.boxes.add(new double[][] { one.gapBox(), one.cutBox(), one.passageBox(), one.stopBox() });
+                }
+            }
+            return s;
+        }
+
+        /** {lead x, lead y, cxx, cxy, cyy} of the centres of one kind of box. */
+        double[] moments(int kind) {
+            double[] m = new double[5];
+            int n = boxes.size();
+            if (n == 0) {
+                return m;
+            }
+            for (double[][] tree : boxes) {
+                double[] box = tree[kind]; // {high_x, high_y, low_x, low_y}
+                m[0] += 0.5 * (box[2] - box[0]) / n;
+                m[1] += 0.5 * (box[3] - box[1]) / n;
+            }
+            for (double[][] tree : boxes) {
+                double[] box = tree[kind];
+                double dx = 0.5 * (box[2] - box[0]) - m[0];
+                double dy = 0.5 * (box[3] - box[1]) - m[1];
+                m[2] += dx * dx / n;
+                m[3] += dx * dy / n;
+                m[4] += dy * dy / n;
+            }
+            return m;
+        }
+
+        static double lead(double[] m) {
+            return Math.hypot(m[0], m[1]);
+        }
+
+        static double spread(double[] m) {
+            return Math.sqrt(Math.max(0.0, m[2] + m[4]));
+        }
+
+        /**
+         * The cloud of per-tree boxes of the kind c has selected, the lead arrow, and
+         * the swing ellipse; nothing while c is off.
+         */
+        Layer layer(double px, double py, Color color, IntSupplier kind) {
+            List<double[][]> frozen = new ArrayList<>(boxes);
+            double[][] stats = new double[KINDS.length][];
+            for (int k = 0; k < KINDS.length; k++) {
+                stats[k] = moments(k);
+            }
+            Color faint = new Color(color.getRed(), color.getGreen(), color.getBlue(), 34);
+            return (g, vp) -> {
+                int k = kind.getAsInt();
+                if (k < 0) {
+                    return;
+                }
+                Stroke old = g.getStroke();
+                g.setStroke(new BasicStroke(0.8f));
+                g.setColor(faint);
+                for (double[][] tree : frozen) {
+                    double[] box = tree[k];
+                    double x0 = vp.px(px - box[0]);
+                    double x1 = vp.px(px + box[2]);
+                    double y0 = vp.py(py + box[3]);
+                    double y1 = vp.py(py - box[1]);
+                    g.draw(new java.awt.geom.Rectangle2D.Double(x0, y0, Math.max(1.0, x1 - x0),
+                            Math.max(1.0, y1 - y0)));
+                }
+                g.setStroke(old);
+                double[] m = stats[k];
+                if (lead(m) > 0) {
+                    Layers.arrows(new double[][] { { px, py } }, new double[][] { { m[0], m[1] } }, LEAD, 1.8f).draw(g,
+                            vp);
+                }
+                if (spread(m) > 0) {
+                    Layers.polyline(ellipse(px + m[0], py + m[1], m), LEAD, true, 0, 1.2f).draw(g, vp);
+                }
+            };
+        }
+
+        /** The one-standard-deviation ellipse of the box centres, around (cx, cy). */
+        private static double[][] ellipse(double cx, double cy, double[] m) {
+            double tr = m[2] + m[4];
+            double det = m[2] * m[4] - m[3] * m[3];
+            double disc = Math.sqrt(Math.max(0.0, 0.25 * tr * tr - det));
+            double a1 = Math.sqrt(0.5 * tr + disc);
+            double a2 = Math.sqrt(Math.max(0.0, 0.5 * tr - disc));
+            double angle = 0.5 * Math.atan2(2 * m[3], m[2] - m[4]);
+            double ca = Math.cos(angle);
+            double sa = Math.sin(angle);
+            double[][] pts = new double[49][2];
+            for (int k = 0; k <= 48; k++) {
+                double th = 2 * Math.PI * k / 48;
+                double u = a1 * Math.cos(th);
+                double v = a2 * Math.sin(th);
+                pts[k][0] = cx + ca * u - sa * v;
+                pts[k][1] = cy + sa * u + ca * v;
+            }
+            return pts;
+        }
     }
 }

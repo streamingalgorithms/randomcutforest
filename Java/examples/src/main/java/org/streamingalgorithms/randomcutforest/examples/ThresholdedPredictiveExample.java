@@ -21,16 +21,19 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
 import static org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData.multiDimData;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.examples.datasets.MultiDimData;
 import org.streamingalgorithms.randomcutforest.examples.plot.GifWriter;
+import org.streamingalgorithms.randomcutforest.examples.plot.KeysLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layer;
 import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
@@ -38,7 +41,7 @@ import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCut
 import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 
 /* the following example is an alerting example based on the sum of multiple time series where each time series is forecasted and then we add the forecasts; the final alerting corresponds to a predicted "cross". The graphics shows the colored lines for the predicted and actual crossings of the (dynamic) threshold.
-*/
+ */
 public class ThresholdedPredictiveExample implements Example {
 
     public static void main(String[] args) throws Exception {
@@ -125,6 +128,12 @@ public class ThresholdedPredictiveExample implements Example {
                 ? Plot2D.openRect("ThresholdedPredictive — aggregate crossing", 0, length, ymin, ymax, 1100, 600)
                 : Plot2D.offscreenRect(0, length, ymin, ymax);
         GifWriter gif = saveGif ? new GifWriter(new File("thresholded_predictive.gif"), gifDelayMs, true) : null;
+        // d shows or hides the data, read when drawing; space pauses and right arrow
+        // steps, as in every Plot2D window
+        AtomicBoolean showData = new AtomicBoolean(true);
+        plot.bindKey(KeyEvent.VK_D, "predictive.data", () -> showData.set(!showData.get()));
+        KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_RIGHT).add("space", "pause", null)
+                .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get));
 
         Color cAgg = Color.BLACK, cFore = new Color(31, 119, 180), cThresh = new Color(150, 150, 150);
         Color cPred = new Color(0, 220, 60, 110); // bright green, translucent
@@ -183,7 +192,7 @@ public class ThresholdedPredictiveExample implements Example {
             if ((livePlot || saveGif) && i % frameEvery == 0) {
                 List<Layer> scene = new ArrayList<>();
                 scene.add(Layers.polyline(thrLine, cThresh, false, 0, 1.0f));
-                scene.add(Layers.polyline(aggLine, cAgg, false, 0, 1.0f));
+                scene.add(Layers.when(showData::get, Layers.polyline(aggLine, cAgg, false, 0, 1.0f)));
                 if (i > sampleSize) {
                     double[][] fLine = new double[horizon][2];
                     for (int t = 0; t < horizon; t++) {
@@ -204,6 +213,7 @@ public class ThresholdedPredictiveExample implements Example {
                 scene.add(Layers.vline(i, new Color(110, 110, 110), 1.5f));
                 scene.add(Layers.legend(new String[] { "Aggregate", "Forecast (sum)", "Threshold", "Predicted crossing",
                         "Actual crossing" }, new Color[] { cAgg, cFore, cThresh, cPred, cActual }));
+                scene.add(keys);
 
                 if (livePlot) {
                     plot.render(scene);
@@ -214,6 +224,7 @@ public class ThresholdedPredictiveExample implements Example {
                 if (saveGif) {
                     gif.writeFrame(plot.renderImage(1000, 540, scene));
                 }
+                plot.awaitResume(); // after the gif, so pausing leaves the recording continuous
             }
         }
 

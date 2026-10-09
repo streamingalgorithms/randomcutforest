@@ -23,7 +23,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor.DEFAULT_SCORE_FACTORY;
-import static org.streamingalgorithms.randomcutforest.interpolation.AnisotropicDisplacementVisitor.DEFAULT_MASS_EXPONENT;
+import static org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor.DEFAULT_MASS_EXPONENT;
 import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.DEFAULT_SEPARATION_RATIO_FOR_MERGE;
 
@@ -54,7 +54,7 @@ import org.streamingalgorithms.randomcutforest.executor.SequentialForestUpdateEx
 import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSummarizer;
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
-import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicDisplacementVisitor;
+import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.*;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
@@ -294,7 +294,7 @@ public class RandomCutForest {
         this.stateCoordinator = stateCoordinator;
         this.components = components;
         this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
-        this.anisotropicFactory = AnisotropicDisplacementVisitor.reusableFactory(1.0, centerOfMassEnabled,
+        this.anisotropicFactory = AnisotropicLocalVisitor.reusableFactory(1.0, centerOfMassEnabled,
                 DEFAULT_MASS_EXPONENT);
         initExecutors(stateCoordinator, components);
     }
