@@ -1165,6 +1165,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
         checkNotNull(visitorFactory, "visitor must not be null");
         Visitor<R> visitor = visitorFactory.newVisitor(this, point);
         NodeView currentNodeView = new NodeView(this, pointStoreView, root, point);
+        currentNodeView.rearm(this, root, visitor.needsGap());
         traversePathToLeafAndVisitNodes(point, visitor, currentNodeView, root, 0, 0);
         return visitorFactory.liftResult(this, visitor.getResult());
     }

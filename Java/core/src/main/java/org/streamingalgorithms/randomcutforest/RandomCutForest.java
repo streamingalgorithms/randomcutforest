@@ -293,9 +293,7 @@ public class RandomCutForest {
         }
         this.stateCoordinator = stateCoordinator;
         this.components = components;
-        this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
-        this.anisotropicFactory = AnisotropicLocalVisitor.reusableFactory(1.0, centerOfMassEnabled,
-                DEFAULT_MASS_EXPONENT);
+
         initExecutors(stateCoordinator, components);
     }
 
@@ -361,6 +359,9 @@ public class RandomCutForest {
         } else {
             threadPoolSize = 0;
         }
+        this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
+        this.anisotropicFactory = AnisotropicLocalVisitor.reusableFactory(1.0, centerOfMassEnabled,
+                DEFAULT_MASS_EXPONENT);
     }
 
     /**

@@ -261,6 +261,12 @@ public class PredictorCorrector {
                     likelyMissingIndices[count++] = position + i;
                 }
             }
+            // pick counts against min(0.1 * sum, 0.1) but the loop above selects against
+            // 0.1 * sum; when sum > 1 fewer may be selected, and the unfilled entries
+            // (index 0) must not be imputed
+            if (count < pick) {
+                likelyMissingIndices = Arrays.copyOf(likelyMissingIndices, count);
+            }
         }
         if (likelyMissingIndices.length > 0.5 * forest.getDimensions()) {
             return null;
@@ -885,8 +891,10 @@ public class PredictorCorrector {
                                 result.setCorrectionMode(CorrectionMode.ANOMALY_IN_SHINGLE);
                             }
                         } else {
-                            // attribution will not be used
-                            correctedScore = getNewScore(choice, point, forest);
+
+                            // attribution will not be used; the score of the expected point is the
+                            // corrected score (as before 3.8, which scored the original point here)
+                            correctedScore = getNewScore(choice, expectedPoint, forest);
                         }
 
                         if (workingGrade > 0 && withinGap(uncertaintyBox, startPosition, result.getScale(), point,
@@ -1178,5 +1186,6 @@ public class PredictorCorrector {
         checkArgument(sampling >= 0, " cannot be negative ");
         checkArgument(sampling < 2 * DEFAULT_SAMPLING_SUPPORT,
                 " cannot be more than " + (2 * DEFAULT_SAMPLING_SUPPORT));
+        this.samplingSupport = sampling;
     }
 }

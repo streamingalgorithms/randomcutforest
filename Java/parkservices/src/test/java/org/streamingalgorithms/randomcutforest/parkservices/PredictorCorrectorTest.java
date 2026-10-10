@@ -26,12 +26,17 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.config.TransformMethod.NORMALIZE;
 import static org.streamingalgorithms.randomcutforest.parkservices.PredictorCorrector.DEFAULT_SAMPLING_SUPPORT;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 import org.junit.jupiter.api.Test;
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
+import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
+import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFComputeDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.state.predictorcorrector.PredictorCorrectorMapper;
 import org.streamingalgorithms.randomcutforest.parkservices.threshold.BasicThresholder;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
@@ -103,6 +108,7 @@ public class PredictorCorrectorTest {
 
         PredictorCorrectorMapper mapper = new PredictorCorrectorMapper();
         PredictorCorrector copy = mapper.toModel(mapper.toState(predictorCorrector));
+        assertEquals(1.5 * DEFAULT_SAMPLING_SUPPORT, copy.getSamplingSupport(), 1e-12);
         assertArrayEquals(copy.ignoreNearExpectedFromAbove, testOne, 1e-10);
         assertArrayEquals(copy.ignoreNearExpectedFromBelow, testTwo, 1e-10);
         assertArrayEquals(copy.ignoreNearExpectedFromAboveByRatio, testThree, 1e-10);
@@ -182,5 +188,85 @@ public class PredictorCorrectorTest {
         double[] scores = forest.getPredictorCorrector().getLastScore();
         forest.predictorCorrector.setLastScore(null);
         assertArrayEquals(forest.predictorCorrector.getLastScore(), scores, 1e-6);
+    }
+
+    @Test
+    public void expectedPointImputesOnlySelectedCoordinates() {
+        List<int[]> asked = new ArrayList<>();
+        RandomCutForest forest = new RandomCutForest(RandomCutForest.builder().dimensions(6).randomSeed(1)) {
+            @Override
+            public float[] imputeMissingValues(float[] point, int numberOfMissingValues, int[] missingIndexes) {
+                asked.add(Arrays.copyOf(missingIndexes, missingIndexes.length));
+                return point;
+            }
+        };
+        PredictorCorrector predictorCorrector = new PredictorCorrector(0.01, 0.005, false, 3, 0L);
+        // two blocks of three; the block at position 3 is blamed. With a block total
+        // above 1, contributors are counted against 0.1 but selected against 10% of the
+        // total, so only the first is selected; nothing else may be imputed.
+        DiVector large = new DiVector(6);
+        large.high[3] = 5;
+        large.high[4] = 0.5;
+        large.high[5] = 0.3;
+        predictorCorrector.getExpectedPoint(large, 3, 3, new float[6], forest);
+        assertArrayEquals(new int[] { 3 }, asked.get(0));
+        // with a total below 1 both thresholds agree
+        DiVector small = new DiVector(6);
+        small.high[3] = 0.5;
+        small.high[4] = 0.2;
+        small.high[5] = 0.05;
+        predictorCorrector.getExpectedPoint(small, 3, 3, new float[6], forest);
+        assertArrayEquals(new int[] { 3, 4 }, asked.get(1));
+    }
+
+    @Test
+    public void expectedPointIsScoredWhenTheLastAnomalyIsAShingleAgo() {
+        int baseDimension = 2;
+        int shingleSize = 4;
+        int dimensions = baseDimension * shingleSize;
+        float[] point = new float[dimensions];
+        Arrays.fill(point, 1.0f);
+        point[dimensions - baseDimension] = 9.0f; // the newest block holds the anomaly
+        float[] expected = Arrays.copyOf(point, dimensions);
+        expected[dimensions - baseDimension] = 1.0f;
+        List<float[]> scored = new ArrayList<>();
+        RandomCutForest forest = new RandomCutForest(RandomCutForest.builder().dimensions(dimensions).randomSeed(1)) {
+            @Override
+            public double getAnomalyScore(float[] p) {
+                scored.add(Arrays.copyOf(p, p.length));
+                return Arrays.equals(p, point) ? 5.0 : 0.5;
+            }
+
+            @Override
+            public DiVector getAnomalyAttribution(float[] p) {
+                DiVector attribution = new DiVector(dimensions);
+                attribution.high[dimensions - baseDimension] = 5.0;
+                return attribution;
+            }
+
+            @Override
+            public float[] imputeMissingValues(float[] p, int numberOfMissingValues, int[] missingIndexes) {
+                return Arrays.copyOf(expected, expected.length);
+            }
+        };
+        PredictorCorrector predictorCorrector = new PredictorCorrector(0.01, 0.005, false, baseDimension, 0L);
+        AnomalyDescriptor result = new AnomalyDescriptor(new double[baseDimension], 100L);
+        result.setScoringStrategy(ScoringStrategy.EXPECTED_INVERSE_DEPTH);
+        result.setRCFPoint(point);
+        result.setShingleSize(shingleSize);
+        result.setDimension(dimensions);
+        result.setInternalTimeStamp(100L);
+        result.setTransformMethod(TransformMethod.NONE);
+        result.setScale(new double[] { 1.0, 1.0 });
+        result.setShift(new double[baseDimension]);
+        result.setDeviations(new double[2 * baseDimension]);
+        // the last anomaly is far more than a shingle ago
+        predictorCorrector.detect(result, new RCFComputeDescriptor(null, 0L), forest);
+
+        assertTrue(result.getAnomalyGrade() > 0);
+        // first the point itself, then the expected point (not the point again)
+        assertEquals(2, scored.size());
+        assertArrayEquals(point, scored.get(0));
+        assertArrayEquals(expected, scored.get(1));
     }
 }

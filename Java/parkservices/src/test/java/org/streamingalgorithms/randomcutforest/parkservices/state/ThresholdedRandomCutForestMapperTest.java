@@ -37,6 +37,7 @@ import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
+import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
 import org.streamingalgorithms.randomcutforest.parkservices.returntypes.RCFComputeDescriptor;
 import org.streamingalgorithms.randomcutforest.returntypes.TimedRangeVector;
 import org.streamingalgorithms.randomcutforest.state.RandomCutForestMapper;
@@ -215,6 +216,42 @@ public class ThresholdedRandomCutForestMapperTest {
             assertEquals(firstResult.getRCFScore(), thirdResult.getRCFScore(), 1e-6);
             assertEquals(firstResult.getDataConfidence(), thirdResult.getDataConfidence(), 1e-6);
             forest.update(point);
+        }
+    }
+
+    /**
+     * A restored model must keep working under every scoring strategy; the distance
+     * strategies need the forest's density factory, which a restored forest once
+     * lacked. Restored and original must also agree from then on.
+     */
+    @ParameterizedTest
+    @EnumSource(ScoringStrategy.class)
+    public void testRoundTripScoringStrategy(ScoringStrategy strategy) {
+        int sampleSize = 256;
+        int baseDimensions = 2;
+        int shingleSize = 4;
+        int dimensions = baseDimensions * shingleSize;
+        long seed = new Random().nextLong();
+        System.out.println(" seed " + seed);
+        ThresholdedRandomCutForest first = new ThresholdedRandomCutForest.Builder<>().dimensions(dimensions)
+                .randomSeed(seed).internalShinglingEnabled(true).shingleSize(shingleSize).anomalyRate(0.01)
+                .scoringStrategy(strategy).build();
+        MultiDimDataWithKey dataWithKeys = ShingledMultiDimDataWithKeys.getMultiDimData(4 * sampleSize, 50, 100, 5,
+                seed, baseDimensions);
+        long count = 0;
+        for (double[] point : dataWithKeys.data) {
+            first.process(point, count++);
+        }
+        ThresholdedRandomCutForestMapper mapper = new ThresholdedRandomCutForestMapper();
+        ThresholdedRandomCutForest second = mapper.toModel(mapper.toState(first));
+        MultiDimDataWithKey testData = ShingledMultiDimDataWithKeys.getMultiDimData(100, 50, 100, 5, seed + 1,
+                baseDimensions);
+        for (double[] point : testData.data) {
+            AnomalyDescriptor firstResult = first.process(point, count);
+            AnomalyDescriptor secondResult = second.process(point, count);
+            ++count;
+            assertEquals(firstResult.getRCFScore(), secondResult.getRCFScore(), 1e-6);
+            assertEquals(firstResult.getAnomalyGrade(), secondResult.getAnomalyGrade(), 1e-6);
         }
     }
 
