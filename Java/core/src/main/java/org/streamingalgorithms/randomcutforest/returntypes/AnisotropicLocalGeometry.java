@@ -15,236 +15,264 @@
 
 package org.streamingalgorithms.randomcutforest.returntypes;
 
-import static org.streamingalgorithms.randomcutforest.returntypes.DensityOutput.DEFAULT_SUM_OF_POINTS_SCALING_FACTOR;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
+
+import java.util.Arrays;
+
+import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
 
 /**
- * DensityOutput plus tree-averaged boxes recorded at local cut-probability or
- * mass crossings.
+ * The local geometry of a query, as the trees of a forest read it at three
+ * nested boxes on their paths (see {@link LocalGeometryConfig}): the cut box,
+ * the passage box, and the reading box. Each is a {@link LocalBox}, averaged
+ * over the trees before any ratio is taken.
  *
+ * <p>
+ * The lead and the swing describe the gap box of each tree's cut box: the void
+ * between the query and the face of the data box it lies beyond, into which
+ * that tree's next cut would fall. The lead is the mean over trees of the
+ * offset from the query to the centre of that box, and the swing the covariance
+ * of those centres across trees.
+ *
+ * <p>
+ * Immutable. It holds sums over trees and divides on the way out, so
+ * {@link #merge} is exact addition and two partial results merge in any order.
+ * Every accessor returns a fresh array. All lengths are in the coordinates of
+ * the tree, in double.
  */
-public class AnisotropicLocalGeometry extends InterpolationMeasure {
+public final class AnisotropicLocalGeometry {
 
-    public AnisotropicLocalGeometry(int dimensions, double sampleSize) {
-        super(dimensions, (int) sampleSize);
-        this.scales = new FirstPassageScales(dimensions);
+    /**
+     * Index of the cut box in the per-box arrays of {@link Accumulator#addTree}.
+     */
+    public static final int CUT = 0;
+    /** Index of the passage box. */
+    public static final int PASSAGE = 1;
+    /** Index of the reading box. */
+    public static final int READING = 2;
+    public static final int BOXES = 3;
+
+    private final LocalGeometryConfig config;
+    private final int dimensions;
+    private final int treeCount;
+    private final double treeMassSum;
+    private final double[] reachSum; // BOXES * 2d, box-major
+    private final double[] gapSum;
+    private final double[] massSum; // BOXES
+    private final double[] cutSum;
+    private final int[] capped;
+    private final double[] centreSum; // d
+    private final double[] centreProducts; // i <= j, packed by rows
+
+    private AnisotropicLocalGeometry(Accumulator a) {
+        this.config = a.config;
+        this.dimensions = a.dimensions;
+        this.treeCount = a.treeCount;
+        this.treeMassSum = a.treeMassSum;
+        this.reachSum = a.reachSum.clone();
+        this.gapSum = a.gapSum.clone();
+        this.massSum = a.massSum.clone();
+        this.cutSum = a.cutSum.clone();
+        this.capped = a.capped.clone();
+        this.centreSum = a.centreSum.clone();
+        this.centreProducts = a.centreProducts.clone();
+    }
+
+    /** No trees: every box is empty and {@link #isEmpty()} is true. */
+    public static AnisotropicLocalGeometry empty(int dimensions, LocalGeometryConfig config) {
+        return new Accumulator(dimensions, config).toGeometry();
     }
 
     /**
-     * Wraps a folded measure. The scales ride on the base class, so they survive an
-     * accumulator seeded with a plain InterpolationMeasure; this constructor only
-     * fixes the type at the end, exactly as DensityOutput does.
+     * The geometry of the trees of both, which must share dimensions and
+     * configuration.
      */
-    public AnisotropicLocalGeometry(InterpolationMeasure base) {
-        super(base, true);
-        if (this.scales == null) {
-            // no anisotropic visitor ran, or every tree converged immediately
-            this.scales = new FirstPassageScales(getDimensions());
+    public static AnisotropicLocalGeometry merge(AnisotropicLocalGeometry left, AnisotropicLocalGeometry right) {
+        Accumulator a = new Accumulator(left.dimensions, left.config);
+        a.add(left);
+        a.add(right);
+        return a.toGeometry();
+    }
+
+    public LocalGeometryConfig getConfig() {
+        return config;
+    }
+
+    public int getDimensions() {
+        return dimensions;
+    }
+
+    public int getTreeCount() {
+        return treeCount;
+    }
+
+    /** True when no tree contributed. */
+    public boolean isEmpty() {
+        return treeCount == 0;
+    }
+
+    /** Mean tree mass, the psi of the configuration's masses. */
+    public double getTreeMass() {
+        return (treeCount > 0) ? treeMassSum / treeCount : 0.0;
+    }
+
+    public LocalBox cut() {
+        return box(CUT);
+    }
+
+    public LocalBox passage() {
+        return box(PASSAGE);
+    }
+
+    public LocalBox reading() {
+        return box(READING);
+    }
+
+    private LocalBox box(int which) {
+        int len = 2 * dimensions;
+        double[] reach = new double[len];
+        double[] gap = new double[len];
+        double n = Math.max(1, treeCount);
+        for (int k = 0; k < len; k++) {
+            reach[k] = reachSum[which * len + k] / n;
+            gap[k] = gapSum[which * len + k] / n;
         }
+        return new LocalBox(reach, gap, massSum[which] / n, cutSum[which] / n, capped[which]);
+    }
+
+    /**
+     * Mean offset, axis by axis, from the query to the centre of each tree's gap
+     * box.
+     */
+    public double[] lead() {
+        double[] out = new double[dimensions];
+        for (int i = 0; i < dimensions && treeCount > 0; i++) {
+            out[i] = centreSum[i] / treeCount;
+        }
+        return out;
+    }
+
+    /** Covariance across trees of the gap-box centre, d by d; zero for one tree. */
+    public double[][] swing() {
+        double[][] out = new double[dimensions][dimensions];
+        if (treeCount == 0) {
+            return out;
+        }
+        double[] mean = lead();
+        int k = 0;
+        for (int i = 0; i < dimensions; i++) {
+            for (int j = i; j < dimensions; j++) {
+                double value = centreProducts[k++] / treeCount - mean[i] * mean[j];
+                out[i][j] = value;
+                out[j][i] = value;
+            }
+        }
+        return out;
     }
 
     @Override
-    public FirstPassageScales getScales() {
-        return scales;
-    }
-
-    // ------------------------------------------------------------------
-    // the box
-    // ------------------------------------------------------------------
-
-    /** Query-relative extents, high followed by low, averaged across trees. */
-    public double[] cutBox() {
-        return scales.cutBox();
+    public String toString() {
+        return "AnisotropicLocalGeometry[trees=" + treeCount + ", cut=" + cut() + ", passage=" + passage()
+                + ", reading=" + reading() + ", lead=" + Arrays.toString(lead()) + "]";
     }
 
     /**
-     * Covariance across trees of the cut box's centre, d by d. The mean of that
-     * centre, the centre of {@link #cutBox()}, says where the trees place the
-     * query's cut box; this says how far they disagree, and in which directions.
+     * The mutable sums a visitor folds trees into; not a result. Allocation free
+     * per tree: {@link #addTree} reads its arrays and keeps nothing.
      */
-    public double[][] cutSpread() {
-        return scales.cutSpread();
-    }
+    public static final class Accumulator {
+        private final LocalGeometryConfig config;
+        private final int dimensions;
+        private final int len;
+        private int treeCount;
+        private double treeMassSum;
+        private final double[] reachSum;
+        private final double[] gapSum;
+        private final double[] massSum;
+        private final double[] cutSum;
+        private final int[] capped;
+        private final double[] centreSum;
+        private final double[] centreProducts;
 
-    public double[] gapBox() {
-        return scales.gapBox();
-    }
-
-    public double[] passageBox() {
-        return scales.passageBox();
-    }
-
-    public double[] stopBox() {
-        return scales.stopBox();
-    }
-
-    /** Full width along each axis: L_high + L_low. */
-    public double[] getAxisExtents() {
-        int d = getDimensions();
-        double[] box = cutBox();
-        double[] widths = new double[d];
-        for (int i = 0; i < d; i++) {
-            widths[i] = box[i] + box[i + d];
+        public Accumulator(int dimensions, LocalGeometryConfig config) {
+            checkArgument(dimensions > 0, "dimensions must be greater than 0");
+            checkNotNull(config, "config must not be null");
+            this.config = config;
+            this.dimensions = dimensions;
+            this.len = 2 * dimensions;
+            reachSum = new double[BOXES * len];
+            gapSum = new double[BOXES * len];
+            massSum = new double[BOXES];
+            cutSum = new double[BOXES];
+            capped = new int[BOXES];
+            centreSum = new double[dimensions];
+            centreProducts = new double[dimensions * (dimensions + 1) / 2];
         }
-        return widths;
-    }
 
-    public double[] passageAxis() {
-        double[] box = passageBox();
-        int d = getDimensions();
-        double[] widths = new double[d];
-        for (int i = 0; i < d; i++) {
-            widths[i] = box[i] + box[i + d];
+        public void clear() {
+            treeCount = 0;
+            treeMassSum = 0.0;
+            Arrays.fill(reachSum, 0.0);
+            Arrays.fill(gapSum, 0.0);
+            Arrays.fill(massSum, 0.0);
+            Arrays.fill(cutSum, 0.0);
+            Arrays.fill(capped, 0);
+            Arrays.fill(centreSum, 0.0);
+            Arrays.fill(centreProducts, 0.0);
         }
-        return widths;
-    }
 
-    /**
-     * Per-axis asymmetry (L_high - L_low) / (L_high + L_low), in [-1, 1]. This is
-     * the odd-parity part of the neighbourhood, which no symmetric rank-2 density
-     * tensor can represent: it says the mass sits preferentially on one side rather
-     * than merely that the axis is stretched.
-     */
-    public double[] getDrift() {
-        double[] box = cutBox();
-        int d = getDimensions();
-        double[] drift = new double[d];
-        for (int i = 0; i < d; i++) {
-            double sum = box[i] + box[i + d];
-            drift[i] = (sum > 0.0) ? (box[i] - box[i + d]) / sum : 0.0;
-        }
-        return drift;
-    }
-
-    /**
-     * Condition number of the local frame: the ratio of the largest to the smallest
-     * axis extent. 1 is isotropic. Note this is anisotropy <i>relative to the
-     * coordinate axes</i> — the cuts are axis-aligned, so a ridge at 45 degrees
-     * inflates every axis equally and reads as isotropic.
-     */
-    public double getAnisotropy() {
-        double[] widths = getAxisExtents();
-        double max = 0.0, min = Double.MAX_VALUE;
-        for (double w : widths) {
-            if (w > 0.0) {
-                max = Math.max(max, w);
-                min = Math.min(min, w);
+        /**
+         * One tree. {@code reach} and {@code gap} hold the three boxes in the order
+         * CUT, PASSAGE, READING, each 2d in half dimensions (see {@link LocalBox}); the
+         * other arrays hold one entry per box.
+         */
+        public void addTree(double treeMass, double[] reach, double[] gap, double[] mass, double[] cutProbability,
+                boolean[] isCapped) {
+            checkArgument(reach.length == BOXES * len && gap.length == BOXES * len, "expected three boxes of 2d");
+            VectorSupport.axpyInto(reachSum, reach, 1.0);
+            VectorSupport.axpyInto(gapSum, gap, 1.0);
+            for (int b = 0; b < BOXES; b++) {
+                massSum[b] += mass[b];
+                cutSum[b] += cutProbability[b];
+                capped[b] += isCapped[b] ? 1 : 0;
             }
-        }
-        return (min < Double.MAX_VALUE && min > 0.0) ? max / min : 1.0;
-    }
-
-    // ------------------------------------------------------------------
-    // density from the box
-    // ------------------------------------------------------------------
-
-    /**
-     * Displaced mass over a box volume; the one formula the three box densities
-     * share.
-     */
-    private double boxDensity(double q, double volume) {
-        double weight = getSampleWeight();
-        if (!(weight > 0.0) || !(volume > 0.0)) {
-            return 0.0;
-        }
-        double sumOfPts = measure.getHighLowSum() / weight;
-        return (sumOfPts > 0.0) ? sumOfPts / (q * sumOfPts + volume) : 0.0;
-    }
-
-    public double getCutDensity(double q) {
-        return boxDensity(q, volumeOf(cutBox()));
-    }
-
-    public double passageDensity(double q) {
-        return boxDensity(q, volumeOf(passageBox()));
-    }
-
-    public double getStoppingDensity(double q) {
-        return boxDensity(q, volumeOf(stopBox()));
-    }
-
-    public double passageDensity() {
-        return passageDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
-    }
-
-    /**
-     * Axes of the cut box with positive width. This is the dimension of the volume
-     * {@link #getCutDensity(double)} divides by, below the ambient dimension
-     * whenever a coordinate carries no extent.
-     */
-    public int getActiveDimensions() {
-        int active = 0;
-        for (double w : getAxisExtents()) {
-            if (w > 0.0) {
-                active++;
+            // The gap box of the cut box: gap[i] > 0 puts the void below the query on
+            // axis i, gap[d + i] > 0 above it, so its centre sits at half their
+            // difference from the query.
+            int base = CUT * len;
+            int k = 0;
+            for (int i = 0; i < dimensions; i++) {
+                double ci = 0.5 * (gap[base + dimensions + i] - gap[base + i]);
+                centreSum[i] += ci;
+                for (int j = i; j < dimensions; j++) {
+                    centreProducts[k++] += ci * 0.5 * (gap[base + dimensions + j] - gap[base + j]);
+                }
             }
+            treeMassSum += treeMass;
+            treeCount++;
         }
-        return active;
-    }
 
-    public double getCutDensity() {
-        return getCutDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
-    }
-
-    private double[] getDirectionalDensity(double q) {
-        int d = getDimensions();
-        double[] out = new double[2 * d];
-        double total = measure.getHighLowSum();
-        double scalar = passageDensity(q);
-        if (!(total > 0.0) || !(scalar > 0.0)) {
-            return out;
-        }
-        for (int i = 0; i < d; i++) {
-            out[i] = scalar * measure.high[i] / total;
-            out[i + d] = scalar * measure.low[i] / total;
-        }
-        return out;
-    }
-
-    private double[] directionalDensity() {
-        return getDirectionalDensity(DEFAULT_SUM_OF_POINTS_SCALING_FACTOR);
-    }
-
-    public double[] getDensityGradient() {
-        int d = getDimensions();
-        double[] c = directionalDensity();
-        double norm = 0;
-        for (double v : c) {
-            norm += v * v;
-        }
-        norm = Math.sqrt(norm);
-        double[] out = new double[d];
-        if (norm > 0) {
-            for (int i = 0; i < d; i++) {
-                out[i] = (c[i + d] - c[i]) / norm;
+        /** Adds the trees of a result. */
+        public void add(AnisotropicLocalGeometry g) {
+            checkNotNull(g, "geometry must not be null");
+            checkArgument(g.dimensions == dimensions, "dimensions must be the same");
+            checkArgument(g.config.equals(config), "geometries read under different configurations do not merge");
+            VectorSupport.axpyInto(reachSum, g.reachSum, 1.0);
+            VectorSupport.axpyInto(gapSum, g.gapSum, 1.0);
+            for (int b = 0; b < BOXES; b++) {
+                massSum[b] += g.massSum[b];
+                cutSum[b] += g.cutSum[b];
+                capped[b] += g.capped[b];
             }
+            VectorSupport.axpyInto(centreSum, g.centreSum, 1.0);
+            VectorSupport.axpyInto(centreProducts, g.centreProducts, 1.0);
+            treeMassSum += g.treeMassSum;
+            treeCount += g.treeCount;
         }
-        return out;
-    }
 
-    /**
-     * Volume of a DiVector-layout box: the product of its axis widths of positive
-     * width. 0 only when no axis is active, since an empty product would read as a
-     * unit box.
-     */
-    private double volumeOf(double[] box) {
-        int d = getDimensions();
-        double v = 1.0;
-        int active = 0;
-        for (int i = 0; i < d; i++) {
-            double w = box[i] + box[i + d];
-            if (w > 0.0) {
-                v *= w;
-                active++;
-            }
+        public AnisotropicLocalGeometry toGeometry() {
+            return new AnisotropicLocalGeometry(this);
         }
-        return (active > 0) ? v : 0.0;
-    }
-
-    /**
-     * Whether any traversal supplied box geometry; this is not a statistical
-     * validity test.
-     */
-    public boolean isReliable() {
-        return scales.getTreeCount() > 0;
     }
 }

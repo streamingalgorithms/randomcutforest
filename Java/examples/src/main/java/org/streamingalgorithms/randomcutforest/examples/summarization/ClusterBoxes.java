@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Random;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.examples.LocalGeometryReaders;
 import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
 import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.util.Weighted;
@@ -61,20 +62,18 @@ public final class ClusterBoxes {
      * cumulative quantity is the survival S = prod (1 - q) over the levels above,
      * and P[separated] = 1 - S. The three boxes are the geometry where that
      * probability crosses a fixed value, so a lower value crosses higher up and
-     * gives a larger box:
+     * gives a larger box; the third box is read at a mass instead:
      *
      * <pre>
-     *   CUT      P[separated] = 0.50, capped at the mass level
-     *   PASSAGE  P[separated] = 0.05, capped at the mass level
-     *   STOP     P[separated] = 0.05, uncapped
+     *   CUT      P[separated] = 0.50, capped at psi^(1/2) points
+     *   PASSAGE  P[separated] = 0.05, capped at psi^(1/2) points
+     *   READING  the first vertex holding 2 psi^(1/2) points
      * </pre>
      *
-     * These are separation probabilities, not quantiles and not local cut
-     * probabilities. PASSAGE and STOP are read at the same 0.05 and differ only in
-     * the mass rule, so STOP is PASSAGE with the truncation lifted and the gap
-     * between them is a readout of local mass rather than a second scale. CUT is
-     * contained in PASSAGE is contained in STOP on every tree, since all three are
-     * read from one buffered path.
+     * These are separation probabilities, not local cut probabilities. READING is a
+     * hitting mass, the same for every query and every tree, at or above the cap,
+     * so CUT is contained in PASSAGE is contained in READING on every tree, since
+     * all three are read from one path.
      */
     public enum BoxKind {
         GAP("the void between the query and the points it merges with"),
@@ -82,8 +81,8 @@ public final class ClusterBoxes {
         CUT("P[sep] 0.50, mass-bounded -- the margin scale"),
         /** P[separated] = 0.05, mass-bounded. The cover scale. */
         PASSAGE("P[sep] 0.05, mass-bounded -- the cover scale"),
-        /** P[separated] = 0.05 with the mass rule lifted. */
-        STOP("P[sep] 0.05, unbounded -- PASSAGE without the mass rule");
+        /** The first vertex holding 2 psi^(1/2) points. The common resolution. */
+        READING("2 psi^(1/2) points -- the common resolution");
 
         private final String blurb;
 
@@ -267,10 +266,10 @@ public final class ClusterBoxes {
         int driftTerms = 0;
         for (float[] query : queries) {
             AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(query);
-            if (!density.isReliable()) {
+            if (density.isEmpty()) {
                 continue;
             }
-            density.getScales().addRatios(sumRatios);
+            LocalGeometryReaders.addLogRatios(density, sumRatios);
             double[] box = boxOf(density, kind);
             int d = query.length;
             double[] o = new double[d];
@@ -278,9 +277,9 @@ public final class ClusterBoxes {
             double[] h = new double[d];
             for (int i = 0; i < d; i++) {
                 o[i] = query[i];
-                // DiVector layout: box[i] is the extent toward MINUS i,
-                // box[i + d] the extent toward PLUS i. Getting this backwards
-                // puts the box on the far side of the query.
+                // Offsets: box[i] is the extent below the query on axis i,
+                // box[i + d] the extent above. Getting this backwards puts the
+                // box on the far side of the query.
                 double width = box[i] + box[i + d];
                 if (width > 0.0) {
                     driftSum += Math.abs(box[i + d] - box[i]) / width;
@@ -323,10 +322,10 @@ public final class ClusterBoxes {
         int driftTerms = 0;
         for (float[] query : queries) {
             AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(query);
-            if (!density.isReliable()) {
+            if (density.isEmpty()) {
                 continue;
             }
-            density.getScales().addRatios(sumRatios);
+            LocalGeometryReaders.addLogRatios(density, sumRatios);
             int d = query.length;
             for (int k = 0; k < kinds.length; k++) {
                 double[] box = boxOf(density, kinds[k]);
@@ -378,21 +377,21 @@ public final class ClusterBoxes {
     }
 
     /**
-     * Counts violations of {@code CUT} &sube; {@code PASSAGE} &sube; {@code STOP}
-     * over three unions read at the same query points, as (box, axis, side)
-     * triples.
+     * Counts violations of {@code CUT} &sube; {@code PASSAGE} &sube;
+     * {@code READING} over three unions read at the same query points, as (box,
+     * axis, side) triples.
      */
-    public static int nestingViolations(Union cut, Union passage, Union stop) {
-        if (cut.size() != passage.size() || passage.size() != stop.size()) {
+    public static int nestingViolations(Union cut, Union passage, Union reading) {
+        if (cut.size() != passage.size() || passage.size() != reading.size()) {
             return 0;
         }
         int bad = 0;
         for (int j = 0; j < cut.size(); j++) {
             for (int i = 0; i < cut.lo[j].length; i++) {
-                if (cut.lo[j][i] < passage.lo[j][i] || passage.lo[j][i] < stop.lo[j][i]) {
+                if (cut.lo[j][i] < passage.lo[j][i] || passage.lo[j][i] < reading.lo[j][i]) {
                     bad++;
                 }
-                if (cut.hi[j][i] > passage.hi[j][i] || passage.hi[j][i] > stop.hi[j][i]) {
+                if (cut.hi[j][i] > passage.hi[j][i] || passage.hi[j][i] > reading.hi[j][i]) {
                     bad++;
                 }
             }
@@ -574,14 +573,14 @@ public final class ClusterBoxes {
     private static double[] boxOf(AnisotropicLocalGeometry density, BoxKind kind) {
         switch (kind) {
         case GAP:
-            return density.gapBox();
+            return density.cut().gapOffsets();
         case CUT:
-            return density.cutBox();
-        case STOP:
-            return density.stopBox();
+            return density.cut().offsets();
+        case READING:
+            return density.reading().offsets();
         case PASSAGE:
         default:
-            return density.passageBox();
+            return density.passage().offsets();
         }
     }
 
@@ -975,8 +974,9 @@ public final class ClusterBoxes {
             int[] t = reachTotal(reach(unions, summary));
             double n = Math.max(1, t[4]);
             System.out.printf("  %6s  %-8s %6d  %5.1f%%   %7.1f%%     %7.1f%%  %6.1f%%%n",
-                    kind == BoxKind.CUT ? "0.50" : kind == BoxKind.PASSAGE ? "0.05" : "stop", kind, t[4],
-                    100 * t[REACH_OWN] / n, 100 * t[REACH_AMBIGUOUS] / n, 100 * t[REACH_OTHER_ONLY] / n,
+                    kind == BoxKind.CUT ? "0.50"
+                            : kind == BoxKind.PASSAGE ? "0.05" : kind == BoxKind.READING ? "mass" : "-",
+                    kind, t[4], 100 * t[REACH_OWN] / n, 100 * t[REACH_AMBIGUOUS] / n, 100 * t[REACH_OTHER_ONLY] / n,
                     100 * t[REACH_NONE] / n);
         }
         System.out.println("  own rises with the box, so the kind at which it saturates is the scale");

@@ -38,20 +38,20 @@ import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeome
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
- * Dynamic near neighbour, with the gap, cut, passage and stop boxes drawn
+ * Dynamic near neighbour, with the gap, cut, passage and reading boxes drawn
  * around the query over a shaded density field.
  *
  * <p>
  * The four boxes nest: GAP is the empty margin between the query and the points
  * it merges with, and CUT is that margin plus those points' own spread, so GAP
- * is contained in CUT is contained in PASSAGE is contained in STOP. The gap box
- * is therefore invisible whenever the query sits inside the data, which is the
- * correct reading rather than a missing layer.
+ * is contained in CUT is contained in PASSAGE is contained in READING. The gap
+ * box is therefore invisible whenever the query sits inside the data, which is
+ * the correct reading rather than a missing layer.
  *
  * <p>
  * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
  * hides the data, <b>t</b> the isolines drawn through the cut, and <b>c</b>
- * cycles the boxes: all four nested, then GAP, CUT, PASSAGE and STOP alone,
+ * cycles the boxes: all four nested, then GAP, CUT, PASSAGE and READING alone,
  * then none. The readout along the bottom stays on the cut box whatever is
  * drawn.
  */
@@ -80,7 +80,7 @@ public class NearNeighborExample implements Example {
     private static final Color GAP_BOX = new Color(214, 39, 40);
 
     /** What the c key steps through, then none; index 0 draws all four nested. */
-    private static final String[] BOXES = { "ALL", "GAP", "CUT", "PASSAGE", "STOP" };
+    private static final String[] BOXES = { "ALL", "GAP", "CUT", "PASSAGE", "READING" };
 
     /**
      * Shading. Cool and neutral so it does not compete with the warm isolines drawn
@@ -153,7 +153,7 @@ public class NearNeighborExample implements Example {
         float[][] data = Yinyang.generate(1000);
         float[] queryPoint = new float[] { 0.5f, 0.6f };
 
-        Plot2D plot = livePlot ? Plot2D.open("Dynamic Near Neighbor + Cut / Passage / Stop Boxes", range, 820)
+        Plot2D plot = livePlot ? Plot2D.open("Dynamic Near Neighbor + Cut / Passage / Reading Boxes", range, 820)
                 : Plot2D.offscreen(range);
         GifWriter gif = saveGif ? new GifWriter(new File("dynamic_near_neighbor.gif"), gifDelayMs, true) : null;
 
@@ -166,7 +166,7 @@ public class NearNeighborExample implements Example {
         plot.bindKey(KeyEvent.VK_C, "nn.boxes",
                 () -> boxes.set(boxes.get() == BOXES.length - 1 ? -1 : boxes.get() + 1));
         System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
-                + "c cycles the boxes (ALL/GAP/CUT/PASSAGE/STOP/none)");
+                + "c cycles the boxes (ALL/GAP/CUT/PASSAGE/READING/none)");
         KeysLayer keys = new KeysLayer(KeysLayer.Corner.TOP_LEFT).add("space", "pause", null)
                 .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
                 .add("t", "isolines through the cut", KeysLayer.onOff(topo::get))
@@ -190,7 +190,7 @@ public class NearNeighborExample implements Example {
                 bg[n][1] = transformed[1];
                 if (n % LINE_STRIDE == 0) {
                     Instant f0 = Instant.now();
-                    lines.add(transformed, newForest.getAnisotropicGeometry(transformed).cutSpread());
+                    lines.add(transformed, LocalGeometryReaders.cutSpread(newForest, transformed));
                     fieldNanos += Duration.between(f0, Instant.now()).toNanos();
                 }
                 n++;
@@ -253,18 +253,18 @@ public class NearNeighborExample implements Example {
             double[] box = null;
             double[] gapBox = null;
             double[] passageBox = null;
-            double[] stopBox = null;
+            double[] readingBox = null;
             double anisotropy = 1.0;
             if (showBox) {
                 Instant b0 = Instant.now();
                 AnisotropicLocalGeometry out = newForest.getAnisotropicGeometry(movingQuery);
                 boxNanos += Duration.between(b0, Instant.now()).toNanos();
-                if (out.isReliable()) {
-                    box = out.cutBox();
-                    gapBox = out.gapBox();
-                    passageBox = out.passageBox();
-                    stopBox = out.stopBox();
-                    anisotropy = out.getAnisotropy();
+                if (!out.isEmpty()) {
+                    box = out.cut().offsets();
+                    gapBox = out.cut().gapOffsets();
+                    passageBox = out.passage().offsets();
+                    readingBox = out.reading().offsets();
+                    anisotropy = LocalGeometryReaders.anisotropy(out.cut());
                 } else {
                     flat++; // no single scale here; drawing a box would assert one
                 }
@@ -324,11 +324,11 @@ public class NearNeighborExample implements Example {
             if (box != null) {
                 // Translucent fills only. The outlines were fighting the isolines,
                 // and the nesting already reads from the stacked alpha. Drawn
-                // outermost first so every box stays visible: STOP, PASSAGE, CUT,
+                // outermost first so every box stays visible: READING, PASSAGE, CUT,
                 // then the gap on top.
                 // Each one gated by the c key, read when drawing.
                 body.add(Layers.when(() -> shows(boxes.get(), 4),
-                        boxFill(movingQuery[0], movingQuery[1], stopBox, STOP_BOX, 35, false)));
+                        boxFill(movingQuery[0], movingQuery[1], readingBox, STOP_BOX, 35, false)));
                 body.add(Layers.when(() -> shows(boxes.get(), 3),
                         boxFill(movingQuery[0], movingQuery[1], passageBox, PASSAGE_BOX, 40, false)));
                 body.add(Layers.when(() -> shows(boxes.get(), 2),
@@ -474,7 +474,7 @@ public class NearNeighborExample implements Example {
         List<String> labels = new ArrayList<>(List.of("data", "near neighbors, area = tree votes", "closest (forest)"));
         List<Color> colors = new ArrayList<>(List.of(new Color(120, 120, 120), NN_CLOUD, Layers.color(0)));
         String[] names = { null, "gap box (void, empty when inside)", "cut box", "passage box",
-                "stop box (shading only)" };
+                "reading box (shading only)" };
         Color[] boxColors = { null, GAP_BOX, CUT_BOX, PASSAGE_BOX, STOP_BOX };
         for (int b = 1; b < names.length; b++) {
             if (shows(selected, b)) {

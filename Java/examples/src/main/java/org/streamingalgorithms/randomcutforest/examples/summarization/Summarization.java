@@ -43,6 +43,7 @@ import javax.imageio.ImageIO;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.LocalGeometryReaders;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Fan;
 import org.streamingalgorithms.randomcutforest.examples.datasets.NormalMixture;
 import org.streamingalgorithms.randomcutforest.examples.plot.BoxUnionLayer;
@@ -78,7 +79,7 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  * <p>
  * Keys: <b>space</b> pauses and <b>right arrow</b> steps one frame, <b>d</b>
  * shows or hides the data, <b>t</b> the isolines drawn through the cut,
- * <b>c</b> cycles the scale the boxes are read at (GAP, CUT, PASSAGE, STOP,
+ * <b>c</b> cycles the scale the boxes are read at (GAP, CUT, PASSAGE, READING,
  * then off), <b>a</b> shows or hides the anomaly boxes, <b>k</b> turns centring
  * on and off, and <b>s</b> writes the current frame to a png. The card in the
  * corner lists them. All of them work while paused -- a new scale is read from
@@ -233,7 +234,7 @@ public class Summarization implements Example {
 
         double[] ratios = new double[3];
         double[] ratiosAnomaly = new double[3];
-        // Denominators. addRatios contributes one number per query per ratio -- a
+        // Denominators. addLogRatios contributes one number per query per ratio -- a
         // per-axis mean of the log -- so the divisor is simply how many queries
         // were reliable, not how many axes they had between them.
         long memberQueries = 0, anomalyQueries = 0;
@@ -312,7 +313,7 @@ public class Summarization implements Example {
             }
         });
         System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
-                + "c cycles the scale (GAP/CUT/PASSAGE/STOP/off), a the anomaly boxes, k centring, s writes a png");
+                + "c cycles the scale (GAP/CUT/PASSAGE/READING/off), a the anomaly boxes, k centring, s writes a png");
         KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
                 .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
                 .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))
@@ -338,7 +339,7 @@ public class Summarization implements Example {
                 bg[n][0] = vec[0];
                 bg[n][1] = vec[1];
                 if (n % LINE_STRIDE == 0) {
-                    lines.add(vec, newForest.getAnisotropicGeometry(vec).cutSpread());
+                    lines.add(vec, LocalGeometryReaders.cutSpread(newForest, vec));
                 }
                 n++;
                 if (printFile) {
@@ -588,12 +589,12 @@ public class Summarization implements Example {
      * side.
      *
      * <p>
-     * Each is a geometric mean over axes and over queries: addRatios contributes
+     * Each is a geometric mean over axes and over queries: addLogRatios contributes
      * the mean log ratio per axis for one query, so dividing by the query count and
      * exponentiating gives a per-axis ratio rather than a volume ratio, which is
      * what makes the three columns comparable to each other and across dimensions.
      * All three are at least 1 by the nesting GAP within CUT within PASSAGE within
-     * STOP.
+     * READING.
      *
      * <p>
      * cut/gap is the one that separates the two rows. It is large where the void is
@@ -601,13 +602,13 @@ public class Summarization implements Example {
      * near 1 where the void is the whole box, which is what an isolated point looks
      * like. An axis with no gap at all contributes nothing to it, so a row whose
      * queries are mostly interior is averaging over fewer axes than its count
-     * suggests; passage/cut and stop/passage have no such hole and are the honest
-     * comparison of the two populations.
+     * suggests; passage/cut and reading/passage have no such hole and are the
+     * honest comparison of the two populations.
      */
     private static void ratioRows(String label, double[] member, long memberCount, double[] anomalyRatios,
             long anomalyCount) {
         System.out.printf("          box ratios (%s, per-axis geometric mean)   %8s %11s %12s%n", label, "cut/gap",
-                "passage/cut", "stop/passage");
+                "passage/cut", "reading/passage");
         ratioRow("members(samples)", member, memberCount);
         ratioRow("anomalies", anomalyRatios, anomalyCount);
     }
@@ -729,12 +730,12 @@ public class Summarization implements Example {
         List<double[][]> polys = new ArrayList<>();
         for (float[] q : points) {
             AnisotropicLocalGeometry density = forest.getAnisotropicGeometry(q);
-            if (!density.isReliable()) {
+            if (density.isEmpty()) {
                 continue;
             }
-            // DiVector layout: box[i] reaches toward MINUS i, box[i + d] toward PLUS i.
-            double[] box = density.gapBox();
-            density.getScales().addRatios(ratioSums);
+            // Offsets: box[i] below the query on axis i, box[i + d] above.
+            double[] box = density.cut().gapOffsets();
+            LocalGeometryReaders.addLogRatios(density, ratioSums);
             int d = q.length;
             double[] lo = new double[d];
             double[] hi = new double[d];

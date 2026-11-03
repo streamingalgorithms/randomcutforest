@@ -27,8 +27,8 @@ import java.util.List;
  * <p>
  * Each reference point brings the forest's own ellipse at that point: the
  * covariance, across trees, of where each tree's cut box sits around it --
- * {@code AnisotropicLocalGeometry.cutSpread()}, or its shadow on the plot when
- * the data has more than two dimensions. The density is a sum of unit-mass
+ * {@code LocalGeometryReaders.cutSpread}, or its shadow on the plot when the
+ * data has more than two dimensions. The density is a sum of unit-mass
  * Gaussians, one per point, centred on the point and shaped by its ellipse.
  *
  * <p>

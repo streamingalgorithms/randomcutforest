@@ -215,7 +215,6 @@ public class SampleSummaryTest {
         ICluster<float[]> newCluster4 = MultiCenter.initialize(new float[1], 1f, 0, 1);
         when(badDistance.applyAsDouble(any(), any())).thenReturn(-1.0).thenReturn(-1.0);
         newCluster4.getAssignedPoints().add(new Weighted<>(1, 1.0f));
-        assertThrows(IllegalArgumentException.class, () -> newCluster4.recompute(getPoint, true, badDistance));
         assertThrows(IllegalArgumentException.class, () -> newCluster4.absorb(newCluster3, badDistance));
 
     }

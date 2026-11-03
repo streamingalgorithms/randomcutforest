@@ -23,7 +23,6 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import static org.streamingalgorithms.randomcutforest.DefaultScoreFunctions.*;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY;
 import static org.streamingalgorithms.randomcutforest.anomalydetection.ScoreVisitor.DEFAULT_SCORE_FACTORY;
-import static org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor.DEFAULT_MASS_EXPONENT;
 import static org.streamingalgorithms.randomcutforest.returntypes.ConvergingAccumulator.CriticalDirection.HIGH;
 import static org.streamingalgorithms.randomcutforest.summarization.Summarizer.DEFAULT_SEPARATION_RATIO_FOR_MERGE;
 
@@ -252,7 +251,7 @@ public class RandomCutForest {
      */
     protected AbstractForestUpdateExecutor<?, float[]> updateExecutor;
     private IVisitorFactory<InterpolationMeasure> densityFactory;
-    protected IVisitorFactory<InterpolationMeasure> anisotropicFactory;
+    protected IVisitorFactory<AnisotropicLocalGeometry> anisotropicFactory;
 
     public <P> RandomCutForest(Builder<?> builder, IStateCoordinator<P, float[]> stateCoordinator,
             ComponentList<P, float[]> components, Random random) {
@@ -360,8 +359,7 @@ public class RandomCutForest {
             threadPoolSize = 0;
         }
         this.densityFactory = InterpolationVisitor.reusableFactory(1.0, centerOfMassEnabled);
-        this.anisotropicFactory = AnisotropicLocalVisitor.reusableFactory(1.0, centerOfMassEnabled,
-                DEFAULT_MASS_EXPONENT);
+        this.anisotropicFactory = AnisotropicLocalVisitor.factory(LocalGeometryConfig.DEFAULT);
     }
 
     /**
@@ -965,21 +963,35 @@ public class RandomCutForest {
     }
 
     /**
-     * Returns the anisotropic geomerty around the query point, which can be used to
-     * compute the anisotropic density that provides local scales for each half
-     * dimension, that can be used to infer density and first passage times of a
-     * walk
+     * The local geometry of the query under the default configuration: the cut,
+     * passage and reading boxes of every tree, averaged over the trees.
      * 
      * @param point query point
-     * @return a AnisotropicLocalGeometry structure for the current tree
+     * @return @return the geometry; empty (no trees) until the forest is ready to
+     *         output
      */
     public AnisotropicLocalGeometry getAnisotropicGeometry(float[] point) {
+        return getAnisotropicGeometry(point, LocalGeometryConfig.DEFAULT);
+    }
+
+    /**
+     * The local geometry of the query, with the boxes read where the configuration
+     * says. The default configuration uses the forest's cached visitor factory; any
+     * other builds one for the call.
+     *
+     * @param point  query point
+     * @param config where each tree reads its boxes
+     * @return the geometry; empty (no trees) until the forest is ready to output
+     */
+    public AnisotropicLocalGeometry getAnisotropicGeometry(float[] point, LocalGeometryConfig config) {
+        checkNotNull(config, "config must not be null");
         if (!isOutputReady()) {
-            return new AnisotropicLocalGeometry(dimensions, sampleSize);
+            return AnisotropicLocalGeometry.empty(dimensions, config);
         }
-        Function<InterpolationMeasure, InterpolationMeasure> finisher = x -> x.scaleInPlace(1.0 / numberOfTrees);
-        return new AnisotropicLocalGeometry(traverseForest(transformToShingledPoint(point), anisotropicFactory,
-                InterpolationMeasure::addToLeft, finisher));
+        IVisitorFactory<AnisotropicLocalGeometry> factory = LocalGeometryConfig.DEFAULT.equals(config)
+                ? anisotropicFactory
+                : AnisotropicLocalVisitor.factory(config);
+        return traverseForest(transformToShingledPoint(point), factory, AnisotropicLocalGeometry::merge, x -> x);
     }
 
     /**

@@ -73,7 +73,7 @@ import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
  * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
  * hides the data, <b>t</b> the isolines drawn through the cut -- each point's
  * three-dimensional spread seen through the camera -- and <b>c</b> cycles the
- * boxes drawn at the probes (GAP, CUT, PASSAGE, STOP, then off).
+ * boxes drawn at the probes (GAP, CUT, PASSAGE, READING, then off).
  */
 public class StarryNights implements Example {
 
@@ -191,7 +191,7 @@ public class StarryNights implements Example {
     private static final Color LINES = new Color(150, 60, 170);
 
     /** The boxes the c key steps through, in the order the probes store them. */
-    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "STOP" };
+    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "READING" };
 
     public static void main(String[] args) throws Exception {
         new StarryNights().run();
@@ -250,7 +250,7 @@ public class StarryNights implements Example {
         plot.bindKey(KeyEvent.VK_C, "starry.boxes",
                 () -> boxKind.set(boxKind.get() == KINDS.length - 1 ? -1 : boxKind.get() + 1));
         System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
-                + "c cycles the boxes (GAP/CUT/PASSAGE/STOP/off)");
+                + "c cycles the boxes (GAP/CUT/PASSAGE/READING/off)");
         KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
                 .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
                 .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))
@@ -300,7 +300,7 @@ public class StarryNights implements Example {
                     double[] seen = camera.project(p[0], p[1], p[2]);
                     if (seen != null) {
                         double[][] rows = camera.jacobian(p[0], p[1], p[2]);
-                        lines.add(seen[0], seen[1], forest.getAnisotropicGeometry(p).cutSpread(), rows[0], rows[1]);
+                        lines.add(seen[0], seen[1], LocalGeometryReaders.cutSpread(forest, p), rows[0], rows[1]);
                     }
                 }
                 forest.update(p);
@@ -380,7 +380,8 @@ public class StarryNights implements Example {
             // pitch. Nothing is inferred from pairwise distances any more, and a pair
             // that happens to land close together can no longer shrink every glyph.
             // One glyph scale per kind of box, each set by its own longest box, so the c
-            // key compares shapes rather than sizes: a gap box is far smaller than a stop
+            // key compares shapes rather than sizes: a gap box is far smaller than a
+            // reading
             // box, and on a common scale it would vanish.
             double pitch = (net.radius() > 0) ? net.radius() : 2 * PROBE_EXTENT / PROBE_BUDGET;
             double[][][] boxArrays = new double[KINDS.length][probeBoxes.size()][];
@@ -484,16 +485,17 @@ public class StarryNights implements Example {
             probes++;
             AnisotropicLocalGeometry out = forest
                     .getAnisotropicGeometry(new float[] { (float) c[0], (float) c[1], (float) c[2] });
-            massSum += out.getSampleSize();
-            if (!out.isReliable()) {
+            massSum += out.getTreeMass();
+            if (out.isEmpty()) {
                 flat++;
                 return false; // flat crossing or masked by duplicates; a box would lie
             }
             drawn++;
 
             origins.add(c);
-            boxes.add(new double[][] { out.gapBox(), out.cutBox(), out.passageBox(), out.stopBox() });
-            shade.add(Math.min(1.0, log2(out.getAnisotropy()) / 3.0));
+            boxes.add(new double[][] { out.cut().gapOffsets(), out.cut().offsets(), out.passage().offsets(),
+                    out.reading().offsets() });
+            shade.add(Math.min(1.0, log2(LocalGeometryReaders.anisotropy(out.cut())) / 3.0));
             fill.add(-1.0);
             return true;
         }

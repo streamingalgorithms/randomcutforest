@@ -64,7 +64,7 @@ public class Center implements ICluster<float[]> {
     // the following sets up reassignment of the coordinate based on the points
     // assigned to the center
     public void reset() {
-        assignedPoints = new ArrayList<>();
+        assignedPoints.clear(); // reused, not reallocated
         previousWeight = weight;
         weight = 0;
         previousSumOFRadius = sumOfRadius;

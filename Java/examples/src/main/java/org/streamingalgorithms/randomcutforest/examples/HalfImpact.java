@@ -36,7 +36,8 @@ import org.streamingalgorithms.randomcutforest.examples.plot.Layers;
 import org.streamingalgorithms.randomcutforest.examples.plot.Plot2D;
 import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor;
 import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
-import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
+import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
+import org.streamingalgorithms.randomcutforest.returntypes.LocalGeometryConfig;
 import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
 
 /**
@@ -57,18 +58,18 @@ import org.streamingalgorithms.randomcutforest.returntypes.Neighbor;
  * rescaled distance.
  *
  * <p>
- * Two headings are swept because {@code getAnisotropy} is an axis-aligned
- * reading: a ridge at 45 degrees inflates every axis equally and reports as
- * isotropic. The ray-frame aspect below is measured in the ray's own frame and
- * does not have that blind spot, so the two columns disagreeing is the point
- * rather than a defect.
+ * Two headings are swept because {@code LocalGeometryReaders.anisotropy} is an
+ * axis-aligned reading: a ridge at 45 degrees inflates every axis equally and
+ * reports as isotropic. The ray-frame aspect below is measured in the ray's own
+ * frame and does not have that blind spot, so the two columns disagreeing is
+ * the point rather than a defect.
  *
  * <p>
  * Keys: <b>space</b> pauses and <b>right arrow</b> steps, <b>d</b> shows or
  * hides the ring, <b>t</b> the isolines drawn through the cut, <b>c</b> cycles
- * the box drawn along the ray (GAP, CUT, PASSAGE, STOP, then off) and <b>e</b>
- * shows or hides the tree ensemble behind it. The printed tables stay on the
- * gap box whatever is drawn.
+ * the box drawn along the ray (GAP, CUT, PASSAGE, READING, then off) and
+ * <b>e</b> shows or hides the tree ensemble behind it. The printed tables stay
+ * on the gap box whatever is drawn.
  */
 public class HalfImpact implements Example {
 
@@ -153,7 +154,7 @@ public class HalfImpact implements Example {
      * The boxes the c key steps through, in the order of the averaged geometry's
      * accessors.
      */
-    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "STOP" };
+    private static final String[] KINDS = { "GAP", "CUT", "PASSAGE", "READING" };
 
     public static void main(String[] args) throws Exception {
         new HalfImpact().run();
@@ -228,13 +229,14 @@ public class HalfImpact implements Example {
         AtomicBoolean swingOn = new AtomicBoolean(true);
         plot.bindKey(KeyEvent.VK_E, "halfimpact.swing", () -> swingOn.set(!swingOn.get()));
         System.out.println("keys: space pauses, right arrow steps, d toggles the ring, t the isolines, "
-                + "c cycles the box (GAP/CUT/PASSAGE/STOP/off), e the tree ensemble");
+                + "c cycles the box (GAP/CUT/PASSAGE/READING/off), e the tree ensemble");
         KeysLayer keys = new KeysLayer(KeysLayer.Corner.TOP_LEFT).add("space", "pause", null)
                 .add("\u2192", "step", null).add("d", "ring", KeysLayer.onOff(showData::get))
                 .add("t", "isolines through the cut", KeysLayer.onOff(topo::get))
                 .add("c", "box along the ray", () -> boxKind.get() < 0 ? "off" : KINDS[boxKind.get()])
                 .add("e", "tree ensemble", KeysLayer.onOff(swingOn::get));
-        IVisitorFactory<InterpolationMeasure> perTreeBox = AnisotropicLocalVisitor.reusableFactory(1.0, true);
+        IVisitorFactory<AnisotropicLocalGeometry> perTreeBox = AnisotropicLocalVisitor
+                .factory(LocalGeometryConfig.DEFAULT);
 
         List<Layer> tracks = new ArrayList<>();
         Instant start = Instant.now();
@@ -272,8 +274,9 @@ public class HalfImpact implements Example {
 
                     AnisotropicLocalGeometry out = forest.getAnisotropicGeometry(probe);
                     // Every box c can draw, off the one walk; the tables read the gap box.
-                    double[][] boxes = out.isReliable()
-                            ? new double[][] { out.gapBox(), out.cutBox(), out.passageBox(), out.stopBox() }
+                    double[][] boxes = !out.isEmpty()
+                            ? new double[][] { out.cut().gapOffsets(), out.cut().offsets(), out.passage().offsets(),
+                                    out.reading().offsets() }
                             : null;
                     double[] box = (boxes == null) ? null : boxes[0];
 
@@ -333,12 +336,12 @@ public class HalfImpact implements Example {
                             tracks.add(
                                     Layers.when(() -> boxKind.get() == drawnKind, boxOutline(px, py, boxes[k], color)));
                         }
-                        aspectSum += out.getAnisotropy();
+                        aspectSum += LocalGeometryReaders.anisotropy(out.cut());
                         aspectCount++;
 
                         if (step % ROW_EVERY == 0) {
                             // Two aspects, deliberately. "gap asp" is the drawn box's
-                            // own axis ratio; "cut asp" is getAnisotropy, which reads
+                            // own axis ratio; "cut asp" is the reader's anisotropy, which reads
                             // the cut box and is axis-aligned. "ray asp" is measured
                             // in the ray's frame, so it is the one that survives the
                             // 45 degree heading.
@@ -347,7 +350,8 @@ public class HalfImpact implements Example {
                             double rayAsp = (across > 0) ? along / across : 0;
                             double base = 2 * nn;
                             System.out.printf("%8.2f %9.4f %9.4f %9.2f %9.2f %9.2f %9.4f %9.2f%n", t, along, across,
-                                    rayAsp, gapAsp, out.getAnisotropy(), nn, (base > 0) ? along / base : 0);
+                                    rayAsp, gapAsp, LocalGeometryReaders.anisotropy(out.cut()), nn,
+                                    (base > 0) ? along / base : 0);
                         }
                     }
 
@@ -448,7 +452,7 @@ public class HalfImpact implements Example {
         double lo = -range * 0.95, span = 2 * range * 0.95;
         CutIsolines lines = new CutIsolines(lo, span, FIELD_GRID, ISO).bands(BAND, BAND_FLOOR);
         for (float[] p : annulus(RING_THICKNESS, seed + 1)) {
-            lines.add(p, forest.getAnisotropicGeometry(p).cutSpread());
+            lines.add(p, LocalGeometryReaders.cutSpread(forest, p));
         }
         List<Layer> out = new ArrayList<>();
         out.add(lines);
@@ -457,11 +461,12 @@ public class HalfImpact implements Example {
         for (int i = 0; i < ARROW_GRID; i++) {
             for (int j = 0; j < ARROW_GRID; j++) {
                 double x = lo + span * (i + 0.5) / ARROW_GRID, y = lo + span * (j + 0.5) / ARROW_GRID;
-                // Projected from the 2d faces into the plane by getDensityGradient,
-                // whose magnitude is the asymmetry of the neighbourhood rather than a
-                // constant. Arrows are therefore SHORT where opposing faces balance,
-                // which is honest: there is no gradient there to point along.
-                double[] g = forest.getAnisotropicGeometry(new float[] { (float) x, (float) y }).getDensityGradient();
+                // Projected from the 2d faces into the plane: the directional
+                // displacement of the density walk, low face less high face over the
+                // norm of all 2d, so its magnitude is the asymmetry of the
+                // neighbourhood rather than a constant. Arrows are therefore SHORT where
+                // opposing faces balance, which is honest: there is no gradient there.
+                double[] g = densityGradient(forest, new float[] { (float) x, (float) y });
                 double n = Math.hypot(g[0], g[1]);
                 if (n > 0) {
                     origins.add(new double[] { x, y });
@@ -508,10 +513,11 @@ public class HalfImpact implements Example {
             AnisotropicLocalGeometry out = f.getAnisotropicGeometry(new float[] { (float) probeR, 0f });
             double inner = RING_RADIUS - w / 2;
             double toInner = probeR - inner;
-            // the probe sits at +x, so the inward reach is the high_x face
-            double reachIn = out.passageAxis()[0];
+            // the probe sits at +x; the passage box's width on x
+            double reachIn = out.passage().widthWithQuery()[0];
             System.out.printf("%10.3f %10.3f %10.3f %10.3f %10.2f %10.2f%n", w, inner, toInner, reachIn,
-                    (toInner > 0) ? reachIn / toInner : 0, out.isReliable() ? out.getAnisotropy() : 0);
+                    (toInner > 0) ? reachIn / toInner : 0,
+                    !out.isEmpty() ? LocalGeometryReaders.anisotropy(out.cut()) : 0);
         }
         System.out.println("ratio > 1 means the box spans the wall and takes in the hollow centre;");
         System.out.println("ratio < 1 means the wall itself terminated it.\n");
@@ -585,6 +591,26 @@ public class HalfImpact implements Example {
     // ------------------------------------------------------------------
 
     /**
+     * The direction the density walk's displacement leans, per axis: the low face
+     * less the high face, over the norm of all 2d faces. Zero where nothing leans.
+     */
+    @SuppressWarnings("deprecation")
+    static double[] densityGradient(RandomCutForest forest, float[] point) {
+        DiVector c = forest.getSimpleDensity(point).getDirectionalDensity();
+        int d = c.getDimensions();
+        double norm = 0;
+        for (int i = 0; i < d; i++) {
+            norm += c.high[i] * c.high[i] + c.low[i] * c.low[i];
+        }
+        norm = Math.sqrt(norm);
+        double[] out = new double[d];
+        for (int i = 0; i < d && norm > 0; i++) {
+            out[i] = (c.low[i] - c.high[i]) / norm;
+        }
+        return out;
+    }
+
+    /**
      * The ensemble behind the averaged box: every tree's boxes, centred on the
      * probe exactly as boxOutline draws them, the mean offset of a box's centres
      * from the probe (the lead), and the covariance of those centres (the swing).
@@ -600,12 +626,12 @@ public class HalfImpact implements Example {
         /** Per tree, its boxes in KINDS order. */
         final List<double[][]> boxes = new ArrayList<>();
 
-        static Swing of(List<InterpolationMeasure> perTree) {
+        static Swing of(List<AnisotropicLocalGeometry> perTree) {
             Swing s = new Swing();
-            for (InterpolationMeasure m : perTree) {
-                AnisotropicLocalGeometry one = new AnisotropicLocalGeometry(m);
-                if (one.getScales().getTreeCount() > 0) {
-                    s.boxes.add(new double[][] { one.gapBox(), one.cutBox(), one.passageBox(), one.stopBox() });
+            for (AnisotropicLocalGeometry one : perTree) {
+                if (!one.isEmpty()) {
+                    s.boxes.add(new double[][] { one.cut().gapOffsets(), one.cut().offsets(), one.passage().offsets(),
+                            one.reading().offsets() });
                 }
             }
             return s;

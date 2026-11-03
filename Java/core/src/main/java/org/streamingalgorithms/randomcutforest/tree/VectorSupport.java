@@ -139,6 +139,17 @@ public final class VectorSupport {
         return SIMD;
     }
 
+    /**
+     * True if a call of length n takes the Vector API path, whose sums run in float
+     * lanes; false if it takes the scalar path of {@link VectorSupportLegacy}. A
+     * caller that reproduces the scalar arithmetic (Summarizer's block assignment)
+     * uses this to know when it is bit-exact. Primitive in, primitive out, like
+     * everything else here.
+     */
+    public static boolean vectorizes(int n) {
+        return simd(n);
+    }
+
     /** Diagnostics, and the benchmark's arm labelling. */
     public static String describe() {
         return "VectorSupport[simd=" + SIMD + ", minLength=" + MIN_LEN + (SIMD ? ", " + VectorSupportSIMD.shape() : "")

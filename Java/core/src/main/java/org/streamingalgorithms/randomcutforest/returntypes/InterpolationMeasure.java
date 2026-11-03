@@ -96,12 +96,6 @@ public class InterpolationMeasure {
      */
     protected double heightScore;
 
-    /**
-     * Optional per-face local scales, null unless the walk produced them.
-     *
-     */
-    protected FirstPassageScales scales;
-
     public InterpolationMeasure(int dimensions, double sampleSize) {
         checkArgument(dimensions > 0, "dimensions must be greater than 0");
         this.dimensions = dimensions;
@@ -123,7 +117,6 @@ public class InterpolationMeasure {
         this.pointMass = base.pointMass;
         this.score = base.score;
         this.heightScore = base.heightScore;
-        this.scales = base.scales;
         measure = consume ? base.measure : new DiVector(base.measure);
         distances = consume ? base.distances : new DiVector(base.distances);
         probMass = consume ? base.probMass : new DiVector(base.probMass);
@@ -215,18 +208,6 @@ public class InterpolationMeasure {
         this.pointMass = pointMass;
     }
 
-    /**
-     * May be null; callers wanting an extent box should go through
-     * AnisotropicDensityOutput.
-     */
-    public FirstPassageScales getScales() {
-        return scales;
-    }
-
-    public void setScales(FirstPassageScales scales) {
-        this.scales = scales;
-    }
-
     // ------------------------------------------------------------------
     // accumulation
     // ------------------------------------------------------------------
@@ -253,13 +234,6 @@ public class InterpolationMeasure {
         DiVector.addToLeft(left.distances, right.distances);
         DiVector.addToLeft(left.measure, right.measure);
         DiVector.addToLeft(left.probMass, right.probMass);
-        if (left.scales == null) {
-            // adopt: right came from toMeasure, which already copied, so no other
-            // holder can observe the subsequent in-place merges
-            left.scales = right.scales;
-        } else if (right.scales != null) {
-            FirstPassageScales.addToLeft(left.scales, right.scales);
-        }
         return left;
     }
 
@@ -283,7 +257,6 @@ public class InterpolationMeasure {
     public InterpolationMeasure scale(double z) {
         InterpolationMeasure out = new InterpolationMeasure(sampleSize * z, measure.scale(z), distances.scale(z),
                 probMass.scale(z), treeCount * z, pointMass, score * z, heightScore * z);
-        out.scales = scales;
         return out;
     }
 

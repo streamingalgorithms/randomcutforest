@@ -18,6 +18,7 @@ package org.streamingalgorithms.randomcutforest.summarization;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.ToDoubleBiFunction;
@@ -26,11 +27,16 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
 
 public class MultiCenter extends GenericMultiCenter<float[]> {
 
-    ArrayList<Weighted<Integer>> assignedPoints;
+    // the points assigned in the current pass, as parallel primitive arrays that
+    // are reused across passes instead of a list of boxed entries
+    int[] assignedIndex = new int[16];
+    float[] assignedWeight = new float[16];
+    // the distance of each assigned point to this cluster, as given to addPoint
+    double[] assignedDist = new double[16];
+    int assignedCount;
 
     MultiCenter(float[] coordinate, float weight, double shrinkage, int numberOfRepresentatives) {
         super(coordinate, weight, shrinkage, numberOfRepresentatives);
-        this.assignedPoints = new ArrayList<>();
     }
 
     public static MultiCenter initialize(float[] coordinate, float weight, double shrinkage,
@@ -44,14 +50,37 @@ public class MultiCenter extends GenericMultiCenter<float[]> {
     public void addPoint(int index, float weight, double dist, float[] point,
             ToDoubleBiFunction<float[], float[]> distance) {
         super.addPoint(index, weight, dist, point, distance);
-        assignedPoints.add(new Weighted<>(index, weight));
+        keep(index, weight, dist);
+    }
+
+    /**
+     * addPoint when the caller already knows the closest representative, by
+     * position: the same updates as GenericMultiCenter.addPoint, without measuring
+     * the point again. Used by Summarizer's block assignment.
+     */
+    void addPointAt(int index, float weight, double dist, int closest) {
+        representatives.get(closest).weight += weight;
+        this.weight += weight;
+        this.sumOfRadius += weight * dist;
+        keep(index, weight, dist);
+    }
+
+    private void keep(int index, float weight, double dist) {
+        if (assignedCount == assignedIndex.length) {
+            assignedIndex = Arrays.copyOf(assignedIndex, 2 * assignedCount);
+            assignedWeight = Arrays.copyOf(assignedWeight, 2 * assignedCount);
+            assignedDist = Arrays.copyOf(assignedDist, 2 * assignedCount);
+        }
+        assignedIndex[assignedCount] = index;
+        assignedWeight[assignedCount] = weight;
+        assignedDist[assignedCount++] = dist;
     }
 
     // the following sets up reassignment of the coordinate based on the points
     // assigned to the center
     public void reset() {
         super.reset();
-        assignedPoints = new ArrayList<>();
+        assignedCount = 0;
     }
 
     // a standard reassignment using the median values and NOT the mean; the mean is
@@ -59,24 +88,48 @@ public class MultiCenter extends GenericMultiCenter<float[]> {
     // provide robust convergence
     public double recompute(Function<Integer, float[]> getPoint, boolean force,
             ToDoubleBiFunction<float[], float[]> distanceFunction) {
-        if (assignedPoints.size() == 0 || weight == 0.0 || !force) {
+        if (assignedCount == 0 || weight == 0.0 || !force) {
             return 0;
         }
 
         previousSumOFRadius = sumOfRadius;
         sumOfRadius = 0;
-        for (int j = 0; j < assignedPoints.size(); j++) {
+        for (int j = 0; j < assignedCount; j++) {
             // distance will check for -negative internally
-            double addTerm = distance(getPoint.apply(assignedPoints.get(j).index), distanceFunction)
-                    * assignedPoints.get(j).weight;
+            double addTerm = distance(getPoint.apply(assignedIndex[j]), distanceFunction) * assignedWeight[j];
             sumOfRadius += addTerm;
         }
         return (previousSumOFRadius - sumOfRadius);
 
     }
 
+    /**
+     * recompute(getPoint, true, distance) right after a block assignment: there the
+     * distance of every assigned point to this cluster is the one addPointAt was
+     * given, so the same sum is formed from those, in the same order.
+     */
+    double recomputeAssigned() {
+        if (assignedCount == 0 || weight == 0.0) {
+            return 0;
+        }
+        previousSumOFRadius = sumOfRadius;
+        sumOfRadius = 0;
+        for (int j = 0; j < assignedCount; j++) {
+            double addTerm = assignedDist[j] * assignedWeight[j];
+            sumOfRadius += addTerm;
+        }
+        return (previousSumOFRadius - sumOfRadius);
+    }
+
+    /**
+     * A copy of the current assignment; the cluster itself keeps primitive arrays.
+     */
     @Override
     public List<Weighted<Integer>> getAssignedPoints() {
-        return assignedPoints;
+        ArrayList<Weighted<Integer>> answer = new ArrayList<>(assignedCount);
+        for (int j = 0; j < assignedCount; j++) {
+            answer.add(new Weighted<>(assignedIndex[j], assignedWeight[j]));
+        }
+        return answer;
     }
 }

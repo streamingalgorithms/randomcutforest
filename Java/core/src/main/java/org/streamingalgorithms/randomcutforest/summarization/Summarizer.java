@@ -22,12 +22,12 @@ import static org.streamingalgorithms.randomcutforest.util.Weighted.prefixPick;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToDoubleBiFunction;
+import java.util.stream.IntStream;
 
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
@@ -68,7 +68,7 @@ public class Summarizer {
 
     /**
      * a function that reassigns points to clusters
-     * 
+     *
      * @param sampledPoints   a list of sampled points with weights
      * @param clusters        a list of current clusters, because random access to
      *                        the elements is necessary
@@ -77,25 +77,47 @@ public class Summarizer {
      *                        cluster by cluster recomputation. Using parallel mode
      *                        during the assignment of points does not seem to help
      */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     public static <R> void assignAndRecompute(List<Weighted<Integer>> sampledPoints, Function<Integer, R> getPoint,
             List<ICluster<R>> clusters, ToDoubleBiFunction<R, R> distance, boolean parallelEnabled) {
         checkArgument(clusters.size() > 0, " cannot be empty list of clusters");
+        ICluster<R>[] byId = clusters.toArray(new ICluster[0]);
+        int[] order = new int[byId.length];
+        for (int k = 0; k < order.length; k++) {
+            order[k] = k;
+        }
+        Workspace workspace = Workspace.acquire();
+        try {
+            workspace.ensure(byId.length);
+            assign(sampledPoints, getPoint, byId, order, byId.length, distance, parallelEnabled, workspace.distances);
+        } finally {
+            workspace.release();
+        }
+    }
+
+    /**
+     * The assignment step over the live clusters byId[order[0..count)], in that
+     * order. Each point is fetched once and its distances go into a reused array;
+     * the arithmetic is that of the list version above.
+     */
+    static <R> void assign(List<Weighted<Integer>> sampledPoints, Function<Integer, R> getPoint, ICluster<R>[] byId,
+            int[] order, int count, ToDoubleBiFunction<R, R> distance, boolean parallelEnabled, double[] dist) {
+        checkArgument(count > 0, " cannot be empty list of clusters");
         checkArgument(sampledPoints.size() > 0, " cannot be empty list of points");
 
-        for (ICluster<R> cluster : clusters) {
-            cluster.reset();
+        for (int k = 0; k < count; k++) {
+            byId[order[k]].reset();
         }
 
         for (Weighted<Integer> point : sampledPoints) {
             if (point.weight > 0) {
-
-                double[] dist = new double[clusters.size()];
-                Arrays.fill(dist, Double.MAX_VALUE);
+                R coordinates = getPoint.apply(point.index);
+                Arrays.fill(dist, 0, count, Double.MAX_VALUE);
                 double minDist = Double.MAX_VALUE;
                 int minDistNbr = -1;
-                for (int i = 0; i < clusters.size(); i++) {
+                for (int i = 0; i < count; i++) {
                     // will check for negative distances
-                    dist[i] = clusters.get(i).distance(getPoint.apply(point.index), distance);
+                    dist[i] = byId[order[i]].distance(coordinates, distance);
                     if (minDist > dist[i]) {
                         minDist = dist[i];
                         minDistNbr = i;
@@ -106,20 +128,19 @@ public class Summarizer {
                 }
 
                 if (minDist == 0) {
-                    clusters.get(minDistNbr).addPoint(point.index, point.weight, 0, getPoint.apply(point.index),
-                            distance);
+                    byId[order[minDistNbr]].addPoint(point.index, point.weight, 0, coordinates, distance);
                 } else {
                     double sum = 0;
-                    for (int i = 0; i < clusters.size(); i++) {
+                    for (int i = 0; i < count; i++) {
                         if (dist[i] <= WEIGHT_ALLOCATION_THRESHOLD * minDist) {
                             sum += minDist / dist[i]; // setting up harmonic mean
                         }
                     }
-                    for (int i = 0; i < clusters.size(); i++) {
+                    for (int i = 0; i < count; i++) {
                         if (dist[i] <= WEIGHT_ALLOCATION_THRESHOLD * minDist) {
                             // harmonic mean
-                            clusters.get(i).addPoint(point.index, (float) (point.weight * minDist / (dist[i] * sum)),
-                                    dist[i], getPoint.apply(point.index), distance);
+                            byId[order[i]].addPoint(point.index, (float) (point.weight * minDist / (dist[i] * sum)),
+                                    dist[i], coordinates, distance);
                         }
                     }
                 }
@@ -127,10 +148,291 @@ public class Summarizer {
         }
 
         if (parallelEnabled) {
-            clusters.parallelStream().forEach(e -> e.recompute(getPoint, true, distance));
+            IntStream.range(0, count).parallel().forEach(k -> byId[order[k]].recompute(getPoint, true, distance));
         } else {
-            clusters.stream().forEach(e -> e.recompute(getPoint, true, distance));
+            for (int k = 0; k < count; k++) {
+                byId[order[k]].recompute(getPoint, true, distance);
+            }
         }
+    }
+
+    /**
+     * Scratch kept per thread and reused across calls, so that summarizing a stream
+     * once per frame allocates little: the cluster distances, the order of the live
+     * clusters, and the per-point distances.
+     *
+     * <p>
+     * A call can begin on a thread whose workspace is in use: with parallelEnabled
+     * the recompute runs as a parallel stream, and a fork-join worker that waits
+     * for it may run another task meanwhile, which can be another summarization.
+     * Such a call gets a workspace of its own instead of the thread's.
+     */
+    static final class Workspace {
+        final ClusterDistanceCache cache = new ClusterDistanceCache();
+        int[] order = new int[0];
+        int[] orderScratch = new int[0];
+        double[] keys = new double[0];
+        double[] keyScratch = new double[0];
+        double[] distances = new double[0];
+        double[] extents = new double[0];
+        final Batch batch = new Batch();
+        private boolean busy;
+
+        /** The thread's workspace, or a fresh one if a call on this thread holds it. */
+        static Workspace acquire() {
+            Workspace w = WORKSPACE.get();
+            if (w.busy) {
+                w = new Workspace();
+            }
+            w.busy = true;
+            return w;
+        }
+
+        void release() {
+            cache.release();
+            busy = false;
+        }
+
+        void ensure(int n) {
+            if (order.length < n) {
+                order = new int[n];
+                orderScratch = new int[n];
+                keys = new double[n];
+                keyScratch = new double[n];
+                distances = new double[n];
+                extents = new double[n];
+            }
+        }
+    }
+
+    private static final ThreadLocal<Workspace> WORKSPACE = ThreadLocal.withInitial(Workspace::new);
+
+    /**
+     * The assignment step in blocks of points, for MultiCenter clusters under a
+     * BatchDistance in a dimension where its blocks are exact. The points are
+     * fetched once per call into one array, coordinate by coordinate; at each
+     * assignment the live clusters' representatives are laid out in one array, and
+     * every block of points is measured against each cluster at once, which gives
+     * each point's distance to the cluster (the nearest representative, shrunk
+     * toward the first) and its closest representative. The decisions that follow
+     * are those of assign, line for line, and the updates those of
+     * MultiCenter.addPoint and recompute, so the clustering is the same bit for
+     * bit; only the work is arranged differently.
+     */
+    static final class Batch {
+        static final int BLOCK = 64;
+
+        private BatchDistance distance;
+        private int d;
+        private int n;
+        private float[] points = new float[0];
+        private int[] index = new int[0];
+        private float[] weight = new float[0];
+        private float[] reps = new float[0];
+        private int[] start = new int[1];
+        private double[] first = new double[0];
+        private double[] best = new double[0];
+        private int[] arg = new int[0];
+        private final double[] work = new double[BatchDistance.WORK_PER_POINT * BLOCK];
+        private double[] dist = new double[0];
+        private MultiCenter[] live = new MultiCenter[0];
+
+        /**
+         * True, with the points fetched, when the blocks apply: a BatchDistance, every
+         * cluster exactly a MultiCenter, and a dimension where the blocks are exact.
+         */
+        <R> boolean prepare(List<Weighted<Integer>> refs, Function<Integer, R> getPoint,
+                ToDoubleBiFunction<R, R> distanceFunction, ICluster<R>[] byId) {
+            if (!(distanceFunction instanceof BatchDistance) || byId.length == 0) {
+                return false;
+            }
+            for (ICluster<R> c : byId) {
+                if (c.getClass() != MultiCenter.class) {
+                    return false;
+                }
+            }
+            distance = (BatchDistance) distanceFunction;
+            d = ((MultiCenter) byId[0]).getRepresentatives().get(0).index.length;
+            if (!distance.exactAt(d)) {
+                return false;
+            }
+            int count = 0;
+            for (Weighted<Integer> point : refs) {
+                if (point.weight > 0) {
+                    count++;
+                }
+            }
+            n = count;
+            if (points.length < d * n) {
+                points = new float[d * n];
+            }
+            if (index.length < n) {
+                index = new int[n];
+                weight = new float[n];
+            }
+            int p = 0;
+            for (Weighted<Integer> point : refs) {
+                if (point.weight > 0) {
+                    float[] x = (float[]) getPoint.apply(point.index);
+                    for (int j = 0; j < d; j++) {
+                        points[j * n + p] = x[j];
+                    }
+                    index[p] = point.index;
+                    weight[p++] = point.weight;
+                }
+            }
+            return true;
+        }
+
+        /** assign(refs, getPoint, byId, order, count, distance, ...), in blocks. */
+        <R> void assign(ICluster<R>[] byId, int[] order, int count) {
+            checkArgument(count > 0, " cannot be empty list of clusters");
+            checkArgument(n > 0, " cannot be empty list of points");
+            if (live.length < count) {
+                live = new MultiCenter[count];
+                start = new int[count + 1];
+                dist = new double[count];
+            }
+            if (best.length < count * BLOCK) {
+                first = new double[count * BLOCK];
+                best = new double[count * BLOCK];
+                arg = new int[count * BLOCK];
+            }
+            int m = 0;
+            for (int k = 0; k < count; k++) {
+                live[k] = (MultiCenter) byId[order[k]];
+                live[k].reset();
+                start[k] = m;
+                for (Weighted<float[]> r : live[k].getRepresentatives()) {
+                    if (reps.length < (m + 1) * d) {
+                        reps = Arrays.copyOf(reps, Math.max(2 * reps.length, (m + 1) * d));
+                    }
+                    System.arraycopy(r.index, 0, reps, m * d, d);
+                    m++;
+                }
+            }
+            start[count] = m;
+
+            for (int from = 0; from < n; from += BLOCK) {
+                int to = Math.min(n, from + BLOCK);
+                for (int k = 0; k < count; k++) {
+                    distance.nearest(d, points, n, from, to, reps, start[k], start[k + 1], first, best, arg, k * BLOCK,
+                            work);
+                }
+                for (int p = from; p < to; p++) {
+                    int q = p - from;
+                    double minDist = Double.MAX_VALUE;
+                    int minDistNbr = -1;
+                    for (int i = 0; i < count; i++) {
+                        // GenericMultiCenter.distance(point): the nearest representative,
+                        // shrunk toward the first
+                        double shrinkage = live[i].shrinkage;
+                        dist[i] = (1 - shrinkage) * best[i * BLOCK + q] + shrinkage * first[i * BLOCK + q];
+                        if (minDist > dist[i]) {
+                            minDist = dist[i];
+                            minDistNbr = i;
+                        }
+                        if (minDist == 0) {
+                            break;
+                        }
+                    }
+                    if (minDist == 0) {
+                        live[minDistNbr].addPointAt(index[p], weight[p], 0, arg[minDistNbr * BLOCK + q]);
+                    } else {
+                        double sum = 0;
+                        for (int i = 0; i < count; i++) {
+                            if (dist[i] <= WEIGHT_ALLOCATION_THRESHOLD * minDist) {
+                                sum += minDist / dist[i]; // setting up harmonic mean
+                            }
+                        }
+                        for (int i = 0; i < count; i++) {
+                            if (dist[i] <= WEIGHT_ALLOCATION_THRESHOLD * minDist) {
+                                // harmonic mean
+                                live[i].addPointAt(index[p], (float) (weight[p] * minDist / (dist[i] * sum)), dist[i],
+                                        arg[i * BLOCK + q]);
+                            }
+                        }
+                    }
+                }
+            }
+            for (int k = 0; k < count; k++) {
+                live[k].recomputeAssigned();
+            }
+            Arrays.fill(live, 0, count, null);
+        }
+    }
+
+    /**
+     * Stable sort of order[0..count) by non-decreasing weight -- the order
+     * List.sort(Comparator.comparingDouble(ICluster::getWeight)) gives -- then
+     * drops the clusters of zero weight from the front. Returns the new count.
+     */
+    static <R> int sortAndDropEmpty(ICluster<R>[] byId, int[] order, int count, Workspace w) {
+        double[] keys = w.keys;
+        for (int k = 0; k < count; k++) {
+            keys[k] = byId[order[k]].getWeight();
+        }
+        int[] srcO = order, dstO = w.orderScratch;
+        double[] srcK = keys, dstK = w.keyScratch;
+        for (int width = 1; width < count; width *= 2) {
+            for (int lo = 0; lo < count; lo += 2 * width) {
+                int mid = Math.min(lo + width, count), hi = Math.min(lo + 2 * width, count);
+                int i = lo, j = mid, k = lo;
+                while (i < mid && j < hi) {
+                    if (Double.compare(srcK[j], srcK[i]) < 0) {
+                        dstO[k] = srcO[j];
+                        dstK[k++] = srcK[j++];
+                    } else {
+                        dstO[k] = srcO[i];
+                        dstK[k++] = srcK[i++];
+                    }
+                }
+                while (i < mid) {
+                    dstO[k] = srcO[i];
+                    dstK[k++] = srcK[i++];
+                }
+                while (j < hi) {
+                    dstO[k] = srcO[j];
+                    dstK[k++] = srcK[j++];
+                }
+            }
+            int[] tO = srcO;
+            srcO = dstO;
+            dstO = tO;
+            double[] tK = srcK;
+            srcK = dstK;
+            dstK = tK;
+        }
+        if (srcO != order) {
+            System.arraycopy(srcO, 0, order, 0, count);
+            System.arraycopy(srcK, 0, keys, 0, count);
+        }
+        int drop = 0;
+        while (drop < count && keys[drop] == 0.0) {
+            drop++;
+        }
+        if (drop > 0) {
+            for (int k = 0; k < drop; k++) {
+                w.cache.invalidate(order[k], order, count);
+            }
+            System.arraycopy(order, drop, order, 0, count - drop);
+        }
+        return count - drop;
+    }
+
+    /** Removes position p from order[0..count); returns the new count. */
+    private static int removeAt(int[] order, int count, int p) {
+        System.arraycopy(order, p + 1, order, p, count - p - 1);
+        return count - 1;
+    }
+
+    private static <R> boolean anyMovesRepresentatives(ICluster<R>[] byId, int[] order, int count) {
+        for (int k = 0; k < count; k++) {
+            if (byId[order[k]].recomputeMovesRepresentatives()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -200,114 +502,158 @@ public class Summarizer {
             return (double) e.weight;
         }).reduce(0.0, Double::sum);
         checkArgument(sampledSum > 0, " total weight has to be positive");
-        ArrayList<ICluster<R>> centers = new ArrayList<>();
+        ArrayList<ICluster<R>> seeds = new ArrayList<>();
         if (refs.size() < 10 * (initial + 5)) {
             for (Weighted<Integer> point : refs) {
-                centers.add(clusterInitializer.apply(getPoint.apply(point.index), 0f));
+                seeds.add(clusterInitializer.apply(getPoint.apply(point.index), 0f));
             }
         } else {
             for (int k = 0; k < 2 * (initial + 5); k++) {
                 double wt = rng.nextDouble() * sampledSum;
                 Weighted<Integer> picked = prefixPick(refs, wt);
-                centers.add(clusterInitializer.apply(getPoint.apply(picked.index), 0f));
+                seeds.add(clusterInitializer.apply(getPoint.apply(picked.index), 0f));
             }
         }
         if (previousClustering != null) {
             for (ICluster<R> previousCluster : previousClustering) {
                 List<Weighted<R>> representatives = previousCluster.getRepresentatives();
                 for (Weighted<R> representative : representatives) {
-                    centers.add(clusterInitializer.apply(representative.index, 0f));
+                    seeds.add(clusterInitializer.apply(representative.index, 0f));
                 }
             }
         }
-        assignAndRecompute(refs, getPoint, centers, distance, parallelEnabled);
-        // assignment would change weights, sorting in non-decreasing order
-        centers.sort(Comparator.comparingDouble(ICluster::getWeight));
-        while (centers.get(0).getWeight() == 0) {
-            centers.remove(0);
-        }
 
-        double phase3Distance = 0;
-        double runningPhase3Distance = 0;
-        boolean keepReducingCenters = (centers.size() > maxAllowed);
-
-        while (keepReducingCenters) {
-            double measure = 0;
-            double measureDist = Double.MAX_VALUE;
-            int lower = 0;
-            int firstOfMerge = lower;
-            int secondOfMerge = lower + 1;// will be reset before exiting the loop
-            boolean foundMerge = false;
-            double minDist = Double.MAX_VALUE;
-
-            while (lower < centers.size() - 1 && !foundMerge) {
-                // we will keep searching
-                int minNbr = -1;
-                for (int j = lower + 1; j < centers.size(); j++) {
-                    double dist = centers.get(lower).distance(centers.get(j), distance);
-                    if (dist == 0) {
-                        foundMerge = true;
-                        firstOfMerge = lower;
-                        secondOfMerge = minNbr = j;
-                        minDist = measureDist = 0.0;
-                        break;
-                    } else {
-                        if (minDist > dist) {
-                            minNbr = j;
-                            minDist = dist;
-                        }
-
-                        double temp = (centers.get(lower).extentMeasure() + centers.get(j).extentMeasure()
-                                + phase3Distance) / dist;
-                        if (temp > overlapParameter && measure < temp) {
-                            firstOfMerge = lower;
-                            secondOfMerge = j;
-                            measure = temp;
-                            measureDist = dist;
-                        }
-                    }
-                }
-                if (lower == 0 && !foundMerge) {
-                    measureDist = minDist;
-                    // this is set assuming we may be interested in merging the minimum weight
-                    // cluster which corresponds to lower == 0
-                    secondOfMerge = minNbr;
-                }
-                ++lower;
+        // The clusters keep their ids, their positions in seeds; the live ones are
+        // order[0..count), sorted by weight as the list of centers used to be.
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        ICluster<R>[] byId = seeds.toArray(new ICluster[0]);
+        int n = byId.length;
+        Workspace workspace = Workspace.acquire();
+        try {
+            workspace.ensure(n);
+            int[] order = workspace.order;
+            for (int k = 0; k < n; k++) {
+                order[k] = k;
             }
+            int count = n;
+            ClusterDistanceCache cache = workspace.cache;
+            cache.reset(n);
+            double[] extents = workspace.extents;
+            Batch batch = workspace.batch.prepare(refs, getPoint, distance, byId) ? workspace.batch : null;
 
-            int inital = centers.size();
-
-            if (inital > maxAllowed || foundMerge || (inital > stopAt && measure > overlapParameter)) {
-                centers.get(secondOfMerge).absorb(centers.get(firstOfMerge), distance);
-                if (phase2GlobalReassign && centers.size() <= PHASE2_THRESHOLD * maxAllowed + 1) {
-                    centers.remove(firstOfMerge);
-                    assignAndRecompute(refs, getPoint, centers, distance, parallelEnabled);
-                } else {
-                    centers.get(secondOfMerge).recompute(getPoint, false, distance);
-                    centers.remove(firstOfMerge);
-                }
-                centers.sort(Comparator.comparingDouble(ICluster::getWeight));
-                while (centers.get(0).getWeight() == 0.0) {
-                    // this line is reachable via zeroTest() in
-                    // SampleSummaryTest
-                    centers.remove(0);
-                }
-                if (inital < 1.2 * maxAllowed + 1) {
-                    // phase 3 kicks in; but this will execute at most once
-                    // note that measureDist can be 0 as well
-                    runningPhase3Distance = max(runningPhase3Distance, measureDist);
-                    if (inital > maxAllowed && centers.size() <= maxAllowed) {
-                        phase3Distance = runningPhase3Distance;
-                    }
-                }
+            if (batch != null) {
+                batch.assign(byId, order, count);
             } else {
-                keepReducingCenters = false;
+                assign(refs, getPoint, byId, order, count, distance, parallelEnabled, workspace.distances);
             }
+            // assignment would change weights, sorting in non-decreasing order
+            count = sortAndDropEmpty(byId, order, count, workspace);
+
+            double phase3Distance = 0;
+            double runningPhase3Distance = 0;
+            boolean keepReducingCenters = (count > maxAllowed);
+
+            while (keepReducingCenters) {
+                double measure = 0;
+                double measureDist = Double.MAX_VALUE;
+                int lower = 0;
+                int firstOfMerge = lower;
+                int secondOfMerge = lower + 1;// will be reset before exiting the loop
+                boolean foundMerge = false;
+                double minDist = Double.MAX_VALUE;
+                for (int k = 0; k < count; k++) {
+                    extents[k] = byId[order[k]].extentMeasure();
+                }
+
+                while (lower < count - 1 && !foundMerge) {
+                    // we will keep searching
+                    int minNbr = -1;
+                    int a = order[lower];
+                    for (int j = lower + 1; j < count; j++) {
+                        // a distance is computed once and kept until one of the two clusters
+                        // changes its representatives
+                        int b = order[j];
+                        double dist = cache.get(a, b);
+                        if (Double.isNaN(dist)) {
+                            dist = byId[a].distance(byId[b], distance);
+                            cache.put(a, b, dist);
+                        }
+                        if (dist == 0) {
+                            foundMerge = true;
+                            firstOfMerge = lower;
+                            secondOfMerge = minNbr = j;
+                            minDist = measureDist = 0.0;
+                            break;
+                        } else {
+                            if (minDist > dist) {
+                                minNbr = j;
+                                minDist = dist;
+                            }
+
+                            double temp = (extents[lower] + extents[j] + phase3Distance) / dist;
+                            if (temp > overlapParameter && measure < temp) {
+                                firstOfMerge = lower;
+                                secondOfMerge = j;
+                                measure = temp;
+                                measureDist = dist;
+                            }
+                        }
+                    }
+                    if (lower == 0 && !foundMerge) {
+                        measureDist = minDist;
+                        // this is set assuming we may be interested in merging the minimum weight
+                        // cluster which corresponds to lower == 0
+                        secondOfMerge = minNbr;
+                    }
+                    ++lower;
+                }
+
+                int inital = count;
+
+                if (inital > maxAllowed || foundMerge || (inital > stopAt && measure > overlapParameter)) {
+                    int first = order[firstOfMerge];
+                    int second = order[secondOfMerge];
+                    byId[second].absorb(byId[first], distance);
+                    if (phase2GlobalReassign && count <= PHASE2_THRESHOLD * maxAllowed + 1) {
+                        count = removeAt(order, count, firstOfMerge);
+                        if (batch != null) {
+                            batch.assign(byId, order, count);
+                        } else {
+                            assign(refs, getPoint, byId, order, count, distance, parallelEnabled, workspace.distances);
+                        }
+                        if (anyMovesRepresentatives(byId, order, count)) {
+                            cache.invalidateAll();
+                        }
+                    } else {
+                        byId[second].recompute(getPoint, false, distance);
+                        count = removeAt(order, count, firstOfMerge);
+                    }
+                    // the absorbing cluster has new representatives; the absorbed one is gone
+                    cache.invalidate(second, order, count);
+                    cache.invalidate(first, order, count);
+                    count = sortAndDropEmpty(byId, order, count, workspace);
+                    if (inital < 1.2 * maxAllowed + 1) {
+                        // phase 3 kicks in; but this will execute at most once
+                        // note that measureDist can be 0 as well
+                        runningPhase3Distance = max(runningPhase3Distance, measureDist);
+                        if (inital > maxAllowed && count <= maxAllowed) {
+                            phase3Distance = runningPhase3Distance;
+                        }
+                    }
+                } else {
+                    keepReducingCenters = false;
+                }
+            }
+            ArrayList<ICluster<R>> centers = new ArrayList<>(count);
+            for (int k = 0; k < count; k++) {
+                centers.add(byId[order[k]]);
+            }
+            // sort in decreasing weight
+            centers.sort((o1, o2) -> Double.compare(o2.getWeight(), o1.getWeight()));
+            return centers;
+        } finally {
+            workspace.release();
         }
-        // sort in decreasing weight
-        centers.sort((o1, o2) -> Double.compare(o2.getWeight(), o1.getWeight()));
-        return centers;
     }
 
     /**

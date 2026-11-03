@@ -94,7 +94,7 @@ public interface ICluster<R> {
     /**
      * optimize the cluster representation based on assigned points; this is classic
      * iterative optimization useful in EM type algorithms
-     * 
+     *
      * @param getPoint a function that provides a point given an integer index
      * @param force    it set as true perform a slow and accurate recomputation;
      *                 otherwise approximation would suffice
@@ -107,5 +107,15 @@ public interface ICluster<R> {
     // adding a point to a cluster, and possibly updates the extent measure and the
     // assigned points
     void addPoint(int index, float weight, double dist, R point, ToDoubleBiFunction<R, R> distance);
+
+    /**
+     * Whether recompute can move the representatives, and with them every distance
+     * to this cluster. Iterative clustering keeps distances between clusters and
+     * drops them all after a reassignment when any cluster says yes; the
+     * conservative default.
+     */
+    default boolean recomputeMovesRepresentatives() {
+        return true;
+    }
 
 }

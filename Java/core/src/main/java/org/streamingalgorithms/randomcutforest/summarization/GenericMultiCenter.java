@@ -132,6 +132,12 @@ public class GenericMultiCenter<R> implements ICluster<R> {
         return 0;
     }
 
+    // representatives change only when a cluster is absorbed, never in recompute
+    @Override
+    public boolean recomputeMovesRepresentatives() {
+        return false;
+    }
+
     // merges a center into another
     public void absorb(ICluster<R> other, ToDoubleBiFunction<R, R> distance) {
         List<Weighted<R>> savedRepresentatives = this.representatives;
@@ -219,8 +225,9 @@ public class GenericMultiCenter<R> implements ICluster<R> {
         double dist = distanceFunction.applyAsDouble(this.representatives.get(0).index, representatives.get(0).index);
         checkArgument(dist >= 0, "distance cannot be negative");
         double newDist = dist;
-        for (int i = 1; i < this.representatives.size(); i++) {
-            for (int j = 1; j < representatives.size(); j++) {
+        // the closest pair over all representatives of both clusters; (0, 0) is dist
+        for (int i = 0; i < this.representatives.size(); i++) {
+            for (int j = (i == 0) ? 1 : 0; j < representatives.size(); j++) {
                 newDist = min(newDist, distanceFunction.applyAsDouble(this.representatives.get(i).index,
                         representatives.get(j).index));
                 checkArgument(newDist >= 0, "distance cannot be negative");

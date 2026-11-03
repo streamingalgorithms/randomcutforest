@@ -111,7 +111,7 @@ public class DensityExample implements Example {
             for (int i = 0; i < data.length; i++) {
                 float[] p = rotateClockWise(data[i], -2 * PI * degree / 360);
                 if (i % LINE_STRIDE == 0) {
-                    lines.add(p, newForest.getAnisotropicGeometry(p).cutSpread());
+                    lines.add(p, LocalGeometryReaders.cutSpread(newForest, p));
                 }
                 newForest.update(p);
             }

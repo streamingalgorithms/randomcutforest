@@ -34,6 +34,7 @@ import javax.imageio.ImageIO;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.examples.Example;
+import org.streamingalgorithms.randomcutforest.examples.LocalGeometryReaders;
 import org.streamingalgorithms.randomcutforest.examples.datasets.Clusters;
 import org.streamingalgorithms.randomcutforest.examples.plot.BoxUnionLayer;
 import org.streamingalgorithms.randomcutforest.examples.plot.CutIsolines;
@@ -61,8 +62,8 @@ import org.streamingalgorithms.randomcutforest.util.Weighted;
  *
  * See {@link ClusterBoxes}. Keys: <b>d</b> shows or hides the data, <b>t</b>
  * the isolines drawn through the cut, and <b>c</b> cycles the scale the boxes
- * are read at (GAP, CUT, PASSAGE, STOP, then off); <b>space</b> pauses the tour
- * and <b>right arrow</b> steps it.
+ * are read at (GAP, CUT, PASSAGE, READING, then off); <b>space</b> pauses the
+ * tour and <b>right arrow</b> steps it.
  *
  * <p>
  * The step from one centroid to several was motivated by a sphere being too
@@ -141,7 +142,7 @@ public class MultiSummarize implements Example {
         }
         // Two member-sampled families, both built with forMembersAll, which
         // takes one forest traversal per query point and reads all three boxes
-        // off it: cutBox, passageBox and stopBox come from the same walk, so
+        // off it: the cut, passage and reading boxes come from the same walk, so
         // asking for them one at a time would pay three walks for what one walk
         // already produced. The drawn family is thinned to COVER_DRAW_QUERIES so
         // the tour stays legible; the reference family is the full budget and is
@@ -186,9 +187,13 @@ public class MultiSummarize implements Example {
 
         // The three sizes above are only comparable if they were read from one
         // walk, which is the claim this checks; see ClusterBoxes.nestingViolations.
-        if (byKind.get(0) != null) {
-            int bad = ClusterBoxes.nestingViolations(byKind.get(0), byKind.get(1), byKind.get(2));
-            System.out.printf("  nesting CUT <= PASSAGE <= STOP on cluster 0: %s%n",
+        int cutKind = ClusterBoxes.BoxKind.CUT.ordinal();
+        int passageKind = ClusterBoxes.BoxKind.PASSAGE.ordinal();
+        int readingKind = ClusterBoxes.BoxKind.READING.ordinal();
+        if (byKind.get(cutKind) != null) {
+            int bad = ClusterBoxes.nestingViolations(byKind.get(cutKind), byKind.get(passageKind),
+                    byKind.get(readingKind));
+            System.out.printf("  nesting CUT <= PASSAGE <= READING on cluster 0: %s%n",
                     bad == 0 ? "holds" : bad + " violations");
         }
 
@@ -207,11 +212,11 @@ public class MultiSummarize implements Example {
         // dimensions in a way volumes are not. Read across the row and the three
         // scales are a ladder on the same query points; PASSAGE over CUT is how
         // much of the neighbourhood lies between the median separation and the
-        // 5% tail, and STOP over PASSAGE is what the mass rule was truncating.
+        // 5% tail, and READING over CUT is the growth to the common resolution.
         System.out.println();
         System.out.printf("Union volume at %d dimensions, as the side of the cube of equal volume%n", newDimensions);
         System.out.println("                      members, %d queries/cluster".formatted(MEMBER_QUERIES));
-        System.out.println("  cluster   boxes      CUT      PASSAGE         STOP     STOP/CUT");
+        System.out.println("  cluster   boxes      CUT      PASSAGE      READING  READING/CUT");
         long volSeed = random.nextLong();
         for (int c = 0; c < reference.size(); c++) {
             double[] side = new double[ClusterBoxes.BoxKind.values().length];
@@ -220,8 +225,9 @@ public class MultiSummarize implements Example {
                 double lv = ClusterBoxes.logUnionVolume(un, volSeed + 7919L * k + c, ClusterBoxes.DEFAULT_SAMPLES);
                 side[k] = Double.isInfinite(lv) ? 0.0 : Math.exp(lv / newDimensions);
             }
-            System.out.printf("  %7d  %6d  %11.4f  %11.4f  %11.4f  %11.2f%n", c, reference.get(c).size(), side[0],
-                    side[1], side[2], (side[0] > 0) ? side[2] / side[0] : Double.NaN);
+            System.out.printf("  %7d  %6d  %11.4f  %11.4f  %11.4f  %11.2f%n", c, reference.get(c).size(), side[cutKind],
+                    side[passageKind], side[readingKind],
+                    (side[cutKind] > 0) ? side[readingKind] / side[cutKind] : Double.NaN);
         }
 
         // Separation as measures, on the reference family. P[x in U_col | x ~
@@ -296,7 +302,7 @@ public class MultiSummarize implements Example {
         float[][] linePoints = stride(points, LINE_POINTS);
         double[][][] lineSpreads = new double[linePoints.length][][];
         for (int i = 0; i < linePoints.length; i++) {
-            lineSpreads[i] = forest.getAnisotropicGeometry(linePoints[i]).cutSpread();
+            lineSpreads[i] = LocalGeometryReaders.cutSpread(forest, linePoints[i]);
         }
 
         boolean showProjection = true;
@@ -651,7 +657,7 @@ public class MultiSummarize implements Example {
                     100 * t[ClusterBoxes.REACH_OTHER_ONLY] / nb, 100 * t[ClusterBoxes.REACH_NONE] / nb);
         });
         System.out.println("keys: space pauses, right arrow steps, d toggles the data, t the isolines, "
-                + "c cycles the scale (GAP/CUT/PASSAGE/STOP/off) and prints reach for it");
+                + "c cycles the scale (GAP/CUT/PASSAGE/READING/off) and prints reach for it");
         KeysLayer keys = new KeysLayer(KeysLayer.Corner.BOTTOM_LEFT).add("space", "pause", null)
                 .add("\u2192", "step", null).add("d", "data", KeysLayer.onOff(showData::get))
                 .add("t", "isolines through the cut", KeysLayer.onOff(showLines::get))

@@ -15,156 +15,100 @@
 
 package org.streamingalgorithms.randomcutforest.interpolation;
 
-import java.util.Arrays;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
 
 import org.streamingalgorithms.randomcutforest.IRFVisitor;
 import org.streamingalgorithms.randomcutforest.IVisitorFactory;
 import org.streamingalgorithms.randomcutforest.Visitor;
-import org.streamingalgorithms.randomcutforest.returntypes.FirstPassageScales;
-import org.streamingalgorithms.randomcutforest.returntypes.InterpolationMeasure;
-import org.streamingalgorithms.randomcutforest.tree.INodeView;
+import org.streamingalgorithms.randomcutforest.returntypes.AnisotropicLocalGeometry;
+import org.streamingalgorithms.randomcutforest.returntypes.LocalGeometryConfig;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
 
 /**
- * Three boxes around the query, indexed by the cumulative probability that a
- * root-to-leaf descent has separated the query by the time it reaches that
- * level.
+ * Reads, in each tree, the three boxes of an {@link AnisotropicLocalGeometry}
+ * from the transcript of a {@link SeparationVisitor}.
  *
  * <pre>
- *   cutBox     P[separated] = P_CUT,     bounded by the mass rule
- *   passageBox P[separated] = P_PASSAGE, bounded by the mass rule
- *   stopBox    P[separated] = P_PASSAGE, not bounded
+ *   cut box      quantile cutQuantile of the separation law, under the cap
+ *   passage box  quantile passageQuantile, under the cap
+ *   reading box  the first ancestor holding the reading mass
  * </pre>
  *
- * So cutBox is contained in passageBox is contained in stopBox, and stopBox is
- * what passageBox would have been with no mass rule.
+ * Both quantiles are read from the stop down: the stop is the first vertex
+ * above the leaf whose own cut probability is at most stopProbability, and the
+ * separation the law accumulates above it is not counted. The cap is the first
+ * ancestor holding the cap mass. Since the reading mass is at least the cap
+ * mass, cut box &sube; passage box &sube; reading box on every tree.
  *
- * Each node carries a local cut probability q: the chance that one uniform cut
- * of the box merging that node with the query separates the query alone. It is
- * local, so the cumulative quantity is the survival S = product of (1 - q) over
- * the levels above, and P[separated] = 1 - S. S is only known once the walk
- * reaches the root, which is why the path is buffered rather than thresholded
- * on the way up.
- *
- * The walk ends when q falls to Q_STOP. The mass crossing does not end it: it
- * is recorded and bounds cutBox and passageBox in flush, so the walk length is
- * the same for every query and the InterpolationMeasure accumulators -- and
- * therefore passageDensity -- do not depend on where the mass crossing fell.
- *
- * Geometry is copied from growingBox at each level and never reconstructed from
- * probability-weighted lengths. Outputs are averaged equally across trees by
- * scales, which also keep how far the trees' cut boxes disagree.
+ * <p>
+ * The walk ends at the later of the stop and the reading box; the cap never
+ * ends it. Above the reading box no box is materialized.
  */
-public class AnisotropicLocalVisitor extends InterpolationVisitor {
+public class AnisotropicLocalVisitor extends SeparationVisitor<AnisotropicLocalGeometry> {
 
-    /** Separation probability at which cutBox is read. */
-    public static final double P_CUT = 0.5;
-    /** Separation probability at which passageBox and stopBox are read. */
-    public static final double P_PASSAGE = 0.05;
-    /**
-     * Local cut probability that ends the traversal. Not a separation probability.
-     */
-    public static final double Q_STOP = 0.05;
-    public static final double DEFAULT_MASS_EXPONENT = 0.5;
+    private static final int CUT = AnisotropicLocalGeometry.CUT;
+    private static final int PASSAGE = AnisotropicLocalGeometry.PASSAGE;
+    private static final int READING = AnisotropicLocalGeometry.READING;
+    private static final int BOXES = AnisotropicLocalGeometry.BOXES;
 
-    private static final int INITIAL_CAPACITY = 32;
+    private final LocalGeometryConfig config;
 
-    private final double massTargetExponent;
-    private final double[] cutBox;
-    private final double[] passageBox;
-    private final double[] stopBox;
-    private final double[] gapBox;
+    // per tree, found as the levels are recorded
+    private double capMass;
+    private double readingMass;
+    private int stopLevel;
+    private int capLevel;
+    private int readingLevel;
 
-    /** Leaf-first buffer: node geometry and 1 - q at each level. */
-    private double[] pathBox;
-    private float[] pathGap;
-    private double[] pathDecay;
-    private double[] pathMass;
-    private int levels;
-    private int massLevel = -1;
+    // per tree, filled by flush(); preallocated so a tree costs no allocation
+    private final double[] reach;
+    private final double[] gap;
+    private final double[] boxMass = new double[BOXES];
+    private final double[] boxCut = new double[BOXES];
+    private final boolean[] capped = new boolean[BOXES];
     private boolean flushed;
-    private boolean folded;
-    private boolean deposited;
 
-    private final FirstPassageScales scales;
-    private final FirstPassageScales foldedScales;
-    private FirstPassageScales pending;
+    private final AnisotropicLocalGeometry.Accumulator folded;
 
-    AnisotropicLocalVisitor(int dimension, double pointMass, boolean centerOfMass, double massTargetExponent) {
-        super(dimension, pointMass, centerOfMass);
-        this.massTargetExponent = massTargetExponent;
-        cutBox = new double[len];
-        passageBox = new double[len];
-        stopBox = new double[len];
-        gapBox = new double[len];
-        pathBox = new double[INITIAL_CAPACITY * len];
-        pathDecay = new double[INITIAL_CAPACITY];
-        pathMass = new double[INITIAL_CAPACITY];
-        pathGap = new float[INITIAL_CAPACITY * len];
-        scales = new FirstPassageScales(dimension);
-        foldedScales = new FirstPassageScales(dimension);
+    public AnisotropicLocalVisitor(int dimension, LocalGeometryConfig config) {
+        super(dimension);
+        checkNotNull(config, "config must not be null");
+        this.config = config;
+        this.reach = new double[BOXES * len];
+        this.gap = new double[BOXES * len];
+        this.folded = new AnisotropicLocalGeometry.Accumulator(dimension, config);
+        reset();
     }
 
-    public AnisotropicLocalVisitor(float[] pointToScore, int treeMass, double pointMass, boolean centerOfMass,
-            double massTargetExponent) {
-        this(pointToScore.length, pointMass, centerOfMass, massTargetExponent);
+    public AnisotropicLocalVisitor(int dimension, int treeMass, LocalGeometryConfig config) {
+        this(dimension, config);
         this.treeMass = treeMass;
     }
 
     @Override
-    public void accept(INodeView node, int depthOfNode) {
-        if (pointInsideBox) {
-            return;
-        }
-        deposited = false;
-        super.accept(node, depthOfNode);
-        // The parent updates growingBox but returns before deposit() at q = 0.
-        // Keep the endpoint: it is the outermost geometry the walk saw.
-        if (!deposited && pointInsideBox) {
-            appendLevel(1.0, node.getMass());
-        }
+    protected void reset() {
+        super.reset();
+        stopLevel = capLevel = readingLevel = -1;
+        flushed = false;
     }
 
     @Override
-    public void acceptLeaf(INodeView node, int depthOfNode) {
-        deposited = false;
-        super.acceptLeaf(node, depthOfNode);
-        if (!deposited) {
-            // Duplicate leaf: the gap is zero, so probOfCut is zero and the
-            // survival through this level is 1. Its box is the degenerate leaf
-            // geometry, which is why the walk is not terminated here.
-            appendLevel(1.0, node.getMass());
+    protected boolean levelRecorded(int level) {
+        if (level == 0) {
+            capMass = config.capMass(treeMass);
+            readingMass = config.readingMass(treeMass);
         }
-    }
-
-    @Override
-    protected void deposit(float[] prob, float[] lenComp, double decay, double mass) {
-        deposited = true;
-        appendLevel(decay, mass);
-        // Setting pointInsideBox makes the parent's accept() return on the next
-        // level, so nothing further enters measure, probMass or distances.
-        if (1.0 - decay <= Q_STOP) {
-            pointInsideBox = true;
+        double m = mass(level);
+        if (capLevel < 0 && m >= capMass) {
+            capLevel = level;
         }
-    }
-
-    /** @param decay 1 - q at this level */
-    private void appendLevel(double decay, double mass) {
-        if (levels == pathDecay.length) {
-            int capacity = pathDecay.length * 2;
-            pathBox = Arrays.copyOf(pathBox, capacity * len);
-            pathDecay = Arrays.copyOf(pathDecay, capacity);
-            pathMass = Arrays.copyOf(pathMass, capacity);
-            pathGap = Arrays.copyOf(pathGap, capacity * len);
+        if (readingLevel < 0 && m >= readingMass) {
+            readingLevel = level;
         }
-        System.arraycopy(growingBox, 0, pathBox, levels * len, len);
-        System.arraycopy(rawGap, 0, pathGap, levels * len, len);
-        pathDecay[levels] = decay;
-        pathMass[levels] = mass;
-        if (massLevel < 0 && mass >= Math.pow(Math.max(1.0, treeMass), massTargetExponent)) {
-            massLevel = levels;
+        if (stopLevel < 0 && level > 0 && cutProbability(level) <= config.stopProbability()) {
+            stopLevel = level;
         }
-        levels++;
+        return stopLevel >= 0 && readingLevel >= 0;
     }
 
     private void flush() {
@@ -172,114 +116,69 @@ public class AnisotropicLocalVisitor extends InterpolationVisitor {
             return;
         }
         flushed = true;
-        if (levels == 0) {
-            return;
+        int top = levels() - 1;
+        int stop = (stopLevel >= 0) ? stopLevel : top;
+        int cutAt = quantileLevel(stop, config.cutQuantile());
+        int passageAt = quantileLevel(stop, config.passageQuantile());
+        capped[CUT] = capLevel >= 0 && capLevel < cutAt;
+        capped[PASSAGE] = capLevel >= 0 && capLevel < passageAt;
+        if (capped[CUT]) {
+            cutAt = capLevel;
         }
-
-        // Descend from the root accumulating survival. P[separated] rises as the
-        // levels get deeper, so the deepest level still under a threshold is the
-        // crossing, and a lower threshold crosses higher up and gives a larger box.
-        double survival = 1.0;
-        int cutLevel = levels - 1;
-        int passageLevel = levels - 1;
-        for (int level = levels - 1; level >= 0; level--) {
-            double separated = 1.0 - survival;
-            if (separated <= P_PASSAGE) {
-                passageLevel = level;
-            }
-            if (separated <= P_CUT) {
-                cutLevel = level;
-            }
-            survival *= pathDecay[level];
+        if (capped[PASSAGE]) {
+            passageAt = capLevel;
         }
-
-        int stopLevel = passageLevel;
-        if (massLevel >= 0) {
-            cutLevel = Math.min(cutLevel, massLevel);
-            passageLevel = Math.min(passageLevel, massLevel);
-        }
-
-        copyBox(cutLevel, cutBox);
-        copyBox(passageLevel, passageBox);
-        copyBox(stopLevel, stopBox);
-        copyGap(cutLevel, gapBox);
-        scales.observeTree(cutBox, passageBox, stopBox, gapBox, pathMass[cutLevel]);
+        // a root lighter than the reading mass gives the root, and says so
+        capped[READING] = readingLevel < 0;
+        int readingAt = capped[READING] ? top : readingLevel;
+        read(CUT, cutAt);
+        read(PASSAGE, passageAt);
+        read(READING, readingAt);
     }
 
-    private void copyBox(int level, double[] out) {
-        System.arraycopy(pathBox, level * len, out, 0, len);
-    }
-
-    private void copyGap(int level, double[] out) {
-        for (int i = 0; i < len; i++) {
-            out[i] = pathGap[level * len + i];
-        }
-    }
-
-    @Override
-    protected void reset() {
-        super.reset();
-        levels = 0;
-        massLevel = -1;
-        flushed = folded = deposited = false;
-        pending = null;
-        scales.clear();
-        Arrays.fill(cutBox, 0.0);
-        Arrays.fill(passageBox, 0.0);
-        Arrays.fill(stopBox, 0.0);
-        Arrays.fill(gapBox, 0.0);
-        // Buffer slots are overwritten on append; no per-tree clearing.
-    }
-
-    @Override
-    public void resetAcrossQueries(float[] point) {
-        super.resetAcrossQueries(point);
-        foldedScales.clear();
+    private void read(int box, int level) {
+        readLevel(level, reach, gap, box * len);
+        boxMass[box] = mass(level);
+        boxCut[box] = cutProbability(level);
     }
 
     @Override
     public void foldOut() {
-        if (folded) {
-            return;
+        flush();
+        if (levels() > 0) {
+            folded.addTree(treeMass, reach, gap, boxMass, boxCut, capped);
         }
+    }
+
+    /** This tree alone, detached: a fresh result each call. */
+    @Override
+    public AnisotropicLocalGeometry getResult() {
         flush();
-        FirstPassageScales.addToLeft(foldedScales, scales);
-        super.foldOut();
-        folded = true;
+        AnisotropicLocalGeometry.Accumulator one = new AnisotropicLocalGeometry.Accumulator(dim, config);
+        if (levels() > 0) {
+            one.addTree(treeMass, reach, gap, boxMass, boxCut, capped);
+        }
+        return one.toGeometry();
     }
 
     @Override
-    public InterpolationMeasure getResult() {
-        flush();
-        pending = scales;
-        InterpolationMeasure result = super.getResult();
-        // The base sets its sampleSize in foldOut(), but not on the direct path.
-        result.setSampleSize(treeMass);
-        return result;
+    public AnisotropicLocalGeometry getFoldResult() {
+        return folded.toGeometry();
     }
 
     @Override
-    public InterpolationMeasure getFoldResult() {
-        pending = foldedScales;
-        return super.getFoldResult();
+    public void resetAcrossQueries(float[] point) {
+        reset();
+        folded.clear();
     }
 
-    @Override
-    protected InterpolationMeasure toMeasure(double[] m, double[] d, double[] p, double ss, double trees, double sc,
-            double h) {
-        InterpolationMeasure base = super.toMeasure(m, d, p, ss, trees, sc, h);
-        base.setScales(new FirstPassageScales(pending != null ? pending : scales));
-        pending = null;
-        return base;
-    }
-
-    public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass) {
-        return reusableFactory(pointMass, centerOfMass, DEFAULT_MASS_EXPONENT);
-    }
-
-    public static IVisitorFactory<InterpolationMeasure> reusableFactory(double pointMass, boolean centerOfMass,
-            double massTargetExponent) {
-        return new IVisitorFactory<InterpolationMeasure>() {
+    /**
+     * Reusable, foldable, reusable across queries. A forest reduces its per-tree or
+     * per-thread results with {@link AnisotropicLocalGeometry#merge}.
+     */
+    public static IVisitorFactory<AnisotropicLocalGeometry> factory(LocalGeometryConfig config) {
+        checkNotNull(config, "config must not be null");
+        return new IVisitorFactory<AnisotropicLocalGeometry>() {
             @Override
             public boolean isReusable() {
                 return true;
@@ -296,14 +195,13 @@ public class AnisotropicLocalVisitor extends InterpolationVisitor {
             }
 
             @Override
-            public IRFVisitor<InterpolationMeasure> newReusableVisitor(float[] point) {
-                return new AnisotropicLocalVisitor(point.length, pointMass, centerOfMass, massTargetExponent);
+            public IRFVisitor<AnisotropicLocalGeometry> newReusableVisitor(float[] point) {
+                return new AnisotropicLocalVisitor(point.length, config);
             }
 
             @Override
-            public Visitor<InterpolationMeasure> newVisitor(ITree<?, ?> tree, float[] point) {
-                return new AnisotropicLocalVisitor(tree.projectToTree(point), tree.getMass(), pointMass, centerOfMass,
-                        massTargetExponent);
+            public Visitor<AnisotropicLocalGeometry> newVisitor(ITree<?, ?> tree, float[] point) {
+                return new AnisotropicLocalVisitor(tree.projectToTree(point).length, tree.getMass(), config);
             }
         };
     }
