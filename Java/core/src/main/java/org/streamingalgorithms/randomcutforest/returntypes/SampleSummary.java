@@ -185,6 +185,32 @@ public class SampleSummary {
 
     // Weighted prefix quantile over the sorted packed keys.
 
+    /**
+     * The lower, median and upper picks of n samples of weight one, exactly as the
+     * constructors pick them at this percentile: the same keys, the same sort and
+     * the same prefix rule. A weighted pick depends only on the multiset of (value,
+     * weight), so merging equal samples into one of their summed weight, as the
+     * conditional summary does before it summarizes, picks the same values. keys
+     * holds at least n entries of scratch, ones at least n entries of 1f. Writes
+     * out[0], out[1], out[2]: lower, median, upper.
+     */
+    public static void pickUnitWeights(float[] values, int n, double percentile, long[] keys, float[] ones,
+            float[] out) {
+        checkArgument(n > 0, "point list cannot be empty");
+        for (int k = 0; k < n; k++) {
+            float v = values[k];
+            if (Float.isNaN(v) || !Float.isFinite(v)) {
+                throw new IllegalArgumentException(" improper input, must be finite, non-NaN values");
+            }
+            keys[k] = ((long) sortableInt(v) << 32) | (k & 0xffffffffL);
+        }
+        Arrays.sort(keys, 0, n);
+        double totalWeight = n;
+        out[0] = weightedPick(keys, ones, n, totalWeight * (1.0 - percentile));
+        out[1] = weightedPick(keys, ones, n, totalWeight / 2.0);
+        out[2] = weightedPick(keys, ones, n, totalWeight * percentile);
+    }
+
     protected static float weightedPick(long[] sorted, float[] w, int n, double target) {
         double cumulative = 0.0;
         for (int t = 0; t < n; t++) {

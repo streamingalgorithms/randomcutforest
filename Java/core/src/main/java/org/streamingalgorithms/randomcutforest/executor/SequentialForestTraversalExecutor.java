@@ -171,8 +171,8 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
             Collector<R, ?, S> collector) {
         // The collector dive: impute (getConditionalField ->
         // ConditionalTreeSample.collector)
-        // lands here. Reuse the ROOT visitor + one NodeView across trees; forks still
-        // allocate via newPartialCopy() (a later, independent cut). Gated on
+        // lands here. Reuse the ROOT visitor + one NodeView across trees; forks are
+        // the visitor's own (ImputeVisitor pools them, last in first out). Gated on
         // isReusable(), so the legacy stream is bit-unchanged for current callers.
         if (visitorFactory.isReusable()) {
             return collectReusableMulti(point, visitorFactory, collector);

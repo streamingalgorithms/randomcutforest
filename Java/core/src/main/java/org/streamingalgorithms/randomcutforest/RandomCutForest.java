@@ -44,6 +44,7 @@ import org.streamingalgorithms.randomcutforest.config.Precision;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestTraversalExecutor;
 import org.streamingalgorithms.randomcutforest.executor.AbstractForestUpdateExecutor;
 import org.streamingalgorithms.randomcutforest.executor.IStateCoordinator;
+import org.streamingalgorithms.randomcutforest.executor.ITraversable;
 import org.streamingalgorithms.randomcutforest.executor.ParallelForestTraversalExecutor;
 import org.streamingalgorithms.randomcutforest.executor.ParallelForestUpdateExecutor;
 import org.streamingalgorithms.randomcutforest.executor.PointStoreCoordinator;
@@ -64,6 +65,7 @@ import org.streamingalgorithms.randomcutforest.summarization.ICluster;
 import org.streamingalgorithms.randomcutforest.summarization.Summarizer;
 import org.streamingalgorithms.randomcutforest.tree.IBoundingBoxView;
 import org.streamingalgorithms.randomcutforest.tree.ITree;
+import org.streamingalgorithms.randomcutforest.tree.NodeView;
 import org.streamingalgorithms.randomcutforest.tree.RandomCutTree;
 import org.streamingalgorithms.randomcutforest.util.ShingleBuilder;
 
@@ -253,6 +255,25 @@ public class RandomCutForest {
     private IVisitorFactory<InterpolationMeasure> densityFactory;
     protected IVisitorFactory<AnisotropicLocalGeometry> anisotropicFactory;
 
+    /**
+     * Set by {@link #setMultiRead}: other threads may read at the same time, so no
+     * call keeps state for the next.
+     */
+    private boolean multiRead;
+
+    /**
+     * Imputation's working state, kept across calls on the sequential path (see
+     * {@link #reusesImputation}): one root walk re-armed per query, one view, and
+     * per tree the leaf its walk settles on. Not part of the forest's state.
+     */
+    private ImputeVisitor imputeRoot;
+    private NodeView imputeView;
+    private int[] imputeLeaves;
+    private float[] imputeValues;
+    private long[] imputeKeys;
+    private float[] imputeOnes;
+    private final float[] imputeQuantiles = new float[3];
+
     public <P> RandomCutForest(Builder<?> builder, IStateCoordinator<P, float[]> stateCoordinator,
             ComponentList<P, float[]> components, Random random) {
         this(builder, false);
@@ -313,7 +334,7 @@ public class RandomCutForest {
      * that isn't used. This argument exists only to create a distinct method
      * signature so that we can expose {@link #RandomCutForest(Builder)} as a
      * protected constructor.
-     * 
+     *
      * @param builder A Builder instance giving the desired random cut forest
      *                configuration.
      * @param notUsed This parameter is not used.
@@ -502,7 +523,7 @@ public class RandomCutForest {
     /**
      * used for scoring and other function, expands to a shingled point in either
      * case performs a clean copy
-     * 
+     *
      * @param point input point
      * @return a shingled copy or a clean copy
      */
@@ -513,7 +534,7 @@ public class RandomCutForest {
 
     /**
      * does the pointstore use rotated shingles
-     * 
+     *
      * @return true/false based on pointstore
      */
     public boolean isRotationEnabled() {
@@ -523,7 +544,7 @@ public class RandomCutForest {
     /**
      * transforms the missing indices on the input point to the corresponding
      * indices of a shingled point
-     * 
+     *
      * @param indexList input array of missing values
      * @param length    length of the input array
      * @return output array of missing values corresponding to shingle
@@ -620,7 +641,7 @@ public class RandomCutForest {
 
     /**
      * changes the setting of time dependent sampling on the fly
-     * 
+     *
      * @param timeDecay new value of sampling rate
      */
     public void setTimeDecay(double timeDecay) {
@@ -630,6 +651,7 @@ public class RandomCutForest {
     }
 
     public void setMultiRead(boolean multiRead) {
+        this.multiRead = multiRead;
         traversalExecutor.setMultiRead(multiRead);
         updateExecutor.setMultiRead(multiRead);
     }
@@ -965,10 +987,9 @@ public class RandomCutForest {
     /**
      * The local geometry of the query under the default configuration: the cut,
      * passage and reading boxes of every tree, averaged over the trees.
-     * 
+     *
      * @param point query point
-     * @return @return the geometry; empty (no trees) until the forest is ready to
-     *         output
+     * @return the geometry; empty (no trees) until the forest is ready to output
      */
     public AnisotropicLocalGeometry getAnisotropicGeometry(float[] point) {
         return getAnisotropicGeometry(point, LocalGeometryConfig.DEFAULT);
@@ -1027,7 +1048,7 @@ public class RandomCutForest {
      * The function returns summary statistics of points close to a query point
      * (with possible missing values). The statics can perform an optional
      * multicentroid clustering
-     * 
+     *
      * @param point                   the query point
      * @param missingIndexes          the list of positions which are missing
      * @param numberOfRepresentatives number of representatives in a cluster
@@ -1078,7 +1099,85 @@ public class RandomCutForest {
      */
 
     public float[] imputeMissingValues(float[] point, int[] missingIndexes) {
-        return getConditionalFieldSummary(point, missingIndexes, 1, 0, false, false, 1.0, 1).median;
+        if (!reusesImputation() || !isOutputReady()) {
+            return getConditionalFieldSummary(point, missingIndexes, 1, 0, false, false, 1.0, 1).median;
+        }
+        checkArgument(point != null, " cannot be null");
+        // the query as the trees see it; returned with its missing coordinates filled
+        float[] shingled = transformToShingledPoint(point);
+        int[] lifted = transformIndices(missingIndexes, point.length);
+        int trees = conditionalLeaves(shingled, lifted, 1.0);
+        checkKnownFinite(shingled);
+        for (int i : lifted) {
+            shingled[i] = imputedQuantiles(i, trees)[1];
+        }
+        return shingled;
+    }
+
+    /**
+     * The summary reads the known coordinates of its output from the query and
+     * refuses a value that is not finite; the same check, on every coordinate the
+     * last conditional walk did not mark missing.
+     */
+    private void checkKnownFinite(float[] shingled) {
+        for (int i = 0; i < shingled.length; i++) {
+            float v = shingled[i];
+            if (!imputeRoot.isMissing(i) && (Float.isNaN(v) || !Float.isFinite(v))) {
+                throw new IllegalArgumentException(" improper input, must be finite, non-NaN values");
+            }
+        }
+    }
+
+    /**
+     * True when imputation may keep its working state across calls: the sequential
+     * executor, and no concurrent readers. Otherwise every call builds its own,
+     * through getConditionalFieldSummary, as it always has.
+     */
+    private boolean reusesImputation() {
+        return !parallelExecutionEnabled && !multiRead;
+    }
+
+    /**
+     * Walks every tree conditionally for the shingled query with the given
+     * coordinates missing, as getConditionalField does, and records per tree the
+     * point-store index of the leaf its walk settles on, in tree order. Returns the
+     * number of trees. Nothing is allocated once the state exists.
+     */
+    private int conditionalLeaves(float[] shingled, int[] lifted, double centrality) {
+        int trees = components.size();
+        if (imputeRoot == null || imputeLeaves.length < trees) {
+            imputeRoot = new ImputeVisitor(shingled, shingled, lifted, lifted, centrality, 0L);
+            imputeView = new NodeView(dimensions, sampleSize);
+            imputeLeaves = new int[trees];
+            imputeValues = new float[trees];
+            imputeKeys = new long[trees];
+            imputeOnes = new float[trees];
+            Arrays.fill(imputeOnes, 1f);
+        }
+        imputeRoot.rearm(shingled, lifted, centrality);
+        imputeView.set(shingled);
+        int n = 0;
+        for (ITraversable c : components) {
+            imputeView = c.reusableTraverseMulti(shingled, imputeRoot, imputeView);
+            imputeLeaves[n++] = imputeRoot.getLeafPointIndex();
+        }
+        return n;
+    }
+
+    /**
+     * Lower, median and upper over the trees of coordinate i of the leaves
+     * {@link #conditionalLeaves} recorded, each tree of weight one: the values the
+     * conditional summary gives for a missing coordinate, which it reads from the
+     * store. Returned in a buffer the next call overwrites.
+     */
+    private float[] imputedQuantiles(int i, int trees) {
+        IPointStore<?, float[]> store = stateCoordinator.getStore();
+        for (int t = 0; t < trees; t++) {
+            imputeValues[t] = store.valueAt(imputeLeaves[t], i);
+        }
+        SampleSummary.pickUnitWeights(imputeValues, trees, SampleSummary.DEFAULT_PERCENTILE, imputeKeys, imputeOnes,
+                imputeQuantiles);
+        return imputeQuantiles;
     }
 
     // number of missing values is redundant
@@ -1206,6 +1305,19 @@ public class RandomCutForest {
             // shift all entries in the query point left by 1 block
             System.arraycopy(queryPoint, blockSize, queryPoint, 0, dimensions - blockSize);
 
+            if (reusesImputation() && isOutputReady()) {
+                // the summary's output is the last block, the missing coordinates
+                int trees = conditionalLeaves(transformToShingledPoint(queryPoint),
+                        transformIndices(missingIndexes, queryPoint.length), centrality);
+                for (int y = 0; y < blockSize; y++) {
+                    float[] q = imputedQuantiles(dimensions - blockSize + y, trees);
+                    result.values[resultIndex] = queryPoint[dimensions - blockSize + y] = q[1];
+                    result.lower[resultIndex] = q[0];
+                    result.upper[resultIndex] = q[2];
+                    resultIndex++;
+                }
+                continue;
+            }
             SampleSummary imputedSummary = getConditionalFieldSummary(queryPoint, missingIndexes, 1, 0, false, false,
                     centrality, dimensions / blockSize);
             for (int y = 0; y < blockSize; y++) {
@@ -1229,6 +1341,24 @@ public class RandomCutForest {
                 missingIndexes[y] = (currentPosition + y) % dimensions;
             }
 
+            if (reusesImputation() && isOutputReady()) {
+                // the summary's output is every coordinate; the known ones are the query's
+                float[] shingled = transformToShingledPoint(queryPoint);
+                int trees = conditionalLeaves(shingled, transformIndices(missingIndexes, queryPoint.length),
+                        centrality);
+                checkKnownFinite(shingled);
+                for (int y = 0; y < blockSize; y++) {
+                    int i = (currentPosition + y) % dimensions;
+                    float[] q = imputeRoot.isMissing(i) ? imputedQuantiles(i, trees) : null;
+                    float value = (q == null) ? shingled[i] : q[1];
+                    result.values[resultIndex] = queryPoint[i] = value;
+                    result.lower[resultIndex] = (q == null) ? value : q[0];
+                    result.upper[resultIndex] = (q == null) ? value : q[2];
+                    resultIndex++;
+                }
+                currentPosition = (currentPosition + blockSize) % dimensions;
+                continue;
+            }
             SampleSummary imputedSummary = getConditionalFieldSummary(queryPoint, missingIndexes, 1, 0, false, false,
                     centrality, 1);
 
@@ -1369,7 +1499,7 @@ public class RandomCutForest {
      * usage of distance metric is similar to the discussion in
      * https://en.wikipedia.org/wiki/Data_stream_clustering See the examples package
      * for an example of dynamic summarization. /
-     * 
+     *
      * @param maxAllowed              maximum number of clusters one is willing to
      *                                see
      * @param shrinkage               a parameter that controls between spherical

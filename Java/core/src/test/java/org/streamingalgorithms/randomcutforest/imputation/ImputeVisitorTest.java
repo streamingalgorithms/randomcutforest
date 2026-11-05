@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -319,6 +335,24 @@ public class ImputeVisitorTest {
         // fork starts with fresh scalar state
         assertEquals(ImputeVisitor.DEFAULT_INIT_VALUE, fork.getAnomalyRank());
         assertEquals(ImputeVisitor.DEFAULT_INIT_VALUE, fork.getDistance());
+    }
+
+    // ---- FORKS ARE POOLED: taken and returned last in first out, re-armed fresh
+    // ----
+
+    @Test
+    public void testForksArePooledLastInFirstOut() {
+        ImputeVisitor first = (ImputeVisitor) visitor.newPartialCopy();
+        ImputeVisitor nested = (ImputeVisitor) first.newPartialCopy();
+        assertNotSame(first, nested);
+        first.anomalyRank = 3.0;
+        first.combine(nested);
+        visitor.combine(first);
+
+        ImputeVisitor again = (ImputeVisitor) visitor.newPartialCopy();
+        assertSame(first, again); // the same frame, reused
+        assertEquals(ImputeVisitor.DEFAULT_INIT_VALUE, again.getAnomalyRank()); // and re-armed
+        assertSame(visitor.queryPoint, again.queryPoint); // still sharing the buffer
     }
 
     // ---- combine: pick the lower adjustedRank; copy scalars; no-op otherwise ----
