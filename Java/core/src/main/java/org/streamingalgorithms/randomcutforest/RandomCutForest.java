@@ -56,6 +56,8 @@ import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
+import org.streamingalgorithms.randomcutforest.projection.TreeProjection;
+import org.streamingalgorithms.randomcutforest.projection.TreeProjector;
 import org.streamingalgorithms.randomcutforest.returntypes.*;
 import org.streamingalgorithms.randomcutforest.sampler.CompactSampler;
 import org.streamingalgorithms.randomcutforest.sampler.IStreamSampler;
@@ -273,6 +275,12 @@ public class RandomCutForest {
     private long[] imputeKeys;
     private float[] imputeOnes;
     private final float[] imputeQuantiles = new float[3];
+
+    /**
+     * The projector of {@link #projectOnTree}, kept across calls like imputation's
+     * state.
+     */
+    private TreeProjector projector;
 
     public <P> RandomCutForest(Builder<?> builder, IStateCoordinator<P, float[]> stateCoordinator,
             ComponentList<P, float[]> components, Random random) {
@@ -1125,6 +1133,52 @@ public class RandomCutForest {
             if (!imputeRoot.isMissing(i) && (Float.isNaN(v) || !Float.isFinite(v))) {
                 throw new IllegalArgumentException(" improper input, must be finite, non-NaN values");
             }
+        }
+    }
+
+    /**
+     * Tree number {@code tree} restricted to points[0], ..., points[n - 1]: the
+     * vertices at which their paths part and the leaves they reach, written into
+     * out, which is cleared first (see {@link TreeProjection}). One walk over the
+     * union of the points' paths, each vertex of it visited once; the points are
+     * routed by the tree's own cuts, as a traversal routes one point. The points
+     * are in the trees' space, of {@link #getDimensions()} coordinates (for a
+     * shingled input, {@link #transformToShingledPoint} first); they are read, not
+     * retained. Nothing is allocated once the projector is warm, except with
+     * multiRead or a parallel executor, where each call takes its own. Before the
+     * forest's output is ready, out holds no node.
+     *
+     * @param tree   the index of the tree, from 0 to {@link #getNumberOfTrees()} -
+     *               1
+     * @param points the points, at least n of them
+     * @param n      how many to project, at most out's capacity
+     * @param out    the projection to fill, of this forest's dimensions
+     * @return out
+     */
+    public TreeProjection projectOnTree(int tree, float[][] points, int n, TreeProjection out) {
+        checkArgument(0 <= tree && tree < components.size(), "no such tree");
+        checkNotNull(points, "points must not be null");
+        checkNotNull(out, "projection must not be null");
+        checkArgument(out.dimensions == dimensions, "the projection must have the forest's dimensions");
+        TreeProjector p = reusesImputation() ? projector : null;
+        if (p == null) {
+            p = new TreeProjector(dimensions);
+            if (reusesImputation()) {
+                projector = p;
+            }
+        }
+        return p.project(components.get(tree), points, isOutputReady() ? n : 0, out);
+    }
+
+    /**
+     * Every tree restricted to the points, tree t into out[t], as
+     * {@link #projectOnTree} does for one.
+     */
+    public void projectOnTrees(float[][] points, int n, TreeProjection[] out) {
+        checkNotNull(out, "projections must not be null");
+        checkArgument(out.length == components.size(), "one projection per tree");
+        for (int t = 0; t < out.length; t++) {
+            projectOnTree(t, points, n, out[t]);
         }
     }
 

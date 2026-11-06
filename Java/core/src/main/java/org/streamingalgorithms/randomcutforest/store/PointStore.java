@@ -1002,10 +1002,49 @@ public class PointStore implements IPointStore<Integer, float[]> {
         if (!rotationEnabled) {
             System.arraycopy(store, address, answer, offset, dimensions);
         } else {
-            // clearly every cell
-            for (int i = 0; i < dimensions; i++) {
-                answer[(address + i) % dimensions + offset] = store[address + i];
-            }
+
+            int column = address % dimensions;
+            System.arraycopy(store, address, answer, offset + column, dimensions - column);
+            System.arraycopy(store, address + dimensions - column, answer, offset, column);
+        }
+    }
+    /*
+     * A rotated point at address a occupies store[a, a + d) with coordinate j at
+     * the cell congruent to j mod d. With c = a mod d and base = a - c, a multiple
+     * of d, coordinates [c, d) are the run store[base + c, base + d) and
+     * coordinates [0, c) the run store[base + d, base + d + c): both runs lie in
+     * [a, a + d), and in each one coordinate j sits at a fixed offset (base, or
+     * base + d) plus j. A kernel over a coordinate range with one point offset
+     * therefore reads either run in place, as the linear store is read.
+     *
+     * The bounds of a box are exact under any order, but its range sum depends on
+     * the order of summation. So the rotated paths below grow the box run by run
+     * and then let the linear path's own kernel sum it, with no further point (an
+     * empty list) or with the box's own upper corner, which lies in the box: a
+     * rotated store returns, bit for bit, what a linear store holding the same
+     * points returns.
+     */
+
+    /**
+     * Grows the box at values[offset, offset + 2d) by the rotated point at address.
+     */
+    private void addRotated(float[] values, int offset, int address) {
+        int column = address % dimensions;
+        int base = address - column;
+        growRun(values, offset, base, column, dimensions);
+        growRun(values, offset, base + dimensions, 0, column);
+    }
+
+    /**
+     * Coordinates [from, to) of the box take the point whose coordinate j is
+     * store[at + j].
+     */
+    private void growRun(float[] values, int offset, int at, int from, int to) {
+        final int dim = dimensions;
+        for (int j = from; j < to; j++) {
+            float p = store[at + j];
+            values[offset + j] = max(values[offset + j], p);
+            values[offset + dim + j] = max(values[offset + dim + j], -p);
         }
     }
 
@@ -1016,7 +1055,13 @@ public class PointStore implements IPointStore<Integer, float[]> {
         if (!rotationEnabled) {
             VectorSupport.expandInto(store, address, values, offset, dimensions);
         } else {
-            VectorSupport.expandInto(getNumericVector(index), 0, values, offset, dimensions);
+            int column = address % dimensions;
+            System.arraycopy(store, address, values, offset + column, dimensions - column);
+            System.arraycopy(store, address + dimensions - column, values, offset, column);
+            for (int j = 0; j < dimensions; j++) {
+                values[offset + dimensions + j] = -values[offset + j];
+            }
+
         }
     }
 
@@ -1029,11 +1074,12 @@ public class PointStore implements IPointStore<Integer, float[]> {
     }
 
     double addToRotatedSlice(float[] values, int offset, int[] array, int start, int finish) {
-        double val = 0;
-        for (int i = start; i < finish; i++) { // allocates
-            val = VectorSupport.addPointInPlace(values, offset, dimensions, getNumericVector(array[i]), 0);
+
+        for (int i = start; i < finish; i++) {
+            checkFeasible(array[i]);
+            addRotated(values, offset, getLocation(array[i]));
         }
-        return val;
+        return VectorSupport.updateBoundsAll(values, offset, dimensions, store, array, start, start);
     }
 
     public double addToSlice(float[] values, int offset, int[] array, int start, int finish) {
@@ -1052,16 +1098,34 @@ public class PointStore implements IPointStore<Integer, float[]> {
         if (!rotationEnabled) {
             return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, store, address);
         } else {
-            return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, getNumericVector(index), 0);
+            addRotated(boxLocation, offset, address);
+            return VectorSupport.addPointInPlace(boxLocation, offset, dimensions, boxLocation, offset);
         }
     }
 
     public double addToSliceWithGap(float[] values, int offset, int[] array, int start, int finish, float[] exp,
             int expOff, float[] gapOut, int gapOff, double[] out) {
-        checkState(!rotationEnabled, "fused path is linear-only");
+        if (rotationEnabled) {
+            return addToRotatedSliceWithGap(values, offset, array, start, finish, exp, expOff, gapOut, gapOff, out);
+        }
         for (int k = start; k < finish; k++)
             array[k] = getLocation(array[k]);
         return VectorSupport.updateBoundsAndGap(values, offset, dimensions, store, array, start, finish, exp, expOff,
+                gapOut, gapOff, out);
+    }
+
+    /**
+     * The rotated form of {@link #addToSliceWithGap}: the box takes the points run
+     * by run, and the fused kernel, given no further point, writes the gaps of exp
+     * beyond it and returns their sum, with the range sum in out[0].
+     */
+    private double addToRotatedSliceWithGap(float[] values, int offset, int[] array, int start, int finish, float[] exp,
+            int expOff, float[] gapOut, int gapOff, double[] out) {
+        for (int k = start; k < finish; k++) {
+            checkFeasible(array[k]);
+            addRotated(values, offset, getLocation(array[k]));
+        }
+        return VectorSupport.updateBoundsAndGap(values, offset, dimensions, store, array, start, start, exp, expOff,
                 gapOut, gapOff, out);
     }
 

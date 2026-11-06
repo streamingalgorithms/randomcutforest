@@ -332,6 +332,45 @@ public class RandomCutForestShingledFunctionalTest {
 
     }
 
+    /**
+     * A forest that rotates its shingles internally holds the same points as a
+     * linear forest fed the same cyclic shingles, so with one seed the two score
+     * and forecast alike, bit for bit, whether boxes are cached, partly cached or
+     * rebuilt from the points.
+     */
+    @Test
+    public void testInternalRotationMatchesLinearAtEveryCacheFraction() {
+        int shingleSize = 24;
+        for (double cache : new double[] { 0.0, 0.3, 1.0 }) {
+            RandomCutForest linear = RandomCutForest.builder().numberOfTrees(20).sampleSize(64).dimensions(shingleSize)
+                    .boundingBoxCacheFraction(cache).randomSeed(17).build();
+            RandomCutForest rotated = RandomCutForest.builder().numberOfTrees(20).sampleSize(64).dimensions(shingleSize)
+                    .shingleSize(shingleSize).internalShinglingEnabled(true).internalRotationEnabled(true)
+                    .boundingBoxCacheFraction(cache).randomSeed(17).build();
+            Random noise = new Random(2);
+            float[] history = new float[shingleSize];
+            int next = 0;
+            boolean full = false;
+            for (int t = 0; t < 600; t++) {
+                float x = (float) (10 * cos(2 * PI * t / 37.0) + noise.nextGaussian());
+                if (full && linear.isOutputReady() && rotated.isOutputReady()) {
+                    float[] candidate = history.clone();
+                    candidate[next] = x;
+                    assertEquals(linear.getAnomalyScore(candidate), rotated.getAnomalyScore(new float[] { x }), 1e-6);
+                }
+                history[next] = x;
+                next = (next + 1) % shingleSize;
+                full |= next == 0;
+                rotated.update(new float[] { x });
+                if (full) {
+                    linear.update(history.clone());
+                }
+            }
+            assertArrayEquals(linear.extrapolateWithRanges(history, 10, 1, true, next, 1.0).values,
+                    rotated.extrapolateFromCurrentTime(10));
+        }
+    }
+
     @Test
     public void testExtrapolateC() {
 
