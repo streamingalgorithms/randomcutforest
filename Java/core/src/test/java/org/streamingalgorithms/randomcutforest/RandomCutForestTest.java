@@ -232,8 +232,8 @@ public class RandomCutForestTest {
 
         components.forEach(c -> when(c.traverse(aryEq(point), any())).thenReturn(0.0));
 
-        assertThrows(NullPointerException.class,
-                () -> forest.traverseForest(null, TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, accumulator, finisher));
+        assertThrows(IllegalArgumentException.class, () -> forest.traverseForest(new float[0],
+                TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, accumulator, finisher));
         assertThrows(IllegalArgumentException.class, () -> forest.traverseForest(new float[] { 2.2f, -1.1f, 3.3f },
                 TestUtils.DUMMY_GENERIC_VISITOR_FACTORY, accumulator, finisher));
         assertThrows(NullPointerException.class, () -> forest.traverseForest(point, null, accumulator, finisher));

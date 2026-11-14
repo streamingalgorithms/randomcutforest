@@ -24,7 +24,7 @@ import org.streamingalgorithms.randomcutforest.testutils.ShingledMultiDimDataWit
  * The two shared datasets, re-partitioned on OPERATION rather than
  * distribution. Both are 100 effective dimensions so the JOL retained-size
  * comparison is honest; they differ only in structure:
- * 
+ *
  * <pre>
  *   D1 = 100-dim normal mixture, shingle 1   (dense, no shingle sharing)
  *   D2 = 10 base-dim x shingle 10            (shingle sharing -> should be far smaller in the store)
@@ -82,6 +82,16 @@ public final class Datasets {
     }
 
     public static Prepared prepare(Id id, double cacheFraction, long seed, int saturation) {
+        return prepare(id, cacheFraction, seed, saturation, false, 0);
+    }
+
+    /**
+     * As above, with the forest's traversal executor chosen: parallel uses the
+     * forest's thread pool, of threadPoolSize threads, or the forest's default (the
+     * processors less one) when threadPoolSize is not positive.
+     */
+    public static Prepared prepare(Id id, double cacheFraction, long seed, int saturation, boolean parallel,
+            int threadPoolSize) {
         final int total = INITIAL + SCORED;
         final double[][] data;
         final RandomCutForest forest;
@@ -90,13 +100,13 @@ public final class Datasets {
         case D1: {
             int dimensions = 100;
             data = new NormalMixtureTestData().generateTestData(total, dimensions, FIXED_SEED);
-            forest = base(dimensions, 1, cacheFraction, seed).build();
+            forest = executor(base(dimensions, 1, cacheFraction, seed), parallel, threadPoolSize).build();
             break;
         }
         case D2: {
             int baseDim = 10, shingleSize = 10, dimensions = baseDim * shingleSize;
             data = ShingledMultiDimDataWithKeys.getMultiDimData(total, 60, 100, 5, FIXED_SEED, baseDim).data;
-            forest = base(dimensions, shingleSize, cacheFraction, seed).build();
+            forest = executor(base(dimensions, shingleSize, cacheFraction, seed), parallel, threadPoolSize).build();
             break;
         }
         default:
@@ -114,6 +124,15 @@ public final class Datasets {
             scoreF[i] = CommonUtils.toFloatArray(data[saturation + i]);
         }
         return new Prepared(forest, scoreD, scoreF, id.effectiveDims());
+    }
+
+    private static RandomCutForest.Builder<?> executor(RandomCutForest.Builder<?> builder, boolean parallel,
+            int threadPoolSize) {
+        builder.parallelExecutionEnabled(parallel);
+        if (parallel && threadPoolSize > 0) {
+            builder.threadPoolSize(threadPoolSize);
+        }
+        return builder;
     }
 
     private static RandomCutForest.Builder<?> base(int dimensions, int shingleSize, double cacheFraction, long seed) {

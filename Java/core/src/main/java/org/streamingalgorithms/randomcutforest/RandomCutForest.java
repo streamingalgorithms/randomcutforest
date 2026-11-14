@@ -55,7 +55,9 @@ import org.streamingalgorithms.randomcutforest.imputation.ConditionalSampleSumma
 import org.streamingalgorithms.randomcutforest.imputation.ImputeVisitor;
 import org.streamingalgorithms.randomcutforest.inspect.NearNeighborVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.AnisotropicLocalVisitor;
+import org.streamingalgorithms.randomcutforest.interpolation.EscapeVisitor;
 import org.streamingalgorithms.randomcutforest.interpolation.InterpolationVisitor;
+import org.streamingalgorithms.randomcutforest.interpolation.ReferenceSums;
 import org.streamingalgorithms.randomcutforest.projection.TreeProjection;
 import org.streamingalgorithms.randomcutforest.projection.TreeProjector;
 import org.streamingalgorithms.randomcutforest.returntypes.*;
@@ -687,6 +689,55 @@ public class RandomCutForest {
      * @return The aggregated and finalized result after sending a visitor through
      *         each tree in the forest.
      */
+    /**
+     * The same visitor for a batch of points; result i is that of the single-point
+     * method for points[i]. Each tree is walked for all the points before the next,
+     * which keeps a tree's work together: with parallel execution each thread takes
+     * a share of the trees for the whole batch. The forest must not be updated
+     * during the call. The points are as the trees read them (already shingled, if
+     * the forest shingles).
+     *
+     * @param points         the points, each of the forest's dimensions
+     * @param visitorFactory creates the visitor; reusable factories get the batch
+     *                       order, others are served point by point
+     * @param accumulator    combines the trees' results of one point; not null
+     * @param finisher       applied to each point's combined result
+     * @return one result per point, in the order of the points
+     */
+    public <R, S> List<S> traverseForest(float[][] points, IVisitorFactory<R> visitorFactory,
+            BinaryOperator<R> accumulator, Function<R, S> finisher) {
+        checkNotNull(points, "points must not be null");
+        for (float[] point : points) {
+            checkNotNull(point, "point must not be null");
+            checkArgument(point.length == dimensions, () -> "point.length must equal to " + dimensions);
+        }
+        checkNotNull(visitorFactory, "visitorFactory must not be null");
+        checkNotNull(accumulator, "accumulator must not be null");
+        checkNotNull(finisher, "finisher must not be null");
+        return traversalExecutor.traverseForest(points, visitorFactory, accumulator, finisher);
+    }
+
+    /**
+     * The anomaly scores of a batch of points, each as {@link #getAnomalyScore},
+     * read tree by tree
+     * ({@link #traverseForest(float[][], IVisitorFactory, BinaryOperator, Function)}).
+     */
+    public double[] getAnomalyScore(float[][] points) {
+        double[] out = new double[points.length];
+        if (!isOutputReady()) {
+            return out;
+        }
+        float[][] shingled = new float[points.length][];
+        for (int i = 0; i < points.length; i++) {
+            shingled[i] = transformToShingledPoint(points[i]);
+        }
+        List<Double> sums = traverseForest(shingled, DEFAULT_SCORE_FACTORY, Double::sum, x -> x / numberOfTrees);
+        for (int i = 0; i < out.length; i++) {
+            out[i] = sums.get(i);
+        }
+        return out;
+    }
+
     public <R, S> S traverseForest(float[] point, IVisitorFactory<R> visitorFactory, BinaryOperator<R> accumulator,
             Function<R, S> finisher) {
 
@@ -1021,6 +1072,58 @@ public class RandomCutForest {
                 ? anisotropicFactory
                 : AnisotropicLocalVisitor.factory(config);
         return traverseForest(transformToShingledPoint(point), factory, AnisotropicLocalGeometry::merge, x -> x);
+    }
+
+    /**
+     * How a random-cut insertion of the point would separate it: codisplacement,
+     * range escape, the exits by face and the passage mass, averaged over the
+     * trees.
+     *
+     * @param point query point
+     * @return the reading; of no trees until the forest is ready to output
+     */
+    public Escape getEscape(float[] point) {
+        if (!isOutputReady()) {
+            return new Escape(dimensions);
+        }
+        return traverseForest(transformToShingledPoint(point), escapeFactory(), Escape::merge, x -> x);
+    }
+
+    /**
+     * The escape of each point of a batch, read tree by tree; with sums, each
+     * reading also carries the point's row against a reference set that was routed
+     * through the trees beforehand ({@link ReferenceSums}). The forest must not be
+     * updated between that routing and this call.
+     *
+     * @param points query points
+     * @param sums   the reference set's sums, or null
+     * @return one reading per point; empty lists until the forest is ready
+     */
+    public List<Escape> getEscape(float[][] points, ReferenceSums sums) {
+        checkNotNull(points, "points must not be null");
+        if (!isOutputReady()) {
+            List<Escape> none = new ArrayList<>(points.length);
+            for (int i = 0; i < points.length; i++) {
+                none.add(new Escape(dimensions));
+            }
+            return none;
+        }
+        float[][] shingled = new float[points.length][];
+        for (int i = 0; i < points.length; i++) {
+            shingled[i] = transformToShingledPoint(points[i]);
+        }
+        IVisitorFactory<Escape> factory = (sums == null) ? escapeFactory()
+                : EscapeVisitor.factory(LocalGeometryConfig.DEFAULT, sums);
+        return traverseForest(shingled, factory, Escape::merge, x -> x);
+    }
+
+    private IVisitorFactory<Escape> escapeFactory;
+
+    private IVisitorFactory<Escape> escapeFactory() {
+        if (escapeFactory == null) {
+            escapeFactory = EscapeVisitor.factory(LocalGeometryConfig.DEFAULT);
+        }
+        return escapeFactory;
     }
 
     /**

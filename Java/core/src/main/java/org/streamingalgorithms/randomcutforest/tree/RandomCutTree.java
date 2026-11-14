@@ -269,7 +269,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * Cleanup fires for anomalous distributions -- it ignores all ranges and
      * performs a nontrivial cut in the first dimension it can cut in, starting
      * evenly from 0 or the box dimension-1
-     * 
+     *
      * @param factor random seed to control/reproduce behavior
      * @param box    the pathological box in question
      * @param point  can be null, non-null points are unioned
@@ -326,7 +326,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
 
     /**
      * the following function adds a point to the tree
-     * 
+     *
      * @param pointIndex    the number corresponding to the point
      * @param sequenceIndex sequence index of the point
      * @return the value of the point index where the point was added; this is
@@ -582,7 +582,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * the following function is used to rebuild the tree structure. This function
      * does not create mass, auxiliary arrays, which should be performed using
      * validateAndReconstruct()
-     * 
+     *
      * @param pointIndex    index of point (in point store)
      * @param sequenceIndex sequence index (stored in sampler)
      */
@@ -804,6 +804,81 @@ public class RandomCutTree implements ITree<Integer, float[]> {
             boundingBoxData = null;
         }
         boundingBoxCacheFraction = fraction;
+    }
+
+    /**
+     * A full box cache that a batch reader owns and lends to one tree at a time
+     * ({@link #lendCache}). The arrays grow to the largest tree seen and are then
+     * reused, so reading a batch through many trees allocates once.
+     */
+    public static final class BoxLoan {
+        private double[] rangeSum = new double[0];
+        private float[] boxes = new float[0];
+        // the borrower's own cache, put back by returnCache
+        private double[] savedRangeSum;
+        private float[] savedBoxes;
+        private int[] savedNodeAt;
+        private int savedLimit, savedBasicCache, savedMapSize;
+        private double savedFraction;
+        private boolean out;
+    }
+
+    /**
+     * Reads of this tree use the loan as a full, initially empty box cache until
+     * {@link #returnCache}: each box is built at most once, on first use, from the
+     * boxes of its children. For a batch of queries against a tree whose own cache
+     * is partial or absent; the tree's own cache is put aside untouched. The tree
+     * must not be updated, nor read by another thread, while the loan is out.
+     *
+     * @return false, with nothing changed, if the tree already caches every box or
+     *         is in multi-read
+     */
+    public boolean lendCache(BoxLoan loan) {
+        int full = numberOfLeaves - 1;
+        if (multiRead || loan.out || (rangeSumData != null && limit == full && basicCache == 0)) {
+            return false;
+        }
+        if (loan.rangeSum.length < full) {
+            loan.rangeSum = new double[full];
+            loan.boxes = new float[full * 2 * dimension];
+        } else {
+            Arrays.fill(loan.rangeSum, 0, full, 0.0); // every slot stale
+        }
+        if (loan.boxes.length < full * 2 * dimension) {
+            loan.boxes = new float[full * 2 * dimension];
+        }
+        loan.savedRangeSum = rangeSumData;
+        loan.savedBoxes = boundingBoxData;
+        loan.savedNodeAt = nodeAt;
+        loan.savedLimit = limit;
+        loan.savedBasicCache = basicCache;
+        loan.savedMapSize = mapSize;
+        loan.savedFraction = boundingBoxCacheFraction;
+        loan.out = true;
+        rangeSumData = loan.rangeSum;
+        boundingBoxData = loan.boxes;
+        nodeAt = null;
+        limit = full;
+        basicCache = 0;
+        mapSize = 0;
+        boundingBoxCacheFraction = 1.0;
+        return true;
+    }
+
+    /** Ends a loan that lendCache granted: the tree's own cache is as it was. */
+    public void returnCache(BoxLoan loan) {
+        checkState(loan.out && rangeSumData == loan.rangeSum, "this tree does not hold the loan");
+        rangeSumData = loan.savedRangeSum;
+        boundingBoxData = loan.savedBoxes;
+        nodeAt = loan.savedNodeAt;
+        limit = loan.savedLimit;
+        basicCache = loan.savedBasicCache;
+        mapSize = loan.savedMapSize;
+        boundingBoxCacheFraction = loan.savedFraction;
+        loan.savedRangeSum = null;
+        loan.savedBoxes = null;
+        loan.savedNodeAt = null;
+        loan.out = false;
     }
 
     protected int translate(int index) {
@@ -1095,7 +1170,7 @@ public class RandomCutTree implements ITree<Integer, float[]> {
      * This function is supposed to validate the integrity of the tree and rebuild
      * internal data structures. At this moment the only internal structure is the
      * pointsum.
-     * 
+     *
      * @param index the node of a tree
      * @return a bounding box of the points
      */

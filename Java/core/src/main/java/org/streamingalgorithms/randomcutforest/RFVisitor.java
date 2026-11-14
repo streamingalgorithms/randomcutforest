@@ -32,6 +32,15 @@ public abstract class RFVisitor<R> implements IRFVisitor<R> {
     public final void prepare(ITree<?, ?> tree, float[] rawPoint) {
         this.treeMass = tree.getMass();
         reset();
+        onTree(tree, rawPoint);
+    }
+
+    /**
+     * Called as a walk begins, after reset: the tree about to be walked and the
+     * point as the forest gave it. For a visitor that reads something it keeps per
+     * tree, such as sums over a reference set routed through that tree beforehand.
+     */
+    protected void onTree(ITree<?, ?> tree, float[] rawPoint) {
     }
 
     protected abstract void reset();

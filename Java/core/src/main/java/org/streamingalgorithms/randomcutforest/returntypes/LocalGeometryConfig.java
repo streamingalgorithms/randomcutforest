@@ -40,9 +40,27 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
  * cap mass for every psi of at least 1.
  */
 public record LocalGeometryConfig(double stopProbability, double cutQuantile, double passageQuantile, double capFactor,
-        double capExponent, double readingFactor, double readingExponent) {
+        double capExponent, double readingFactor, double readingExponent, boolean centreMoments) {
 
     public static final LocalGeometryConfig DEFAULT = new LocalGeometryConfig(0.05, 0.5, 0.05, 1.0, 0.5, 2.0, 0.5);
+
+    /** Without the centre moments: no lead and no swing. */
+    public LocalGeometryConfig(double stopProbability, double cutQuantile, double passageQuantile, double capFactor,
+            double capExponent, double readingFactor, double readingExponent) {
+        this(stopProbability, cutQuantile, passageQuantile, capFactor, capExponent, readingFactor, readingExponent,
+                false);
+    }
+
+    /**
+     * The same rules with the centre moments kept or not. Kept, a geometry also
+     * holds the mean and the covariance across trees of the centre of the cut box's
+     * void (its lead and swing): d + d(d + 1)/2 more numbers, and as many additions
+     * for every tree read.
+     */
+    public LocalGeometryConfig withCentreMoments(boolean centreMoments) {
+        return new LocalGeometryConfig(stopProbability, cutQuantile, passageQuantile, capFactor, capExponent,
+                readingFactor, readingExponent, centreMoments);
+    }
 
     public LocalGeometryConfig {
         checkArgument(stopProbability > 0 && stopProbability < 1, "stopProbability must be in (0, 1)");

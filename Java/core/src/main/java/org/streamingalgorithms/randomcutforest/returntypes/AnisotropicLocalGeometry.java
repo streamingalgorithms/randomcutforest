@@ -17,6 +17,7 @@ package org.streamingalgorithms.randomcutforest.returntypes;
 
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 import static org.streamingalgorithms.randomcutforest.CommonUtils.checkNotNull;
+import static org.streamingalgorithms.randomcutforest.CommonUtils.checkState;
 
 import java.util.Arrays;
 
@@ -33,7 +34,9 @@ import org.streamingalgorithms.randomcutforest.tree.VectorSupport;
  * between the query and the face of the data box it lies beyond, into which
  * that tree's next cut would fall. The lead is the mean over trees of the
  * offset from the query to the centre of that box, and the swing the covariance
- * of those centres across trees.
+ * of those centres across trees. Both are kept only when the configuration asks
+ * ({@link LocalGeometryConfig#withCentreMoments}); by default a geometry is the
+ * three boxes alone.
  *
  * <p>
  * Immutable. It holds sums over trees and divides on the way out, so
@@ -146,6 +149,7 @@ public final class AnisotropicLocalGeometry {
      * box.
      */
     public double[] lead() {
+        checkState(config.centreMoments(), "read without centre moments: see LocalGeometryConfig.withCentreMoments");
         double[] out = new double[dimensions];
         for (int i = 0; i < dimensions && treeCount > 0; i++) {
             out[i] = centreSum[i] / treeCount;
@@ -155,6 +159,7 @@ public final class AnisotropicLocalGeometry {
 
     /** Covariance across trees of the gap-box centre, d by d; zero for one tree. */
     public double[][] swing() {
+        checkState(config.centreMoments(), "read without centre moments: see LocalGeometryConfig.withCentreMoments");
         double[][] out = new double[dimensions][dimensions];
         if (treeCount == 0) {
             return out;
@@ -206,8 +211,9 @@ public final class AnisotropicLocalGeometry {
             massSum = new double[BOXES];
             cutSum = new double[BOXES];
             capped = new int[BOXES];
-            centreSum = new double[dimensions];
-            centreProducts = new double[dimensions * (dimensions + 1) / 2];
+            // the lead and the swing are kept only when the configuration asks
+            centreSum = new double[config.centreMoments() ? dimensions : 0];
+            centreProducts = new double[config.centreMoments() ? dimensions * (dimensions + 1) / 2 : 0];
         }
 
         public void clear() {
@@ -242,7 +248,7 @@ public final class AnisotropicLocalGeometry {
             // difference from the query.
             int base = CUT * len;
             int k = 0;
-            for (int i = 0; i < dimensions; i++) {
+            for (int i = 0; i < centreSum.length; i++) {
                 double ci = 0.5 * (gap[base + dimensions + i] - gap[base + i]);
                 centreSum[i] += ci;
                 for (int j = i; j < dimensions; j++) {
