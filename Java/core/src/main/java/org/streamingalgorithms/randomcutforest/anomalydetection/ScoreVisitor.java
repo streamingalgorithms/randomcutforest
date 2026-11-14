@@ -141,6 +141,15 @@ public class ScoreVisitor extends AbstractScoringVisitor<Double> {
         foldedScore = 0;
     }
 
+    @Override
+    public boolean absorb(IRFVisitor<Double> other) {
+        if (!(other instanceof ScoreVisitor)) {
+            return false;
+        }
+        foldedScore += ((ScoreVisitor) other).foldedScore;
+        return true;
+    }
+
     public static final IVisitorFactory<Double> DEFAULT_SCORE_FACTORY = reusableFactory(true,
             DEFAULT_IGNORE_LEAF_MASS_THRESHOLD, DefaultScoreFunctions.DEFAULT_SCORE_SEEN,
             DefaultScoreFunctions.DEFAULT_SCORE_UNSEEN, DefaultScoreFunctions.DEFAULT_DAMP,

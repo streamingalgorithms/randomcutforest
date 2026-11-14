@@ -40,6 +40,27 @@ public interface IRFVisitor<R> extends Visitor<R> {
         throw new UnsupportedOperationException("not foldable");
     }
 
+    /**
+     * Adds the trees another visitor of the same factory has folded into this one's
+     * fold, leaving the other unchanged, and returns true; or returns false, with
+     * nothing changed, if this visitor cannot. A forest that shares its trees among
+     * threads joins the threads' folds this way, and reads one result at the end;
+     * where it cannot, it joins their results with its accumulator.
+     */
+    default boolean absorb(IRFVisitor<R> other) {
+        return false;
+    }
+
+    /**
+     * Copies the fold, as the visitor holds it, into the start of out and returns
+     * true; or returns false, with out untouched, if the visitor's fold is not an
+     * array. A forest reads a result into a caller's buffer this way, building no
+     * result object. The layout and any scaling are the visitor's to state.
+     */
+    default boolean copyFold(double[] out) {
+        return false;
+    }
+
     default void resetAcrossQueries(float[] point) {
         throw new UnsupportedOperationException("not reusable yet");
     }

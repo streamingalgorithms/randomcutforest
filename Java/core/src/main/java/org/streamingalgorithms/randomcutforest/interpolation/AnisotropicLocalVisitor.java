@@ -172,6 +172,15 @@ public class AnisotropicLocalVisitor extends SeparationVisitor<AnisotropicLocalG
         folded.clear();
     }
 
+    @Override
+    public boolean absorb(IRFVisitor<AnisotropicLocalGeometry> other) {
+        if (!(other instanceof AnisotropicLocalVisitor)) {
+            return false;
+        }
+        folded.add(((AnisotropicLocalVisitor) other).folded);
+        return true;
+    }
+
     /**
      * Reusable, foldable, reusable across queries. A forest reduces its per-tree or
      * per-thread results with {@link AnisotropicLocalGeometry#merge}.

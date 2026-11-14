@@ -251,6 +251,15 @@ public class EscapeVisitor extends SeparationVisitor<Escape> {
         folded.clear();
     }
 
+    @Override
+    public boolean absorb(IRFVisitor<Escape> other) {
+        if (!(other instanceof EscapeVisitor)) {
+            return false;
+        }
+        folded.add(((EscapeVisitor) other).folded);
+        return true;
+    }
+
     /**
      * Reusable, foldable, reusable across queries. A forest reduces its per-tree or
      * per-thread results with {@link Escape#merge}.

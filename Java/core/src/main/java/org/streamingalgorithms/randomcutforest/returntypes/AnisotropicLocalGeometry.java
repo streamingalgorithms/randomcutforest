@@ -179,7 +179,7 @@ public final class AnisotropicLocalGeometry {
     @Override
     public String toString() {
         return "AnisotropicLocalGeometry[trees=" + treeCount + ", cut=" + cut() + ", passage=" + passage()
-                + ", reading=" + reading() + ", lead=" + Arrays.toString(lead()) + "]";
+                + ", reading=" + reading() + (config.centreMoments() ? ", lead=" + Arrays.toString(lead()) : "") + "]";
     }
 
     /**
@@ -260,6 +260,23 @@ public final class AnisotropicLocalGeometry {
         }
 
         /** Adds the trees of a result. */
+        /** Adds the trees of another accumulator of the same point. */
+        public void add(Accumulator other) {
+            checkArgument(other.dimensions == dimensions, "dimensions must be the same");
+            checkArgument(other.config.equals(config), "readings under different configurations do not merge");
+            VectorSupport.axpyInto(reachSum, other.reachSum, 1.0);
+            VectorSupport.axpyInto(gapSum, other.gapSum, 1.0);
+            for (int b = 0; b < BOXES; b++) {
+                massSum[b] += other.massSum[b];
+                cutSum[b] += other.cutSum[b];
+                capped[b] += other.capped[b];
+            }
+            VectorSupport.axpyInto(centreSum, other.centreSum, 1.0);
+            VectorSupport.axpyInto(centreProducts, other.centreProducts, 1.0);
+            treeMassSum += other.treeMassSum;
+            treeCount += other.treeCount;
+        }
+
         public void add(AnisotropicLocalGeometry g) {
             checkNotNull(g, "geometry must not be null");
             checkArgument(g.dimensions == dimensions, "dimensions must be the same");

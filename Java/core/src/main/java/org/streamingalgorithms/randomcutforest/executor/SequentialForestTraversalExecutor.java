@@ -75,6 +75,20 @@ public class SequentialForestTraversalExecutor extends AbstractForestTraversalEx
         return resusableView;
     }
 
+    @Override
+    public <R> boolean foldInto(float[] point, IVisitorFactory<R> vf, double[] out) {
+        if (!vf.isReusable() || !vf.isFoldable()) {
+            return false;
+        }
+        IRFVisitor<R> slot = slotFor(vf, point);
+        NodeView viewTower = viewFor(point);
+        for (ITraversable c : components) {
+            viewTower = c.reusableTraverse(point, slot, viewTower);
+            slot.foldOut();
+        }
+        return slot.copyFold(out);
+    }
+
     private <R, S> S foldForest(float[] point, IVisitorFactory<R> vf, ConvergingAccumulator<R> conv,
             Function<R, S> finisher) {
         /// slotFor(vf, point) can be used someday. TODAY!!

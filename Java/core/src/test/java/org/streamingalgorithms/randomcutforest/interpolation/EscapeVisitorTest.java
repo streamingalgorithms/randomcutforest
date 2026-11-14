@@ -162,6 +162,7 @@ public class EscapeVisitorTest {
         RandomCutForest forest = forest(false, 1.0);
         float[] p = new float[] { 6, 0, 0, 0 };
         AnisotropicLocalGeometry plain = forest.getAnisotropicGeometry(p);
+        assertFalse(plain.toString().contains("lead")); // and it prints without them
         assertThrows(IllegalStateException.class, plain::lead);
         assertThrows(IllegalStateException.class, plain::swing);
         AnisotropicLocalGeometry full = forest.getAnisotropicGeometry(p,

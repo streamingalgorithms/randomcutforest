@@ -113,8 +113,24 @@ public abstract class AbstractForestTraversalExecutor {
             batchState = new BatchState();
         }
         Object[] acc = new Object[points.length];
-        batchSlice(0, components.size(), points, visitorFactory, accumulator, acc, batchState);
+        IRFVisitor<R>[] folders = batchSlice(0, components.size(), points, visitorFactory, accumulator, acc,
+                batchState);
+        if (folders != null) {
+            for (int i = 0; i < points.length; i++) {
+                acc[i] = visitorFactory.liftResult(null, folders[i].getFoldResult());
+            }
+        }
         return finish(acc, finisher, out);
+    }
+
+    /**
+     * Folds the forest for one point and copies the fold into out, building no
+     * result: see {@link IRFVisitor#copyFold}. Returns false, with out undefined,
+     * when the factory does not fold or its visitor has no array to copy; the
+     * caller then takes the result the usual way.
+     */
+    public <R> boolean foldInto(float[] point, IVisitorFactory<R> visitorFactory, double[] out) {
+        return false;
     }
 
     /** What one thread keeps between its batches. */
@@ -159,11 +175,14 @@ public abstract class AbstractForestTraversalExecutor {
     }
 
     /**
-     * Trees [from, to), each walked for every point; acc[i] takes the trees'
-     * results for points[i], combined in the order of the trees.
+     * Trees [from, to), each walked for every point. For a factory that does not
+     * fold, acc[i] takes the trees' results for points[i], combined in the order of
+     * the trees, and null is returned. For one that folds, the visitors are
+     * returned, one per point, each holding its fold of these trees: the caller
+     * joins the folds of its slices and reads each result once.
      */
     @SuppressWarnings("unchecked")
-    protected <R> void batchSlice(int from, int to, float[][] points, IVisitorFactory<R> visitorFactory,
+    protected <R> IRFVisitor<R>[] batchSlice(int from, int to, float[][] points, IVisitorFactory<R> visitorFactory,
             BinaryOperator<R> accumulator, Object[] acc, BatchState state) {
         // a factory that folds gets a visitor per point, which adds each tree in as it
         // is read; otherwise one visitor serves, and each tree's result is detached
@@ -202,11 +221,7 @@ public abstract class AbstractForestTraversalExecutor {
             }
         }
         state.view = tower;
-        if (folding) {
-            for (int i = 0; i < points.length; i++) {
-                acc[i] = visitorFactory.liftResult(null, folders[i].getFoldResult());
-            }
-        }
+        return folders;
     }
 
     /**

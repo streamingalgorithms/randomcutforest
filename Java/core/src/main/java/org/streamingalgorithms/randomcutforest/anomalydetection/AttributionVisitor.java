@@ -217,6 +217,25 @@ public class AttributionVisitor extends AbstractScoringVisitor<DiVector> {
         Arrays.fill(foldedAttribution, 0.0);
     }
 
+    /**
+     * The folded attribution: the high directions of the d coordinates, then the
+     * low.
+     */
+    @Override
+    public boolean copyFold(double[] out) {
+        System.arraycopy(foldedAttribution, 0, out, 0, foldedAttribution.length);
+        return true;
+    }
+
+    @Override
+    public boolean absorb(IRFVisitor<DiVector> other) {
+        if (!(other instanceof AttributionVisitor)) {
+            return false;
+        }
+        VectorSupport.axpyInto(foldedAttribution, ((AttributionVisitor) other).foldedAttribution, 1.0);
+        return true;
+    }
+
     // after each tree: scale this tree's result, add into the running sum
     public void foldOut() {
         double factor = idempotentRefactor();

@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -623,7 +639,9 @@ public class RandomCutForest {
      *
      * @param point       The point used to update the forest.
      * @param sequenceNum The timestamp of the corresponding point
+     * @deprecated the forest reads float[]; use {@link #update(float[], long)}.
      */
+    @Deprecated
     public void update(double[] point, long sequenceNum) {
         checkNotNull(point, "point must not be null");
         update(toFloatArray(point), sequenceNum);
@@ -893,18 +911,38 @@ public class RandomCutForest {
         return fn.apply(toFloatArray(p));
     }
 
+    /**
+     * @deprecated the forest reads float[]; convert once at the caller, as the
+     *             float[] method of the same name expects.
+     */
+    @Deprecated
     public double getAnomalyScore(double[] p) {
         return asFloat(p, this::getAnomalyScore);
     }
 
+    /**
+     * @deprecated the forest reads float[]; convert once at the caller, as the
+     *             float[] method of the same name expects.
+     */
+    @Deprecated
     public DiVector getAnomalyAttribution(double[] p) {
         return asFloat(p, this::getAnomalyAttribution);
     }
 
+    /**
+     * @deprecated the forest reads float[]; convert once at the caller, as the
+     *             float[] method of the same name expects.
+     */
+    @Deprecated
     public double getApproximateAnomalyScore(double[] p) {
         return asFloat(p, this::getApproximateAnomalyScore);
     }
 
+    /**
+     * @deprecated the forest reads float[]; convert once at the caller, as the
+     *             float[] method of the same name expects.
+     */
+    @Deprecated
     public DensityOutput getSimpleDensity(double[] p) {
         return asFloat(p, this::getSimpleDensity);
     }
@@ -982,6 +1020,40 @@ public class RandomCutForest {
     }
 
     /**
+     * The anomaly attribution of {@link #getAnomalyAttribution(float[])} as an
+     * array of 2 * dimensions: the high directions of the coordinates, then the
+     * low. With a buffer, the attribution is written into it and it is returned,
+     * and nothing is allocated; with null, a new array is returned. An attribution
+     * is a sum over trees and is kept in double, as the forest computes it; a
+     * {@link DiVector} of it is {@code new DiVector(array)}.
+     *
+     * @param point  the point being scored
+     * @param buffer an array of 2 * dimensions to write into, or null
+     * @return the attribution: buffer, if one was given
+     */
+    public double[] getAnomalyAttribution(float[] point, double[] buffer) {
+        checkArgument(buffer == null || buffer.length == 2 * dimensions,
+                () -> "buffer must have length " + 2 * dimensions);
+        double[] out = (buffer != null) ? buffer : new double[2 * dimensions];
+        if (!isOutputReady()) {
+            Arrays.fill(out, 0.0);
+            return out;
+        }
+        checkNotNull(point, "point must not be null");
+        float[] shingled = transformToShingledPoint(point);
+        if (traversalExecutor.foldInto(shingled, AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY, out)) {
+            for (int i = 0; i < out.length; i++) {
+                out[i] /= numberOfTrees;
+            }
+            return out;
+        }
+        DiVector vector = attributionWith(point, AttributionVisitor.DEFAULT_ATTRIBUTION_FACTORY);
+        System.arraycopy(vector.high, 0, out, 0, dimensions);
+        System.arraycopy(vector.low, 0, out, dimensions, dimensions);
+        return out;
+    }
+
+    /**
      * Gauged attribution. {@code weights} is float[2 * dimensions] in [high, low]
      * layout; null falls through to the unweighted singleton.
      *
@@ -1009,7 +1081,10 @@ public class RandomCutForest {
      *
      * @param point The point being scored.
      * @return anomaly attribution for the given point.
+     * @deprecated the forest reads float[]; use
+     *             {@link #getApproximateAnomalyAttribution(float[])}.
      */
+    @Deprecated
     public DiVector getApproximateAnomalyAttribution(double[] point) {
         return getApproximateAnomalyAttribution(toFloatArray(point));
     }
@@ -1210,17 +1285,51 @@ public class RandomCutForest {
      */
 
     public float[] imputeMissingValues(float[] point, int[] missingIndexes) {
+        return imputeMissingValues(point, missingIndexes, null);
+    }
+
+    /**
+     * As {@link #imputeMissingValues(float[], int[])}. With a buffer of the
+     * forest's dimensions, the point as the trees see it, its missing coordinates
+     * filled, is written into the buffer and the buffer is returned; with null, a
+     * new array is returned. The buffer must not be the point.
+     *
+     * @param point          the point, with arbitrary values at the missing indexes
+     * @param missingIndexes the indexes to impute
+     * @param buffer         an array of {@link #getDimensions()} to write into, or
+     *                       null
+     * @return the imputed point: buffer, if one was given
+     */
+    public float[] imputeMissingValues(float[] point, int[] missingIndexes, float[] buffer) {
+        checkArgument(buffer == null || buffer.length == dimensions, () -> "buffer must have length " + dimensions);
+        checkArgument(buffer == null || buffer != point, "the buffer must not be the point");
         if (!reusesImputation() || !isOutputReady()) {
-            return getConditionalFieldSummary(point, missingIndexes, 1, 0, false, false, 1.0, 1).median;
+            float[] median = getConditionalFieldSummary(point, missingIndexes, 1, 0, false, false, 1.0, 1).median;
+            if (buffer == null) {
+                return median;
+            }
+            System.arraycopy(median, 0, buffer, 0, dimensions);
+            return buffer;
         }
         checkArgument(point != null, " cannot be null");
         // the query as the trees see it; returned with its missing coordinates filled
-        float[] shingled = transformToShingledPoint(point);
+        float[] shingled;
+        IPointStore<?, ?> store = stateCoordinator.getStore();
+        if (buffer != null && store instanceof PointStore) {
+            ((PointStore) store).transformToShingledPoint(point, buffer);
+            shingled = buffer;
+        } else {
+            shingled = transformToShingledPoint(point);
+        }
         int[] lifted = transformIndices(missingIndexes, point.length);
         int trees = conditionalLeaves(shingled, lifted, 1.0);
         checkKnownFinite(shingled);
         for (int i : lifted) {
             shingled[i] = imputedQuantiles(i, trees)[1];
+        }
+        if (buffer != null && shingled != buffer) {
+            System.arraycopy(shingled, 0, buffer, 0, dimensions);
+            return buffer;
         }
         return shingled;
     }
@@ -1538,7 +1647,9 @@ public class RandomCutForest {
      *
      * @param horizon The number of blocks to forecast.
      * @return a forecasted time series.
+     * @deprecated points are float[]; use {@link #extrapolateFromCurrentTime}.
      */
+    @Deprecated
     public double[] extrapolate(int horizon) {
         return toDoubleArray(extrapolateFromCurrentTime(horizon));
     }
@@ -1999,11 +2110,6 @@ public class RandomCutForest {
 
         ConvergingAccumulator<DiVector> accumulator = new PrimitiveConvergingAccumulator<>(HIGH, precision,
                 DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED, numberOfTrees);
-        // ConvergingAccumulator<DiVector> accumulator = new
-        // OneSidedConvergingDiVectorAccumulator(dimensions, HIGH,
-        // precision, DEFAULT_APPROXIMATE_DYNAMIC_SCORE_MIN_VALUES_ACCEPTED,
-        // numberOfTrees);
-
         Function<DiVector, DiVector> finisher = vector -> vector.scaleInPlace(1.0 / accumulator.getValuesAccepted());
 
         return traverseForest(transformToShingledPoint(point), vf, accumulator, finisher);

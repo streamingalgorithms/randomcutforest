@@ -148,24 +148,50 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
         }
         BatchState[] states = batchStates;
         Object[][] part = new Object[all.length][points.length];
+        @SuppressWarnings("unchecked")
+        IRFVisitor<R>[][] folders = new IRFVisitor[all.length][];
         if (all.length == 1) {
-            batchSlice(all[0].from, all[0].to, points, visitorFactory, accumulator, part[0], states[0]);
+            folders[0] = batchSlice(all[0].from, all[0].to, points, visitorFactory, accumulator, part[0], states[0]);
         } else {
             submitAndJoin(() -> {
-                IntStream.range(0, all.length).parallel().forEach(i -> batchSlice(all[i].from, all[i].to, points,
-                        visitorFactory, accumulator, part[i], states[i]));
+                IntStream.range(0, all.length).parallel().forEach(i -> folders[i] = batchSlice(all[i].from, all[i].to,
+                        points, visitorFactory, accumulator, part[i], states[i]));
                 return null;
             });
         }
         Object[] acc = part[0];
-        for (int s = 1; s < all.length; s++) {
-            for (int i = 0; i < points.length; i++) {
+        for (int i = 0; i < points.length; i++) {
+            if (folders[0] != null) {
+                acc[i] = joinFolds(visitorFactory, accumulator, folders, i);
+                continue;
+            }
+            for (int s = 1; s < all.length; s++) {
                 @SuppressWarnings("unchecked")
                 R joined = accumulator.apply((R) acc[i], (R) part[s][i]);
                 acc[i] = joined;
             }
         }
         return finish(acc, finisher, new ArrayList<>(points.length));
+    }
+
+    /**
+     * The folds of the slices for point i as one result: added in place into the
+     * first slice's visitor where the visitor can absorb, so that one result is
+     * built; otherwise each slice's result, joined by the accumulator.
+     */
+    private <R> R joinFolds(IVisitorFactory<R> vf, BinaryOperator<R> accumulator, IRFVisitor<R>[][] folders, int i) {
+        IRFVisitor<R> first = folders[0][i];
+        R acc = null;
+        for (int s = 1; s < folders.length; s++) {
+            if (acc == null && first.absorb(folders[s][i])) {
+                continue;
+            }
+            if (acc == null) { // cannot absorb: the first slice's result, then the rest
+                acc = vf.liftResult(null, first.getFoldResult());
+            }
+            acc = accumulator.apply(acc, vf.liftResult(null, folders[s][i].getFoldResult()));
+        }
+        return (acc != null) ? acc : vf.liftResult(null, first.getFoldResult());
     }
 
     private synchronized Slice[] slices() {
@@ -179,6 +205,41 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
             slices = fresh;
         }
         return slices;
+    }
+
+    @Override
+    public <R> boolean foldInto(float[] point, IVisitorFactory<R> vf, double[] out) {
+        if (!vf.isReusable() || !vf.isFoldable() || components.isEmpty()) {
+            return false;
+        }
+        Slice[] all = slices();
+        if (all.length == 1) {
+            return foldSlice(all[0], point, vf).copyFold(out);
+        }
+        List<IRFVisitor<R>> folds = submitAndJoin(() -> IntStream.range(0, all.length).parallel()
+                .mapToObj(i -> foldSlice(all[i], point, vf)).collect(Collectors.toList()));
+        IRFVisitor<R> first = folds.get(0);
+        for (int s = 1; s < folds.size(); s++) {
+            if (!first.absorb(folds.get(s))) {
+                return false;
+            }
+        }
+        return first.copyFold(out);
+    }
+
+    /** One slice folded, its visitor returned with the fold still in it. */
+    private <R> IRFVisitor<R> foldSlice(Slice slice, float[] point, IVisitorFactory<R> vf) {
+        boolean keep = !multiRead;
+        IRFVisitor<R> slot = slice.slotFor(vf, point, keep);
+        NodeView tower = slice.viewFor(point, keep);
+        for (int t = slice.from; t < slice.to; t++) {
+            tower = components.get(t).reusableTraverse(point, slot, tower);
+            slot.foldOut();
+        }
+        if (keep) {
+            slice.view = tower;
+        }
+        return slot;
     }
 
     /** One slice folded, or reduced tree by tree when the factory does not fold. */
@@ -232,6 +293,18 @@ public class ParallelForestTraversalExecutor extends AbstractForestTraversalExec
             Slice[] all = slices();
             if (accumulator == null) { // foldable, by the forest's check: nothing combines slices, so one fold
                 return finisher.apply(reduceSlice(new Slice(0, components.size()), point, visitorFactory, null));
+            }
+            if (visitorFactory.isFoldable() && all.length > 1) { // join the folds, read one result
+                List<IRFVisitor<R>> folds = submitAndJoin(() -> IntStream.range(0, all.length).parallel()
+                        .mapToObj(i -> foldSlice(all[i], point, visitorFactory)).collect(Collectors.toList()));
+                @SuppressWarnings("unchecked")
+                IRFVisitor<R>[][] folders = new IRFVisitor[all.length][];
+                for (int s = 0; s < all.length; s++) {
+                    @SuppressWarnings("unchecked")
+                    IRFVisitor<R>[] one = new IRFVisitor[] { folds.get(s) };
+                    folders[s] = one;
+                }
+                return finisher.apply(joinFolds(visitorFactory, accumulator, folders, 0));
             }
             List<R> parts = (all.length == 1)
                     ? java.util.Collections.singletonList(reduceSlice(all[0], point, visitorFactory, accumulator))
