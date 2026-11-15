@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -18,6 +34,7 @@ package org.streamingalgorithms.randomcutforest.parkservices.calibration;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Random;
 
@@ -97,4 +114,36 @@ public class ErrorHandlerTest {
                 deviations, null, null));
     }
 
+    @Test
+    public void limitsKeepTheIntervalAroundItsPoint() {
+        ErrorHandler e = ErrorHandler.builder().dimensions(1).forecastHorizon(1).errorHorizon(10).useRCF(false)
+                .lowerLimit(new float[] { -5 }).upperLimit(new float[] { 8 }).build();
+        // RCF's range above the upper limit, and a positive lower offset
+        e.errorDistribution.values[0] = 2;
+        e.errorDistribution.upper[0] = 5;
+        e.errorDistribution.lower[0] = 1;
+        RangeVector above = new RangeVector(new float[] { 9 }, new float[] { 10 }, new float[] { 8.5f });
+        e.calibrate(new double[1], Calibration.SIMPLE, above);
+        assertEquals(8, above.values[0]);
+        assertTrue(above.lower[0] <= above.values[0] && above.values[0] <= above.upper[0]);
+        // RCF's range below the lower limit, and a negative upper offset
+        e.errorDistribution.values[0] = -2;
+        e.errorDistribution.upper[0] = -1;
+        e.errorDistribution.lower[0] = -5;
+        RangeVector below = new RangeVector(new float[] { -7 }, new float[] { -6.5f }, new float[] { -8 });
+        e.calibrate(new double[1], Calibration.SIMPLE, below);
+        assertEquals(-5, below.values[0]);
+        assertTrue(below.lower[0] <= below.values[0] && below.values[0] <= below.upper[0]);
+    }
+
+    @Test
+    public void restoreRepairsAnIntervalThatMissesItsPoint() {
+        Deviation[] deviations = new Deviation[] { new Deviation(0.1), new Deviation(0.1), new Deviation(0.1) };
+        // value 8, upper 8, lower 8.0012: as published with an upper limit of 8
+        float[] past = new float[] { 8, 8, 8.0012f };
+        ErrorHandler e = assertDoesNotThrow(
+                () -> new ErrorHandler(1, 1, 1, 0.1, 1, past, new float[1], new double[2], deviations, null, null));
+        assertEquals(8, e.getPastForecasts()[0].lower[0]);
+        assertEquals(8, e.getPastForecasts()[0].upper[0]);
+    }
 }

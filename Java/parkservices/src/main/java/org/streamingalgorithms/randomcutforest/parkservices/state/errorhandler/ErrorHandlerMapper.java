@@ -18,6 +18,8 @@ package org.streamingalgorithms.randomcutforest.parkservices.state.errorhandler;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getDeviations;
 import static org.streamingalgorithms.randomcutforest.state.statistics.DeviationMapper.getStates;
 
+import java.util.Arrays;
+
 import org.streamingalgorithms.randomcutforest.PredictiveRandomCutForest;
 import org.streamingalgorithms.randomcutforest.parkservices.calibration.ErrorHandler;
 import org.streamingalgorithms.randomcutforest.state.IStateMapper;
@@ -33,18 +35,19 @@ public class ErrorHandlerMapper implements IStateMapper<ErrorHandler, ErrorHandl
         errorHandlerState.setPercentile(model.getPercentile());
         errorHandlerState.setForecastHorizon(model.getForecastHorizon());
         errorHandlerState.setErrorHorizon(model.getErrorHorizon());
-        errorHandlerState.setLastDataDeviations(model.getLastDataDeviations());
+        // copies: the handler updates these arrays in place
+        errorHandlerState.setLastDataDeviations(copy(model.getLastDataDeviations()));
         DeviationMapper deviationMapper = new DeviationMapper();
         errorHandlerState.setDeviationStates(getStates(model.getDeviationList(), deviationMapper));
-        errorHandlerState.setLastInput(model.getLastInputs());
+        errorHandlerState.setLastInput(Arrays.copyOf(model.getLastInputs(), model.getLastInputs().length));
         errorHandlerState.setInputLength(model.getInputLength());
         errorHandlerState.setPastForecastsFlattened(model.getPastForecastsFlattened());
         if (model.getEstimator() != null) {
             PredictiveRandomCutForestMapper mapper = new PredictiveRandomCutForestMapper();
             errorHandlerState.setEstimatorState(mapper.toState(model.getEstimator()));
         }
-        errorHandlerState.setLowerLimit(model.getLowerLimit());
-        errorHandlerState.setUpperLimit(model.getUpperLimit());
+        errorHandlerState.setLowerLimit(copy(model.getLowerLimit()));
+        errorHandlerState.setUpperLimit(copy(model.getUpperLimit()));
         return errorHandlerState;
     }
 
@@ -63,5 +66,9 @@ public class ErrorHandlerMapper implements IStateMapper<ErrorHandler, ErrorHandl
         errorHandler.setUpperLimit(state.getUpperLimit());
         errorHandler.setLowerLimit(state.getLowerLimit());
         return errorHandler;
+    }
+
+    private static float[] copy(float[] array) {
+        return (array == null) ? null : Arrays.copyOf(array, array.length);
     }
 }

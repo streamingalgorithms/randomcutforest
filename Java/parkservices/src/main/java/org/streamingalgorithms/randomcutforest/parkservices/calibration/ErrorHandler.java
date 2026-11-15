@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -33,6 +49,7 @@ import org.streamingalgorithms.randomcutforest.returntypes.RangeVector;
 import org.streamingalgorithms.randomcutforest.returntypes.SampleSummary;
 import org.streamingalgorithms.randomcutforest.statistics.Deviation;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -46,6 +63,39 @@ import lombok.Setter;
 // can be involved and out of current scope of this library. We simplify the issue to calibrating two
 // fixed quantiles and hence additive updates are reasonable.
 
+/**
+ * Keeps the errors of the forecasts that were published and turns them into the
+ * interval of the next forecast. This is the algorithm in outline; the methods
+ * give the details.
+ * <ul>
+ * <li>It stores the last forecastHorizon published forecasts (point, upper and
+ * lower), in a ring, and the last two inputs.</li>
+ * <li>When an actual arrives, for each step k it takes the forecast made k + 1
+ * steps earlier. It records a hit if the actual fell inside that forecast's
+ * published interval. It splits the error, actual minus the published point,
+ * into its positive part and its negative part; each part goes to its own
+ * discounted statistic (discount 1/errorHorizon), and the other side receives a
+ * zero.</li>
+ * <li>For a starting range of forecasts, 10 x forecastHorizon (or the
+ * estimator's outputAfter, 50 as built), both widths are the data's smoothed
+ * deviation. Over the next as many forecasts the widths move linearly to the
+ * error deviations (without the estimator). After that, the upward width is the
+ * standard deviation of the positive parts and the downward width that of the
+ * negative parts, so that the interval is asymmetric.</li>
+ * <li>With the estimator (useRCF), a second forest trained on the last two
+ * inputs, the step, and the two parts of the error supplies the widths of the
+ * near steps, moving linearly to the observed widths as the step grows.</li>
+ * <li>A control loop: when a step's hit rate is below 1 - percentile, both of
+ * its widths are multiplied by 1/(hit rate + 0.1).</li>
+ * <li>The mean error is the mean of the positive parts plus the mean of the
+ * negative parts. The upper offset is mean + 1.3 x upward width and the lower
+ * offset is mean - 1.3 x downward width.</li>
+ * </ul>
+ * {@link #calibrate(double[], Calibration, RangeVector)} describes how the
+ * offsets meet the forecast. The reported errorRMSE holds the widths before the
+ * estimator and the control loop: after the starting range, the standard
+ * deviations of the two parts of the error, not root mean squares.
+ */
 @Getter
 @Setter
 public class ErrorHandler {
@@ -77,6 +127,21 @@ public class ErrorHandler {
     PredictiveRandomCutForest estimator;
     float[] lastDataDeviations;
 
+    // scratch arrays, reused so that an update allocates nothing; they carry no
+    // state and are not saved
+    @Getter(AccessLevel.NONE)
+    private final float[] errorTuple;
+    @Getter(AccessLevel.NONE)
+    private final float[] query;
+    @Getter(AccessLevel.NONE)
+    private final int[] missing;
+    @Getter(AccessLevel.NONE)
+    private final float[] errorHigh;
+    @Getter(AccessLevel.NONE)
+    private final float[] errorLow;
+    @Getter(AccessLevel.NONE)
+    private final float[] precision;
+
     // We keep the multipliers defined for potential
     // future use.
 
@@ -99,6 +164,12 @@ public class ErrorHandler {
         }
         sequenceIndex = 0;
         lastInputs = new double[2 * inputLength];
+        errorTuple = new float[lastInputs.length + 2 * inputLength + 2];
+        query = new float[lastInputs.length + 2 * inputLength + 2];
+        missing = new int[inputLength];
+        errorHigh = new float[length];
+        errorLow = new float[length];
+        precision = new float[length];
         rmseHighDeviations = new Deviation[length];
         rmseLowDeviations = new Deviation[length];
         intervalPrecision = new Deviation[length];
@@ -170,6 +241,12 @@ public class ErrorHandler {
         this.lastInputs = Arrays.copyOf(lastInput, lastInput.length);
 
         int length = forecastHorizon * inputLength;
+        errorTuple = new float[lastInputs.length + 2 * inputLength + 2];
+        query = new float[lastInputs.length + 2 * inputLength + 2];
+        missing = new int[inputLength];
+        errorHigh = new float[length];
+        errorLow = new float[length];
+        precision = new float[length];
         checkArgument(lastDataDeviations.length >= inputLength, "incorrect length");
         this.lastDataDeviations = Arrays.copyOf(lastDataDeviations, lastDataDeviations.length);
         this.errorMean = new float[length];
@@ -194,6 +271,17 @@ public class ErrorHandler {
             float[] values = Arrays.copyOfRange(pastForecastsFlattened, i * 3 * length, (i * 3 + 1) * length);
             float[] upper = Arrays.copyOfRange(pastForecastsFlattened, (i * 3 + 1) * length, (i * 3 + 2) * length);
             float[] lower = Arrays.copyOfRange(pastForecastsFlattened, (i * 3 + 2) * length, (i * 3 + 3) * length);
+            // a state saved before calibrate kept each end on its side of the point can
+            // hold an interval that misses its point; it is repaired as calibrate now
+            // would have published it
+            for (int y = 0; y < length; y++) {
+                if (upper[y] < values[y]) {
+                    upper[y] = values[y];
+                }
+                if (lower[y] > values[y]) {
+                    lower[y] = values[y];
+                }
+            }
             pastForecasts[i] = new RangeVector(values, upper, lower);
 
         }
@@ -221,12 +309,18 @@ public class ErrorHandler {
     }
 
     /**
-     * updates the stored information (actuals) and recomputes the calibrations
-     * 
+     * Updates the statistics with an actual and recomputes the offsets. The input
+     * is first shifted into the last inputs, so that the estimator's training row
+     * pairs an error with the two inputs ending at its actual; the estimator's
+     * query in recomputeErrors uses the two inputs ending when the next forecast is
+     * made. For each step k with a stored forecast, the forecast made k + 1 steps
+     * earlier is compared with the actual: a hit if the actual lies within its
+     * published interval, and the error, actual minus its published point, split
+     * into a positive and a negative part.
+     *
      * @param input      the actual input
      * @param deviations the deviations (post the current input)
      */
-
     public void updateActuals(double[] input, double[] deviations) {
         int arrayLength = pastForecasts.length;
         int inputLength = input.length;
@@ -240,46 +334,65 @@ public class ErrorHandler {
             // sequenceIndex indicates the first empty place for input
             // note the predictions have already been stored
             int inputIndex = (sequenceIndex + arrayLength - 1) % arrayLength;
-            float[] errorTuple = new float[lastInputs.length + 2 * inputLength + 2];
-            for (int y = 0; y < lastInputs.length; y++) {
-                errorTuple[y] = (float) lastInputs[y];
+            float[] tuple = null;
+            if (estimator != null) {
+                int tupleLength = lastInputs.length + 2 * inputLength + 2;
+                tuple = (errorTuple.length == tupleLength) ? errorTuple : new float[tupleLength];
+                for (int y = 0; y < lastInputs.length; y++) {
+                    tuple[y] = (float) lastInputs[y];
+                }
             }
             for (int i = 0; i < forecastHorizon; i++) {
                 if (sequenceIndex > i) {
+                    RangeVector a = pastForecasts[inputIndex];
+                    int offset = i * inputLength;
                     for (int j = 0; j < inputLength; j++) {
-                        RangeVector a = pastForecasts[inputIndex];
-                        int offset = i * inputLength;
-                        errorTuple[lastInputs.length] = i;
-                        errorTuple[lastInputs.length + 1] = forecastHorizon - i;
-                        if (input[j] <= a.upper[offset + j] && input[j] >= a.lower[offset + j]) {
-                            intervalPrecision[offset + j].update(1.0);
-                        } else {
-                            intervalPrecision[offset + j].update(0);
-                        }
+                        boolean hit = input[j] <= a.upper[offset + j] && input[j] >= a.lower[offset + j];
+                        intervalPrecision[offset + j].update(hit ? 1.0 : 0);
                         double error = input[j] - a.values[offset + j];
                         if (error >= 0) {
                             rmseHighDeviations[offset + j].update(error);
                             rmseLowDeviations[offset + j].update(0);
-                            errorTuple[lastInputs.length + 2 + j] = (float) error;
-                            errorTuple[lastInputs.length + inputLength + 2 + j] = 0;
                         } else {
                             rmseLowDeviations[offset + j].update(error);
                             rmseHighDeviations[offset + j].update(0);
-                            errorTuple[lastInputs.length + inputLength + 2 + j] = (float) (error);
-                            errorTuple[lastInputs.length + 2 + j] = 0;
                         }
                     }
-                    if (estimator != null) {
-                        estimator.update(errorTuple, 0L);
+                    if (tuple != null) {
+                        tuple[lastInputs.length] = i;
+                        tuple[lastInputs.length + 1] = forecastHorizon - i;
+                        for (int j = 0; j < inputLength; j++) {
+                            double error = input[j] - a.values[offset + j];
+                            if (error >= 0) {
+                                tuple[lastInputs.length + 2 + j] = (float) error;
+                                tuple[lastInputs.length + inputLength + 2 + j] = 0;
+                            } else {
+                                tuple[lastInputs.length + inputLength + 2 + j] = (float) (error);
+                                tuple[lastInputs.length + 2 + j] = 0;
+                            }
+                        }
+                        estimator.update(tuple, 0L);
                     }
                 }
                 inputIndex = (inputIndex + arrayLength - 1) % arrayLength;
             }
         }
-        lastDataDeviations = toFloatArray(deviations);
+        if (deviations != null && lastDataDeviations.length == deviations.length) {
+            // as toFloatArray, in place
+            for (int i = 0; i < deviations.length; i++) {
+                lastDataDeviations[i] = (deviations[i] == 0) ? 0 : (float) deviations[i];
+            }
+        } else {
+            lastDataDeviations = toFloatArray(deviations);
+        }
         recomputeErrors(lastInputs, inputLength);
     }
 
+    /**
+     * Recomputes the mean error and the two offsets from the statistics: the
+     * starting range, the linear move to the error deviations, the estimator if
+     * there is one, and the control loop; see the class description.
+     */
     void recomputeErrors(double[] lastInputs, int inputLength) {
         double a;
         if (estimator != null) {
@@ -287,10 +400,6 @@ public class ErrorHandler {
         } else {
             a = (double) (sequenceIndex) / (10 * forecastHorizon);
         }
-        float[] query = new float[lastInputs.length + inputLength * 2 + 2];
-        System.arraycopy(toFloatArray(lastInputs), 0, query, 0, lastInputs.length);
-        float[] errorHigh = new float[intervalPrecision.length];
-        float[] errorLow = new float[intervalPrecision.length];
         if (a < 1) {
             for (int y = 0; y < intervalPrecision.length; y++) {
                 errorRMSE.high[y] = errorRMSE.low[y] = lastDataDeviations[y % inputLength];
@@ -311,8 +420,15 @@ public class ErrorHandler {
             }
 
             if (estimator != null) {
+                int queryLength = lastInputs.length + inputLength * 2 + 2;
+                // the error coordinates of the query stay zero; they are the missing ones
+                float[] query = (this.query.length == queryLength) ? this.query : new float[queryLength];
+                for (int y = 0; y < lastInputs.length; y++) {
+                    // as toFloatArray
+                    query[y] = (lastInputs[y] == 0) ? 0 : (float) lastInputs[y];
+                }
+                int[] missing = (this.missing.length == inputLength) ? this.missing : new int[inputLength];
                 for (int i = 0; i < forecastHorizon; i++) {
-                    int[] missing = new int[inputLength];
                     query[lastInputs.length] = i;
                     query[lastInputs.length + 1] = forecastHorizon - i;
                     for (int j = 0; j < inputLength; j++) {
@@ -351,9 +467,11 @@ public class ErrorHandler {
         }
         // a control loop
         for (int y = 0; y < intervalPrecision.length; y++) {
-            if (intervalPrecision[y].getMean() < 1.0 - percentile) {
-                errorHigh[y] = (float) max(1.0, 1.0 / (intervalPrecision[y].getMean() + 0.1)) * errorHigh[y];
-                errorLow[y] = (float) max(1.0, 1.0 / (intervalPrecision[y].getMean() + 0.1)) * errorLow[y];
+            double hitRate = intervalPrecision[y].getMean();
+            if (hitRate < 1.0 - percentile) {
+                float factor = (float) max(1.0, 1.0 / (hitRate + 0.1));
+                errorHigh[y] = factor * errorHigh[y];
+                errorLow[y] = factor * errorLow[y];
             }
         }
 
@@ -367,7 +485,9 @@ public class ErrorHandler {
 
     public void augmentDescriptor(ForecastDescriptor descriptor) {
         int inputLength = descriptor.getInputLength();
-        float[] iPrecision = new float[inputLength * forecastHorizon];
+        // the descriptor copies what it is given
+        float[] iPrecision = (precision.length == inputLength * forecastHorizon) ? precision
+                : new float[inputLength * forecastHorizon];
         for (int i = 0; i < errorMean.length; i++) {
             iPrecision[i] = (float) intervalPrecision[i].getMean();
         }
@@ -380,7 +500,7 @@ public class ErrorHandler {
     /**
      * saves the forecast -- note that this section assumes that updateActuals() has
      * been invoked prior (to recompute the deviations)
-     * 
+     *
      * @param vector the forecast
      */
     public void updateForecasts(RangeVector vector) {
@@ -423,6 +543,30 @@ public class ErrorHandler {
         return iPrecision;
     }
 
+    /**
+     * Calibrates a forecast in place. SIMPLE moves the point by the mean error and
+     * MINIMAL keeps it; both hold it within the limits. The published upper end is
+     * the larger of RCF's own upper end and the point plus the upper offset, and
+     * the lower end is the smaller of RCF's own lower end and the point plus the
+     * lower offset: the envelope of the forecast's own range and the range of the
+     * past errors, not their sum. NONE leaves the forecast as RCF made it.
+     * <p>
+     * The errors are measured against the published point, never against the
+     * bounds. Under SIMPLE the point has been moved by the mean error, so the mean
+     * error settles near half of RCF's own mean error; the offsets contain the mean
+     * error again, so the band sits around RCF's forecast plus all of its mean
+     * error, while the point carries half of it. Under MINIMAL the mean error is
+     * RCF's own, and the band sits at the same place.
+     * <p>
+     * Each end is then kept on its side of the point. An end is bounded only by its
+     * own limit, so without this a lower end could lie above an upper limit that
+     * holds the point (or an upper end below a lower limit), and a saved state
+     * holding that interval could not be restored.
+     *
+     * @param input       the last input (its length is checked)
+     * @param calibration the calibration
+     * @param ranges      the forecast; calibrated on return
+     */
     public void calibrate(double[] input, Calibration calibration, RangeVector ranges) {
         if (calibration != Calibration.NONE) {
             int inputLength = intervalPrecision.length / forecastHorizon;
@@ -441,6 +585,13 @@ public class ErrorHandler {
                         upperLimit[y % inputLength]);
                 ranges.lower[y] = max(min(ranges.lower[y], ranges.values[y] + errorDistribution.lower[y]),
                         lowerLimit[y % inputLength]);
+                // each end stays on its side of the point
+                if (ranges.upper[y] < ranges.values[y]) {
+                    ranges.upper[y] = ranges.values[y];
+                }
+                if (ranges.lower[y] > ranges.values[y]) {
+                    ranges.lower[y] = ranges.values[y];
+                }
             }
         }
     }
