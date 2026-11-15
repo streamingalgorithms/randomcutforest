@@ -44,7 +44,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
     /**
      * the builder initializes the numberOfImputed, which is not used in the other
      * classes
-     * 
+     *
      * @param builder a builder for Preprocessor
      */
     public ImputePreprocessor(Builder<?> builder) {
@@ -52,7 +52,9 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
         numberOfImputed = shingleSize;
     }
 
-    public float[] getScaledShingledInput(double[] inputPoint, long timestamp, int[] missing, RandomCutForest forest) {
+    @Override
+    public float[] getScaledShingledInput(double[] inputPoint, long timestamp, int[] missing, RandomCutForest forest,
+            float[] buffer) {
         if (valuesSeen < startNormalization) {
             return null;
         }
@@ -77,6 +79,10 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
         lastShingledInput = Arrays.copyOf(savedShingledInput, savedShingledInput.length);
         lastShingledPoint = Arrays.copyOf(savedShingle, savedShingle.length);
 
+        if (point != null && buffer != null && buffer.length == point.length) {
+            System.arraycopy(point, 0, buffer, 0, point.length);
+            return buffer;
+        }
         return point;
     }
 
@@ -165,7 +171,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
      * lastShingledInput as well as previousTimeStamps, and adds the shingled input
      * to the forest (provided it is allowed by the number of imputes and the
      * transformation function)
-     * 
+     *
      * @param input          the input point (can be imputed)
      * @param timestamp      the input timestamp (will be the most recent timestamp
      *                       for imputes)
@@ -291,7 +297,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
 
     /**
      * determines the gap between the last known timestamp and the current timestamp
-     * 
+     *
      * @param timestampGap current gap
      * @param averageGap   the average gap (often determined by
      *                     timeStampDeviation.getMean()
@@ -397,7 +403,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
      * a basic function that performs a single step imputation in the input space
      * the function has to be deterministic since it is run twice, first at scoring
      * and then at committing to the RCF
-     * 
+     *
      * @param stepFraction the interpolation fraction
      * @param previous     the previous input point
      * @param input        the current input point
@@ -423,7 +429,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
     /**
      * Uses RCF to impute the missing values in the current input or impute the
      * entire set of values for that time step (based on partial input being null)
-     * 
+     *
      * @param forest        the RCF
      * @param partialInput  the information available about the most recent point
      * @param missingValues the array indicating missing values for the partial
@@ -450,7 +456,7 @@ public class ImputePreprocessor extends InitialSegmentPreprocessor {
                     getShingledInput(shingleSize - 1), null, clipFactor);
             copyAtEnd(temp, scaledInput);
         }
-        float[] newPoint = forest.imputeMissingValues(temp, missingIndices.length, missingIndices);
+        float[] newPoint = forest.imputeMissingValues(temp, missingIndices);
         return toDoubleArray(getExpectedBlock(newPoint, 0));
     }
 }

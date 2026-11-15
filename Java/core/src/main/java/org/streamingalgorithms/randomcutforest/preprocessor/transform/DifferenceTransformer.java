@@ -48,7 +48,7 @@ public class DifferenceTransformer extends WeightedTransformer {
      * the values are scaled by the factor used in the transformation for each
      * iteration; and the resulting value is added back as an inverse of the
      * differencing operation.
-     * 
+     *
      * @param ranges        provides p50 values with upper and lower estimates
      * @param baseDimension the number of variables being forecast (often 1)
      * @param previousInput the last input of length baseDimension
@@ -82,11 +82,10 @@ public class DifferenceTransformer extends WeightedTransformer {
     }
 
     @Override
-    public double[] getShift(double[] previous) {
-        double[] answer = new double[weights.length];
+    public double[] getShift(double[] previous, double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = getShift(i, deviations) + previous[i];
+            buffer[offset + i] = getShift(i, deviations) + previous[i];
         }
-        return answer;
+        return buffer;
     }
 }

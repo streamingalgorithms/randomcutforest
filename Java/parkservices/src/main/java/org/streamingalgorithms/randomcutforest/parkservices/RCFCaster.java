@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -173,9 +189,8 @@ public class RCFCaster extends ThresholdedRandomCutForest {
 
     void augment(ForecastDescriptor answer) {
         super.augment(answer);
-        TimedRangeVector timedForecast = new TimedRangeVector(
-                forest.getDimensions() * forecastHorizon / preprocessor.getShingleSize(), forecastHorizon);
-
+        // a new (or reset) descriptor holds an empty forecast of the horizon, which
+        // stays when there is no forecast yet
         // forest is ready mens that we can forecast -- but there is an implicit
         // assumption that preprocessor is ready
         if (forest.isOutputReady() && preprocessor.isOutputReady()) {
@@ -186,13 +201,13 @@ public class RCFCaster extends ThresholdedRandomCutForest {
                 errorHandler.augmentDescriptor(answer);
             }
 
-            timedForecast = extrapolate(forecastHorizon, true, 1.0);
+            TimedRangeVector timedForecast = extrapolate(forecastHorizon, true, 1.0);
 
             // note that internal timestamp of answer is 1 step in the past
             // outputReady corresponds to first (and subsequent) forecast
             errorHandler.updateForecasts(timedForecast.rangeVector);
+            answer.setTimedForecast(timedForecast);
         }
-        answer.setTimedForecast(timedForecast);
     }
 
     /**
@@ -209,28 +224,37 @@ public class RCFCaster extends ThresholdedRandomCutForest {
 
     @Override
     public ForecastDescriptor process(double[] inputPoint, long timestamp, int[] missingValues) {
-        checkArgument(missingValues == null, "on the fly imputation and error estimation should not mix");
-        ForecastDescriptor answer = new ForecastDescriptor(inputPoint, timestamp, forecastHorizon);
-        answer.setScoringStrategy(scoringStrategy);
-        boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
-        try {
-            // Note that this entire block in the prior releases
-            // (a) changed the cache state
-            // (b) changed the tree state (update/etc)
-            // This block should not be executed simultaneously
-            // but the changes here do not change any prior behavior.
-            // Now, the remark about caching was absent in prior releases.
-            if (cacheDisabled) { // turn caching on temporarily
-                forest.setBoundingBoxCacheFraction(0.001);
-            }
-            augment(answer);
-        } finally {
-            if (cacheDisabled) {
-                // turn caching off
-                forest.setBoundingBoxCacheFraction(0);
-            }
-        }
+        return process(inputPoint, timestamp, missingValues, null);
+    }
 
+    /**
+     * As {@link #process(double[], long, int[])}, writing the description into a
+     * forecast descriptor that is reused, as
+     * {@link ThresholdedRandomCutForest#process(double[], long, int[], AnomalyDescriptor)}:
+     * the buffer is reset to the forecast horizon and filled, its arrays
+     * overwritten in place when their lengths are right.
+     *
+     * @param inputPoint    current input point
+     * @param timestamp     time stamp of input
+     * @param missingValues must be null (see above)
+     * @param buffer        a {@link ForecastDescriptor} to overwrite, or null
+     * @return forecast descriptor for the current input point: buffer, if one was
+     *         given
+     */
+    @Override
+    public ForecastDescriptor process(double[] inputPoint, long timestamp, int[] missingValues,
+            AnomalyDescriptor buffer) {
+        checkArgument(missingValues == null, "on the fly imputation and error estimation should not mix");
+        checkArgument(buffer == null || buffer instanceof ForecastDescriptor,
+                "the buffer of a forecast must be a ForecastDescriptor");
+        ForecastDescriptor answer = (ForecastDescriptor) buffer;
+        if (answer == null) {
+            answer = new ForecastDescriptor(inputPoint, timestamp, forecastHorizon);
+        } else {
+            answer.reset(inputPoint, timestamp, forecastHorizon);
+        }
+        answer.setScoringStrategy(scoringStrategy);
+        augment(answer);
         return answer;
     }
 
@@ -285,27 +309,29 @@ public class RCFCaster extends ThresholdedRandomCutForest {
         ArrayList<AnomalyDescriptor> answer = new ArrayList<>();
         if (data != null) {
             if (data.length > 0) {
-                boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
-                try {
-                    if (cacheDisabled) { // turn caching on temporarily
-                        forest.setBoundingBoxCacheFraction(1.0);
+
+                int length = preprocessor.getInputLength();
+                // a descriptor the filter dropped is reused for the next point
+                ForecastDescriptor spare = null;
+                for (int i = 0; i < data.length; i++) {
+                    double[] point = data[i];
+                    checkArgument(point != null, " data should not be null ");
+                    checkArgument(point.length == length, " nonuniform lengths ");
+                    ForecastDescriptor description = spare;
+                    if (description == null) {
+                        description = new ForecastDescriptor(point, timestamps[i], forecastHorizon);
+                    } else {
+                        description.reset(point, timestamps[i], forecastHorizon);
                     }
-                    int length = preprocessor.getInputLength();
-                    for (int i = 0; i < data.length; i++) {
-                        double[] point = data[i];
-                        checkArgument(point != null, " data should not be null ");
-                        checkArgument(point.length == length, " nonuniform lengths ");
-                        ForecastDescriptor description = new ForecastDescriptor(point, timestamps[i], forecastHorizon);
-                        augment(description);
-                        if (filter.apply(description)) {
-                            answer.add(description);
-                        }
-                    }
-                } finally {
-                    if (cacheDisabled) { // turn caching off
-                        forest.setBoundingBoxCacheFraction(0);
+                    augment(description);
+                    if (filter.apply(description)) {
+                        answer.add(description);
+                        spare = null;
+                    } else {
+                        spare = description;
                     }
                 }
+
             }
         }
         return answer;

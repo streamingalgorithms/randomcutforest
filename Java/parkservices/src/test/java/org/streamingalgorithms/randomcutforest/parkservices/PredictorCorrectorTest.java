@@ -195,7 +195,7 @@ public class PredictorCorrectorTest {
         List<int[]> asked = new ArrayList<>();
         RandomCutForest forest = new RandomCutForest(RandomCutForest.builder().dimensions(6).randomSeed(1)) {
             @Override
-            public float[] imputeMissingValues(float[] point, int numberOfMissingValues, int[] missingIndexes) {
+            public float[] imputeMissingValues(float[] point, int[] missingIndexes) {
                 asked.add(Arrays.copyOf(missingIndexes, missingIndexes.length));
                 return point;
             }
@@ -245,7 +245,7 @@ public class PredictorCorrectorTest {
             }
 
             @Override
-            public float[] imputeMissingValues(float[] p, int numberOfMissingValues, int[] missingIndexes) {
+            public float[] imputeMissingValues(float[] p, int[] missingIndexes) {
                 return Arrays.copyOf(expected, expected.length);
             }
         };

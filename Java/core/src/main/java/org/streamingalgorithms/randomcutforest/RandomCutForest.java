@@ -1106,7 +1106,6 @@ public class RandomCutForest {
      * @param point The point where the density estimate is made.
      * @return A density estimate.
      */
-    @Deprecated
     public DensityOutput getSimpleDensity(float[] point) {
         if (!isOutputReady()) {
             return new DensityOutput(dimensions, sampleSize);

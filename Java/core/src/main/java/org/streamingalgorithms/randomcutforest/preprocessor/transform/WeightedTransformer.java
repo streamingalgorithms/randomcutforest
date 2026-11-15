@@ -81,7 +81,7 @@ public class WeightedTransformer implements ITransformer {
      * inverts a forecast (and upper and lower limits) provided by RangeVector range
      * note that the expected difference maintained in deviation[j + inputLength] is
      * added for each attribute j
-     * 
+     *
      * @param ranges        provides p50 values with upper and lower estimates
      * @param baseDimension the number of variables being forecast (often 1)
      * @param previousInput the last input of length baseDimension
@@ -106,7 +106,7 @@ public class WeightedTransformer implements ITransformer {
      * updates the 3*inputPoint.length statistics; the statistic i corresponds to
      * discounted average of variable i and statistic i + inputPoint.length
      * corresponds to the discounted average single step difference
-     * 
+     *
      * @param inputPoint    the input
      * @param previousInput the previous input
      * @param missingValues any missing values (in range 0..(inputLength-1))
@@ -217,36 +217,52 @@ public class WeightedTransformer implements ITransformer {
 
     @Override
     public double[] getScale() {
-        double[] answer = new double[weights.length];
+        return getScale(new double[weights.length], 0);
+    }
+
+    @Override
+    public double[] getScale(double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = (weights[i] == 0) ? 0 : getScale(i, deviations) / weights[i];
+            buffer[offset + i] = (weights[i] == 0) ? 0 : getScale(i, deviations) / weights[i];
         }
-        return answer;
+        return buffer;
     }
 
     @Override
     public double[] getShift(double[] previous) {
-        double[] answer = new double[weights.length];
+        return getShift(previous, new double[weights.length], 0);
+    }
+
+    @Override
+    public double[] getShift(double[] previous, double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = getShift(i, deviations);
+            buffer[offset + i] = getShift(i, deviations);
         }
-        return answer;
+        return buffer;
     }
 
     public double[] getSmoothedDeviations() {
-        double[] answer = new double[weights.length];
+        return getSmoothedDeviations(new double[weights.length], 0);
+    }
+
+    @Override
+    public double[] getSmoothedDeviations(double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = Math.abs(deviations[i + 2 * weights.length].getMean());
+            buffer[offset + i] = Math.abs(deviations[i + 2 * weights.length].getMean());
         }
-        return answer;
+        return buffer;
     }
 
     public double[] getSmoothedDifferenceDeviations() {
-        double[] answer = new double[weights.length];
+        return getSmoothedDifferenceDeviations(new double[weights.length], 0);
+    }
+
+    @Override
+    public double[] getSmoothedDifferenceDeviations(double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = Math.abs(deviations[i + 4 * weights.length].getMean());
+            buffer[offset + i] = Math.abs(deviations[i + 4 * weights.length].getMean());
         }
-        return answer;
+        return buffer;
     }
 
 }

@@ -33,7 +33,7 @@ public class SequentialAnalysis {
      * provides a list of anomalies given a block of data. While this is a fairly
      * simple function, it is provided as a reference such that users do not have
      * depend on interpretations of sequentian analysis
-     * 
+     *
      * @param data            the array containing the values
      * @param shingleSize     shinglesize of RCF
      * @param sampleSize      sampleSize of RCF
@@ -77,7 +77,7 @@ public class SequentialAnalysis {
     /**
      * Same as the anomaly detector but provides a list of anomalies as well as a
      * calibrated (with testing) interval and forecasts.
-     * 
+     *
      * @param inputArray      the input
      * @param shingleSize     shingle size of RCF
      * @param sampleSize      samplesize of RCF
@@ -111,10 +111,14 @@ public class SequentialAnalysis {
 
         ArrayList<AnomalyDescriptor> descriptors = new ArrayList<>();
         ForecastDescriptor last = null;
+        ForecastDescriptor spare = null; // a descriptor that is not kept is reused
         for (double[] input : inputArray) {
-            ForecastDescriptor descriptor = caster.process(input, 0L);
+            ForecastDescriptor descriptor = caster.process(input, 0L, null, spare);
             if (descriptor.getAnomalyGrade() > 0) {
                 descriptors.add(descriptor);
+                spare = null;
+            } else {
+                spare = descriptor;
             }
             last = descriptor;
         }

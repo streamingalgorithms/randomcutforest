@@ -333,13 +333,21 @@ public class Preprocessor implements IPreprocessor {
     }
 
     public float[] getScaledShingledInput(double[] inputPoint, long timestamp, int[] missing, RandomCutForest forest) {
+        return getScaledShingledInput(inputPoint, timestamp, missing, forest, null);
+    }
+
+    @Override
+    public float[] getScaledShingledInput(double[] inputPoint, long timestamp, int[] missing, RandomCutForest forest,
+            float[] buffer) {
         boolean requireForest = (imputationMethod == RCF || mode != ForestMode.STANDARD);
         checkArgument(!requireForest || forest != null, "need a forest");
 
         if (!requireForest) {
-            double[] newInput = Arrays.copyOf(inputPoint, inputLength);
-            double[] values = (defaultFill != null) ? defaultFill : getShingledInput(shingleSize - 1);
+            // the input is read, not changed, by the transform
+            double[] newInput = (missing == null && inputPoint.length == inputLength) ? inputPoint
+                    : Arrays.copyOf(inputPoint, inputLength);
             if (missing != null) {
+                double[] values = (defaultFill != null) ? defaultFill : getShingledInput(shingleSize - 1);
                 for (int j : missing) {
                     newInput[j] = values[j];
                 }
@@ -348,7 +356,11 @@ public class Preprocessor implements IPreprocessor {
             if (scaledInput == null) {
                 return null;
             }
-            float[] point = Arrays.copyOf(lastShingledPoint, dimension);
+            // as Arrays.copyOf(lastShingledPoint, dimension), into the buffer
+            float[] point = (buffer != null && buffer.length == dimension) ? buffer : new float[dimension];
+            int length = Math.min(lastShingledPoint.length, dimension);
+            System.arraycopy(lastShingledPoint, 0, point, 0, length);
+            Arrays.fill(point, length, dimension, 0);
             shiftLeft(point, inputLength);
             System.arraycopy(scaledInput, 0, point, dimension - inputLength, inputLength);
             return point;
@@ -375,19 +387,27 @@ public class Preprocessor implements IPreprocessor {
                     for (int i = 0; i < missing.length; i++) {
                         newMissing[i] = missing[i] + dimension - scaledInput.length;
                     }
-                    point = forest.imputeMissingValues(point, newMissing.length, newMissing);
+                    point = forest.imputeMissingValues(point, newMissing);
                 }
+            }
+            if (point != null && buffer != null && buffer.length == point.length) {
+                System.arraycopy(point, 0, buffer, 0, point.length);
+                return buffer;
             }
             return point;
         }
     }
 
     public double[] getScale() {
+        return getScale(null);
+    }
+
+    @Override
+    public double[] getScale(double[] buffer) {
         if (mode != ForestMode.TIME_AUGMENTED) {
-            return transformer.getScale();
+            return transformer.getScale(reuse(buffer, inputLength), 0);
         } else {
-            double[] scale = new double[inputLength + 1];
-            System.arraycopy(transformer.getScale(), 0, scale, 0, inputLength);
+            double[] scale = transformer.getScale(reuse(buffer, inputLength + 1), 0);
             scale[inputLength] = (weightTime == 0) ? 0 : 1.0 / weightTime;
             if (normalizeTime) {
                 scale[inputLength] *= NORMALIZATION_SCALING_FACTOR
@@ -403,13 +423,17 @@ public class Preprocessor implements IPreprocessor {
     }
 
     public double[] getShift() {
+        return getShift(null);
+    }
+
+    @Override
+    public double[] getShift(double[] buffer) {
         double[] previous = (inputLength == lastShingledInput.length) ? lastShingledInput
                 : getShingledInput(shingleSize - 1);
         if (mode != ForestMode.TIME_AUGMENTED) {
-            return transformer.getShift(previous);
+            return transformer.getShift(previous, reuse(buffer, inputLength), 0);
         } else {
-            double[] shift = new double[inputLength + 1];
-            System.arraycopy(transformer.getShift(previous), 0, shift, 0, inputLength);
+            double[] shift = transformer.getShift(previous, reuse(buffer, inputLength + 1), 0);
             // time is always differenced
             shift[inputLength] = ((normalizeTime) ? getTimeShift() : 0) + previousTimeStamps[shingleSize - 1];
             return shift;
@@ -417,21 +441,31 @@ public class Preprocessor implements IPreprocessor {
     }
 
     public double[] getSmoothedDeviations() {
+        return getSmoothedDeviations(null);
+    }
+
+    @Override
+    public double[] getSmoothedDeviations(double[] buffer) {
         if (mode != ForestMode.TIME_AUGMENTED) {
-            double[] deviations = new double[2 * inputLength];
-            System.arraycopy(transformer.getSmoothedDeviations(), 0, deviations, 0, inputLength);
-            System.arraycopy(transformer.getSmoothedDifferenceDeviations(), 0, deviations, inputLength, inputLength);
+            double[] deviations = reuse(buffer, 2 * inputLength);
+            transformer.getSmoothedDeviations(deviations, 0);
+            transformer.getSmoothedDifferenceDeviations(deviations, inputLength);
             return deviations;
         } else {
-            double[] deviations = new double[2 * inputLength + 2];
-            System.arraycopy(transformer.getSmoothedDeviations(), 0, deviations, 0, inputLength);
-            System.arraycopy(transformer.getSmoothedDifferenceDeviations(), 0, deviations, inputLength + 1,
-                    inputLength);
+            // the input and then time, for the values and then their differences
+            double[] deviations = reuse(buffer, 2 * inputLength + 2);
+            transformer.getSmoothedDeviations(deviations, 0);
+            transformer.getSmoothedDifferenceDeviations(deviations, inputLength + 1);
             // time is differenced (for now) or unchanged
-            deviations[inputLength + 1] = timeStampDeviations[4].getMean();
+            deviations[inputLength] = timeStampDeviations[4].getMean();
             deviations[2 * inputLength + 1] = timeStampDeviations[4].getMean();
             return deviations;
         }
+    }
+
+    // the buffer when it has the length, a new array otherwise
+    private static double[] reuse(double[] buffer, int length) {
+        return (buffer != null && buffer.length == length) ? buffer : new double[length];
     }
 
     public void update(double[] point, float[] rcfPoint, long timestamp, int[] missing, RandomCutForest forest) {
@@ -493,7 +527,7 @@ public class Preprocessor implements IPreprocessor {
      * returns the input values corresponding to a position in the shingle; this is
      * needed in the corrector steps; and avoids the need for replicating this
      * information downstream
-     * 
+     *
      * @param index position in the shingle
      * @return the input values for those positions in the shingle
      */
@@ -512,7 +546,7 @@ public class Preprocessor implements IPreprocessor {
     /**
      * produces the expected value given location of the anomaly -- being aware that
      * the nearest anomaly may be behind us in time.
-     * 
+     *
      * @param relativeBlockIndex the relative index of the anomaly
      * @param reference          the reference input (so that we do not generate
      *                           arbitrary rounding errors of transformations which
@@ -682,7 +716,7 @@ public class Preprocessor implements IPreprocessor {
 
     /**
      * updates the various shingles
-     * 
+     *
      * @param inputPoint  the input point
      * @param scaledPoint the scaled/transformed point which is used in the RCF
      */
@@ -704,7 +738,7 @@ public class Preprocessor implements IPreprocessor {
 
     /**
      * updates timestamps
-     * 
+     *
      * @param timestamp the timestamp of the current input
      */
     protected void updateTimestamps(long timestamp) {
@@ -743,7 +777,7 @@ public class Preprocessor implements IPreprocessor {
 
     /**
      * updates the state of the preprocessor
-     * 
+     *
      * @param inputPoint    the actual input
      * @param scaledInput   the transformed input
      * @param timestamp     the timestamp of the input
@@ -763,7 +797,7 @@ public class Preprocessor implements IPreprocessor {
 
     /**
      * copies at the end for a shingle
-     * 
+     *
      * @param array shingled array
      * @param small new small array
      */

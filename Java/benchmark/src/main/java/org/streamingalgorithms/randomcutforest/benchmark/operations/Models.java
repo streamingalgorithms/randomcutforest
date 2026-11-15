@@ -21,6 +21,7 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.toFloatArray;
 import java.util.EnumMap;
 
 import org.streamingalgorithms.randomcutforest.RandomCutForest;
+import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 import org.streamingalgorithms.randomcutforest.parkservices.RCFCaster;
 import org.streamingalgorithms.randomcutforest.parkservices.ThresholdedRandomCutForest;
 import org.streamingalgorithms.randomcutforest.parkservices.state.RCFCasterMapper;
@@ -33,13 +34,13 @@ import org.streamingalgorithms.randomcutforest.state.RandomCutForestState;
 /**
  * The three streaming models under measurement, built and saturated identically
  * so the Process and Serialization suites can't drift in setup.
- * 
+ *
  * <pre>
  *   RCF    -- score+update (RCF has no process(); one tuple = getAnomalyScore then update)
  *   TRCF   -- process(point, ts).getRCFScore()
  *   CASTER -- process(point, ts).getRCFScore()  (same call as TRCF; forecast is internal)
  * </pre>
- * 
+ *
  * The RCF member is the baseline that isolates the TRCF thresholder / Caster
  * forecast overhead ABOVE raw RCF.
  *
@@ -178,6 +179,24 @@ public final class Models {
             return ((RCFCaster) model).process(toDoubleArray(point), ts).getRCFScore();
         default:
             throw new IllegalStateException("unknown model " + kind);
+        }
+    }
+
+    /**
+     * As {@link #processOne}, for TRCF and CASTER, with the input already in
+     * double[] and the descriptor of the last call passed back to be overwritten
+     * (null for a new one each call). Returns the descriptor, to be passed in the
+     * next call.
+     */
+    public static AnomalyDescriptor processOne(Kind kind, Object model, double[] input, long ts,
+            AnomalyDescriptor buffer) {
+        switch (kind) {
+        case TRCF:
+            return ((ThresholdedRandomCutForest) model).process(input, ts, null, buffer);
+        case CASTER:
+            return ((RCFCaster) model).process(input, ts, null, buffer);
+        default:
+            throw new IllegalStateException("no descriptor for model " + kind);
         }
     }
 

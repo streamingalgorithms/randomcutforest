@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -85,6 +101,66 @@ public class ForecastDescriptor extends AnomalyDescriptor {
         this.errorMean = new float[forecastLength];
         this.errorRMSE = new DiVector(forecastLength);
         this.intervalPrecision = new float[forecastLength];
+    }
+
+    /**
+     * Readies the descriptor for reuse on a new input, as
+     * {@link AnomalyDescriptor#reset(double[], long)}, keeping its horizon.
+     *
+     * @param input          the new input
+     * @param inputTimeStamp its timestamp
+     */
+    @Override
+    public void reset(double[] input, long inputTimeStamp) {
+        reset(input, inputTimeStamp, (timedForecast == null) ? 1 : timedForecast.timeStamps.length);
+    }
+
+    /**
+     * Readies the descriptor for reuse on a new input with the given horizon: the
+     * forecast and the error fields return to those of a new descriptor, in place
+     * when the lengths agree.
+     *
+     * @param input          the new input
+     * @param inputTimeStamp its timestamp
+     * @param horizon        the forecast horizon
+     */
+    public void reset(double[] input, long inputTimeStamp, int horizon) {
+        super.reset(input, inputTimeStamp);
+        int forecastLength = input.length * horizon;
+        if (timedForecast == null || timedForecast.rangeVector.values.length != forecastLength
+                || timedForecast.timeStamps.length != horizon) {
+            timedForecast = new TimedRangeVector(forecastLength, horizon);
+        } else {
+            Arrays.fill(timedForecast.rangeVector.values, 0);
+            Arrays.fill(timedForecast.rangeVector.upper, 0);
+            Arrays.fill(timedForecast.rangeVector.lower, 0);
+            Arrays.fill(timedForecast.timeStamps, 0);
+            Arrays.fill(timedForecast.upperTimeStamps, 0);
+            Arrays.fill(timedForecast.lowerTimeStamps, 0);
+        }
+        if (observedErrorDistribution == null || observedErrorDistribution.values.length != forecastLength) {
+            observedErrorDistribution = new RangeVector(forecastLength);
+        } else {
+            Arrays.fill(observedErrorDistribution.values, 0);
+        }
+        Arrays.fill(observedErrorDistribution.lower, -Float.MAX_VALUE);
+        Arrays.fill(observedErrorDistribution.upper, Float.MAX_VALUE);
+        if (errorMean == null || errorMean.length != forecastLength) {
+            errorMean = new float[forecastLength];
+        } else {
+            Arrays.fill(errorMean, 0);
+        }
+        if (errorRMSE == null || errorRMSE.getDimensions() != forecastLength) {
+            errorRMSE = new DiVector(forecastLength);
+        } else {
+            Arrays.fill(errorRMSE.high, 0);
+            Arrays.fill(errorRMSE.low, 0);
+        }
+        if (intervalPrecision == null || intervalPrecision.length != forecastLength) {
+            intervalPrecision = new float[forecastLength];
+        } else {
+            Arrays.fill(intervalPrecision, 0);
+        }
     }
 
     public void setObservedErrorDistribution(RangeVector base) {

@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -226,7 +242,7 @@ public class ThresholdedRandomCutForest {
     /**
      * a single call that prepreprocesses data, compute score/grade and updates
      * state
-     * 
+     *
      * @param inputPoint current input point
      * @param timestamp  time stamp of input
      * @return anomaly descriptor for the current input point
@@ -246,38 +262,47 @@ public class ThresholdedRandomCutForest {
      * @return anomaly descriptor for the current input point
      */
     public AnomalyDescriptor process(double[] inputPoint, long timestamp, int[] missingValues) {
+        return process(inputPoint, timestamp, missingValues, null);
+    }
 
-        AnomalyDescriptor description = new AnomalyDescriptor(inputPoint, timestamp);
+    /**
+     * As {@link #process(double[], long, int[])}, writing the description into a
+     * descriptor that is reused. With a buffer, the buffer is reset (see
+     * {@link AnomalyDescriptor#reset(double[], long)}) and filled: an array it
+     * holds is overwritten in place when its length is right and allocated
+     * otherwise, so a field reads as it would on a new descriptor. The model keeps
+     * no reference to the buffer: what it keeps of an anomaly is a copy. With null,
+     * a new descriptor is returned.
+     *
+     * @param inputPoint    current input point
+     * @param timestamp     time stamp of input
+     * @param missingValues indices of the input which are missing/questionable
+     *                      values, or null
+     * @param buffer        a descriptor to overwrite, or null
+     * @return anomaly descriptor for the current input point: buffer, if one was
+     *         given
+     */
+    public AnomalyDescriptor process(double[] inputPoint, long timestamp, int[] missingValues,
+            AnomalyDescriptor buffer) {
+
+        AnomalyDescriptor description = buffer;
+        if (description == null) {
+            description = new AnomalyDescriptor(inputPoint, timestamp);
+        } else {
+            description.reset(inputPoint, timestamp);
+        }
         description.setScoringStrategy(scoringStrategy);
-        boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
-        try {
-            // Note that this entire block in the prior releases
-            // (a) changed the cache state
-            // (b) changed the tree state (update/etc)
-            // This block should not be executed simultaneously
-            // but the changes here do not change any prior behavior.
-            // Now, the remark about caching was absent in prior releases.
-            if (cacheDisabled) { // turn caching on temporarily
-                forest.setBoundingBoxCacheFraction(0.001);
+
+        if (missingValues != null) {
+            checkArgument(missingValues.length <= inputPoint.length, " incorrect data");
+            for (int i = 0; i < missingValues.length; i++) {
+                checkArgument(missingValues[i] >= 0, " missing values cannot be at negative position");
+                checkArgument(missingValues[i] < inputPoint.length,
+                        "missing values cannot be at position larger than input length");
             }
-            if (missingValues != null) {
-                checkArgument(missingValues.length <= inputPoint.length, " incorrect data");
-                for (int i = 0; i < missingValues.length; i++) {
-                    checkArgument(missingValues[i] >= 0, " missing values cannot be at negative position");
-                    checkArgument(missingValues[i] < inputPoint.length,
-                            "missing values cannot be at position larger than input length");
-                }
-                description.setMissingValues(missingValues);
-            }
-            augment(description);
-        } finally {
-            if (cacheDisabled) { // turn caching off
-                forest.setBoundingBoxCacheFraction(0);
-            }
+            description.setMissingValues(missingValues);
         }
-        if (saveDescriptor(description)) {
-            lastAnomalyDescriptor = description.copyOf();
-        }
+        augment(description); // keeps a copy of an anomaly
         return description;
     }
 
@@ -295,7 +320,8 @@ public class ThresholdedRandomCutForest {
      * @param data   a vectors of vectors (each of which has to have the same
      *               inputLength)
      * @param filter a condition to drop desriptor (recommended filter: anomalyGrade
-     *               positive)
+     *               positive); a descriptor it drops is reused for the next point,
+     *               so it should not keep one
      * @return collection of descriptors of the anomalies filtered by the condition
      */
     public List<AnomalyDescriptor> processSequentially(double[][] data, Function<AnomalyDescriptor, Boolean> filter) {
@@ -332,7 +358,8 @@ public class ThresholdedRandomCutForest {
      * @param timestamps a vector of timestamps (in the same order as the data, has
      *                   to be same length as data, and ascending)
      * @param filter     a condition to drop desriptor (recommended filter:
-     *                   anomalyGrade positive)
+     *                   anomalyGrade positive); a descriptor it drops is reused for
+     *                   the next point, so it should not keep one
      * @return collection of descriptors of the anomalies filtered by the condition
      * @throws IllegalArgumentException if
      *                                  <ul>
@@ -365,34 +392,32 @@ public class ThresholdedRandomCutForest {
         ArrayList<AnomalyDescriptor> answer = new ArrayList<>();
 
         if (data != null && data.length > 0) {
-            boolean cacheDisabled = (forest.getBoundingBoxCacheFraction() == 0);
-            try {
-                if (cacheDisabled) { // turn caching on temporarily
-                    forest.setBoundingBoxCacheFraction(1.0);
+
+            int length = preprocessor.getInputLength();
+            // a descriptor the filter dropped is reused for the next point
+            AnomalyDescriptor spare = null;
+            for (int i = 0; i < data.length; i++) {
+                double[] point = data[i];
+                long timestamp = timestamps[i];
+                checkArgument(point != null, " data should not be null ");
+                checkArgument(point.length == length, " nonuniform lengths ");
+                AnomalyDescriptor description = spare;
+                if (description == null) {
+                    description = new AnomalyDescriptor(point, timestamp);
+                } else {
+                    description.reset(point, timestamp);
                 }
-                int length = preprocessor.getInputLength();
-                for (int i = 0; i < data.length; i++) {
-                    double[] point = data[i];
-                    long timestamp = timestamps[i];
-                    checkArgument(point != null, " data should not be null ");
-                    checkArgument(point.length == length, " nonuniform lengths ");
-                    AnomalyDescriptor description = new AnomalyDescriptor(point, timestamp);
-                    // check missing values in point.
-                    int[] missingValues = generateMissingIndicesArray(point);
-                    if (missingValues != null) {
-                        description.setMissingValues(missingValues);
-                    }
-                    augment(description);
-                    if (saveDescriptor(description)) {
-                        lastAnomalyDescriptor = description.copyOf();
-                    }
-                    if (filter.apply(description)) {
-                        answer.add(description);
-                    }
+                // check missing values in point.
+                int[] missingValues = generateMissingIndicesArray(point);
+                if (missingValues != null) {
+                    description.setMissingValues(missingValues);
                 }
-            } finally {
-                if (cacheDisabled) { // turn caching off
-                    forest.setBoundingBoxCacheFraction(0);
+                augment(description); // keeps a copy of an anomaly
+                if (filter.apply(description)) {
+                    answer.add(description);
+                    spare = null;
+                } else {
+                    spare = description;
                 }
             }
         }
@@ -429,7 +454,7 @@ public class ThresholdedRandomCutForest {
      * general, since the STREAMING_IMPUTE can use non-RCF options to fill in
      * missing data, the internal imputation and extrapolation need not be
      * consistent.
-     * 
+     *
      * @param horizon    the length of time in the future which is being forecast
      * @param correct    a boolean indicating if predictor-corrector subroutine
      *                   should be turned on; this is specially helpful if there has
@@ -470,7 +495,7 @@ public class ThresholdedRandomCutForest {
             float[] newPoint = lastPoint;
 
             // gap will be at least 1
-            if (gap <= shingleSize && correct && lastAnomalyDescriptor.getExpectedRCFPoint() != null) {
+            if (gap <= shingleSize && correct && lastAnomalyDescriptor.isExpectedRCFPointPresent()) {
                 if (gap == 1) {
                     newPoint = lastAnomalyDescriptor.getExpectedRCFPoint();
                 } else {
@@ -480,7 +505,7 @@ public class ThresholdedRandomCutForest {
             }
             RangeVector answer = forest.extrapolateWithRanges(newPoint, horizon, blockSize, false, 0, centrality);
             return preprocessor.invertForecastRange(answer, lastAnomalyDescriptor.getInputTimestamp(),
-                    lastAnomalyDescriptor.getDeltaShift(), lastAnomalyDescriptor.getExpectedRCFPoint() != null,
+                    lastAnomalyDescriptor.getDeltaShift(), lastAnomalyDescriptor.isExpectedRCFPointPresent(),
                     lastAnomalyDescriptor.getExpectedTimeStamp());
         } else {
             return new TimedRangeVector(new TimedRangeVector(horizon * blockSize, horizon));
@@ -560,13 +585,10 @@ public class ThresholdedRandomCutForest {
         description.setInputLength(preprocessor.getInputLength());
         description.setDimension(forest.getDimensions());
         description.setReasonableForecast(forest.isOutputReady() && forest.getDimensions() >= 4);
-        description.setScale(preprocessor.getScale());
-        description.setShift(preprocessor.getShift());
-        description.setDeviations(preprocessor.getSmoothedDeviations());
+        description.readTransform(preprocessor); // scale, shift and deviations
         description.setNumberOfNewImputes(preprocessor.numberOfImputes(description.getInputTimestamp()));
         description.setInternalTimeStamp(preprocessor.getInternalTimeStamp() + description.getNumberOfNewImputes());
-        description.setRCFPoint(preprocessor.getScaledShingledInput(description.getCurrentInput(),
-                description.getInputTimestamp(), description.getMissingValues(), forest));
+        description.readRCFPoint(preprocessor, forest);
         return description;
     }
 
@@ -663,9 +685,9 @@ public class ThresholdedRandomCutForest {
                 result.setTransformDecay(preprocessor.getTransformDecay());
             }
         }
-        if (preprocessor.isOutputReady()) {
-            result.setPostDeviations(preprocessor.getSmoothedDeviations());
-        }
+        // set on every point (null before output), so that a reused descriptor
+        // reads as a new one
+        result.readPostDeviations(preprocessor);
     }
 
     /**

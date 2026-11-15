@@ -15,6 +15,8 @@
 
 package org.streamingalgorithms.randomcutforest.benchmark;
 
+import static org.streamingalgorithms.randomcutforest.CommonUtils.toDoubleArray;
+
 import java.util.concurrent.TimeUnit;
 
 import org.openjdk.jmh.annotations.Benchmark;
@@ -34,6 +36,7 @@ import org.openjdk.jmh.annotations.Warmup;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.Datasets;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.JolBreakdown;
 import org.streamingalgorithms.randomcutforest.benchmark.operations.Models;
+import org.streamingalgorithms.randomcutforest.parkservices.AnomalyDescriptor;
 
 /**
  * ===========================================================================
@@ -77,9 +80,25 @@ public class ProcessBenchmark {
     @Param({ "0.0", "0.001", "0.2", "0.5", "1.0" })
     double cacheFraction;
 
+    /**
+     * How TRCF and CASTER are called (RCF ignores it). LEGACY converts each float[]
+     * tuple to double[] and takes a new descriptor, as before; FRESH takes the
+     * input already in double[] and a new descriptor; BUFFERED also overwrites one
+     * descriptor. LEGACY - FRESH prices the conversion, FRESH - BUFFERED the
+     * descriptor.
+     */
+    public enum Call {
+        LEGACY, FRESH, BUFFERED
+    }
+
+    @Param({ "LEGACY", "FRESH", "BUFFERED" })
+    Call call;
+
     private Models.Kind kind;
     private Object modelObj;
     private float[][] stream;
+    private double[][] inputs; // the stream in double[], the same values LEGACY converts to
+    private AnomalyDescriptor descriptor; // reused across invocations when BUFFERED
     private long clock;
 
     @Setup(Level.Trial)
@@ -88,6 +107,11 @@ public class ProcessBenchmark {
         kind = p.kind;
         modelObj = p.model;
         stream = p.stream;
+        inputs = new double[stream.length][];
+        for (int i = 0; i < stream.length; i++) {
+            inputs[i] = toDoubleArray(stream[i]);
+        }
+        descriptor = null;
         clock = p.clock0; // continue timestamps after saturation, monotonic across invocations
     }
 
@@ -99,8 +123,19 @@ public class ProcessBenchmark {
         final float[][] s = stream;
         long c = clock;
         double checksum = 0.0;
-        for (int i = 0; i < Datasets.SCORED; i++) {
-            checksum += Models.processOne(k, m, s[i], c++);
+        if (k == Models.Kind.RCF || call == Call.LEGACY) {
+            for (int i = 0; i < Datasets.SCORED; i++) {
+                checksum += Models.processOne(k, m, s[i], c++);
+            }
+        } else {
+            final double[][] x = inputs;
+            final boolean reuse = (call == Call.BUFFERED);
+            AnomalyDescriptor d = descriptor;
+            for (int i = 0; i < Datasets.SCORED; i++) {
+                d = Models.processOne(k, m, x[i], c++, reuse ? d : null);
+                checksum += d.getRCFScore();
+            }
+            descriptor = reuse ? d : null;
         }
         clock = c;
         return checksum;

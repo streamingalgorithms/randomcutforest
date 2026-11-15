@@ -1,4 +1,20 @@
 /*
+ * Copyright 2026 The streamingalgorithms authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * The file is substantially modified from its prior version which had the
+ * following notice.
+ *
  * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -19,12 +35,14 @@ import static org.streamingalgorithms.randomcutforest.CommonUtils.checkArgument;
 
 import java.util.Arrays;
 
+import org.streamingalgorithms.randomcutforest.RandomCutForest;
 import org.streamingalgorithms.randomcutforest.config.ForestMode;
 import org.streamingalgorithms.randomcutforest.config.ImputationMethod;
 import org.streamingalgorithms.randomcutforest.config.TransformMethod;
 import org.streamingalgorithms.randomcutforest.inputtypes.Point;
 import org.streamingalgorithms.randomcutforest.parkservices.config.CorrectionMode;
 import org.streamingalgorithms.randomcutforest.parkservices.config.ScoringStrategy;
+import org.streamingalgorithms.randomcutforest.preprocessor.IPreprocessor;
 import org.streamingalgorithms.randomcutforest.returntypes.DiVector;
 
 import lombok.Getter;
@@ -150,12 +168,53 @@ public class RCFComputeDescriptor extends Point {
         this.imputationMethod = imputationMethod;
     }
 
+    /**
+     * Readies the descriptor for reuse on a new input: every field returns to the
+     * value of a new descriptor, except the arrays that every processing of an
+     * input sets (the transformed point, shift, scale, deviations, post deviations
+     * and the expected point of the last anomaly), which are kept so that the
+     * setters overwrite them in place. A setter writes into the array the
+     * descriptor holds when the lengths agree and allocates one otherwise; null
+     * clears the field.
+     *
+     * @param input          the new input
+     * @param inputTimeStamp its timestamp
+     */
+    public void reset(double[] input, long inputTimeStamp) {
+        resetInput(input, inputTimeStamp);
+        forestMode = ForestMode.STANDARD;
+        transformMethod = TransformMethod.NONE;
+        imputationMethod = ImputationMethod.PREVIOUS;
+        scoringStrategy = ScoringStrategy.EXPECTED_INVERSE_DEPTH;
+        correctionMode = CorrectionMode.NONE;
+        shingleSize = 0;
+        dimension = 0;
+        inputLength = 0;
+        totalUpdates = 0;
+        reasonableForecast = false;
+        internalTimeStamp = 0;
+        numberOfTrees = 0;
+        missingValues = null;
+        numberOfNewImputes = 0;
+        RCFScore = 0;
+        anomalyGrade = 0;
+        threshold = 0;
+        attribution = null;
+        relativeIndex = 0;
+        postShift = null;
+        transformDecay = 0;
+        expectedRCFPoint = null;
+        lastAnomalyInternalTimestamp = 0;
+        expectedTimeStamp = 0;
+        imputedPoints = null;
+    }
+
     public void setShift(double[] shift) {
-        this.shift = copyIfNotnull(shift);
+        this.shift = copyInto(this.shift, shift);
     }
 
     public void setPostShift(double[] shift) {
-        this.postShift = copyIfNotnull(shift);
+        this.postShift = copyInto(this.postShift, shift);
     }
 
     public double[] getShift() {
@@ -163,11 +222,53 @@ public class RCFComputeDescriptor extends Point {
     }
 
     public void setScale(double[] scale) {
-        this.scale = copyIfNotnull(scale);
+        this.scale = copyInto(this.scale, scale);
     }
 
     public double[] getScale() {
         return copyIfNotnull(scale);
+    }
+
+    public void setDeviations(double[] deviations) {
+        this.deviations = copyInto(this.deviations, deviations);
+    }
+
+    public void setPostDeviations(double[] deviations) {
+        this.postDeviations = copyInto(this.postDeviations, deviations);
+    }
+
+    /**
+     * The scale, shift and deviations of the preprocessor, written into the arrays
+     * the descriptor holds (allocated when they are null or of another length).
+     *
+     * @param preprocessor the preprocessor
+     */
+    public void readTransform(IPreprocessor preprocessor) {
+        scale = preprocessor.getScale(scale);
+        shift = preprocessor.getShift(shift);
+        deviations = preprocessor.getSmoothedDeviations(deviations);
+    }
+
+    /**
+     * The deviations of the preprocessor after its update, written into the array
+     * the descriptor holds; null until the preprocessor has output.
+     *
+     * @param preprocessor the preprocessor
+     */
+    public void readPostDeviations(IPreprocessor preprocessor) {
+        postDeviations = preprocessor.isOutputReady() ? preprocessor.getSmoothedDeviations(postDeviations) : null;
+    }
+
+    /**
+     * The point the forest sees for this input, its timestamp and missing values,
+     * written into the array the descriptor holds; null when the preprocessor has
+     * none yet.
+     *
+     * @param preprocessor the preprocessor
+     * @param forest       the forest
+     */
+    public void readRCFPoint(IPreprocessor preprocessor, RandomCutForest forest) {
+        RCFPoint = preprocessor.getScaledShingledInput(currentInput, inputTimestamp, missingValues, forest, RCFPoint);
     }
 
     public double[] getDeltaShift() {
@@ -182,7 +283,7 @@ public class RCFComputeDescriptor extends Point {
     }
 
     public void setExpectedRCFPoint(float[] point) {
-        expectedRCFPoint = copyIfNotnull(point);
+        expectedRCFPoint = copyInto(expectedRCFPoint, point);
     }
 
     public float[] getExpectedRCFPoint() {
@@ -190,15 +291,35 @@ public class RCFComputeDescriptor extends Point {
     }
 
     public void setRCFPoint(float[] point) {
-        RCFPoint = copyIfNotnull(point);
+        RCFPoint = copyInto(RCFPoint, point);
     }
 
     public float[] getRCFPoint() {
         return copyIfNotnull(RCFPoint);
     }
 
+    /**
+     * @return whether there is a transformed point, as getRCFPoint() != null
+     *         without the copy
+     */
+    public boolean isRCFPointPresent() {
+        return RCFPoint != null;
+    }
+
+    /**
+     * @return whether there is an expected point, as getExpectedRCFPoint() != null
+     *         without the copy
+     */
+    public boolean isExpectedRCFPointPresent() {
+        return expectedRCFPoint != null;
+    }
+
+    public void setLastExpectedRCFPoint(float[] point) {
+        lastExpectedRCFPoint = copyInto(lastExpectedRCFPoint, point);
+    }
+
     public void setLastExpectedRCFdPoint(float[] point) {
-        lastExpectedRCFPoint = copyIfNotnull(point);
+        setLastExpectedRCFPoint(point);
     }
 
     public float[] getLastExpectedRCFPoint() {
@@ -206,7 +327,14 @@ public class RCFComputeDescriptor extends Point {
     }
 
     public void setAttribution(DiVector attribution) {
-        this.attribution = (attribution == null) ? null : new DiVector(attribution);
+        if (attribution == null) {
+            this.attribution = null;
+        } else if (this.attribution != null && this.attribution.getDimensions() == attribution.getDimensions()) {
+            System.arraycopy(attribution.high, 0, this.attribution.high, 0, attribution.getDimensions());
+            System.arraycopy(attribution.low, 0, this.attribution.low, 0, attribution.getDimensions());
+        } else {
+            this.attribution = new DiVector(attribution);
+        }
     }
 
     public DiVector getAttribution() {
@@ -225,6 +353,25 @@ public class RCFComputeDescriptor extends Point {
         return array == null ? null : Arrays.copyOf(array, array.length);
     }
 
+    /**
+     * A copy of source: written into target when the lengths agree, a new array
+     * otherwise, and null when source is null.
+     *
+     * @param target the array to reuse, or null
+     * @param source the values
+     * @return the copy
+     */
+    protected static float[] copyInto(float[] target, float[] source) {
+        if (source == null) {
+            return null;
+        }
+        if (target == null || target.length != source.length) {
+            return Arrays.copyOf(source, source.length);
+        }
+        System.arraycopy(source, 0, target, 0, source.length);
+        return target;
+    }
+
     public void setImputedPoint(int index, double[] impute) {
         checkArgument(numberOfNewImputes > 0, " no imputation is indicated");
         checkArgument(impute != null && impute.length == inputLength, "incorrect length");
@@ -237,8 +384,33 @@ public class RCFComputeDescriptor extends Point {
 
     // an explicit copy operation to control the stored state
     public RCFComputeDescriptor copyOf() {
-        RCFComputeDescriptor answer = new RCFComputeDescriptor(getCurrentInput(), getInputTimestamp(), forestMode,
-                transformMethod, imputationMethod);
+        return copyOf(null);
+    }
+
+    /**
+     * As {@link #copyOf()}, written into target when it is not null: target is
+     * reset and its arrays are overwritten in place when the lengths agree. The
+     * copy is a separate object from this descriptor; target must not be this.
+     *
+     * @param target a descriptor to overwrite, or null for a new one
+     * @return the copy: target, if one was given
+     */
+    public RCFComputeDescriptor copyOf(RCFComputeDescriptor target) {
+        checkArgument(target != this, "a descriptor cannot be copied onto itself");
+        RCFComputeDescriptor answer;
+        if (target == null) {
+            answer = new RCFComputeDescriptor(currentInput, inputTimestamp, forestMode, transformMethod,
+                    imputationMethod);
+        } else {
+            answer = target;
+            answer.reset(currentInput, inputTimestamp);
+            answer.setForestMode(forestMode);
+            answer.setTransformMethod(transformMethod);
+            answer.setImputationMethod(imputationMethod);
+            // a copy carries neither (they are kept by reset for processing)
+            answer.setDeviations(null);
+            answer.setPostDeviations(null);
+        }
         answer.setShingleSize(shingleSize);
         answer.setDimension(dimension);
         answer.setInputLength(inputLength);
@@ -252,7 +424,7 @@ public class RCFComputeDescriptor extends Point {
         answer.setTotalUpdates(totalUpdates);
         answer.setNumberOfNewImputes(numberOfNewImputes);
         answer.setLastAnomalyInternalTimestamp(lastAnomalyInternalTimestamp);
-        answer.setLastExpectedRCFdPoint(lastExpectedRCFPoint);
+        answer.setLastExpectedRCFPoint(lastExpectedRCFPoint);
         answer.setScoringStrategy(scoringStrategy);
         answer.setShift(shift);
         answer.setScale(scale);

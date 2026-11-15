@@ -214,7 +214,7 @@ public class PredictorCorrector {
 
     /**
      * the following creates the expected point based on RCF forecasting
-     * 
+     *
      * @param diVector      the attribution vector that is used to choose which
      *                      elements are to be predicted
      * @param position      the block of (multivariate) elements we are focusing on
@@ -271,7 +271,7 @@ public class PredictorCorrector {
         if (likelyMissingIndices.length > 0.5 * forest.getDimensions()) {
             return null;
         } else {
-            return forest.imputeMissingValues(point, likelyMissingIndices.length, likelyMissingIndices);
+            return forest.imputeMissingValues(point, likelyMissingIndices);
         }
     }
 
@@ -279,7 +279,7 @@ public class PredictorCorrector {
      * a subroutine that helps eliminates flagging anomalies too close to a
      * previously flagged anomaly -- this avoids the repetition due to shingling;
      * but still can detect some anomalies if the deviations are usual
-     * 
+     *
      * @param candidate             the candidate attribution of the point
      * @param difference            the gap (in RCF space) from the last anomaly
      * @param baseDimension         the size of a block
@@ -312,7 +312,7 @@ public class PredictorCorrector {
      * corrects the effect of a last anomaly -- note that an anomaly by definition
      * will alter the shift and scale of transformations. This computation fixes one
      * single large anomaly.
-     * 
+     *
      * @param transformMethod       the transformation method used
      * @param gap                   the number of steps the anomaly occurred in the
      *                              past
@@ -322,13 +322,15 @@ public class PredictorCorrector {
      */
     public double[] getCorrectionOfLastAnomaly(TransformMethod transformMethod, int gap,
             RCFComputeDescriptor lastAnomalyDescriptor, double[] currentScale) {
-        double[] deltaShift = lastAnomalyDescriptor.getDeltaShift();
         double[] answer = new double[currentScale.length];
         // correct the effect of shifts in last observed anomaly because the anomaly may
         // have skewed the shift and scale -- but the gap cannot last forever
         // otherwise this will always change the point and force a costlier path
-        if (deltaShift != null && gap < 2 * lastAnomalyDescriptor.getShingleSize()
-                && (transformMethod == TransformMethod.NORMALIZE || transformMethod == TransformMethod.SUBTRACT_MA)) {
+        double[] deltaShift = (gap < 2 * lastAnomalyDescriptor.getShingleSize()
+                && (transformMethod == TransformMethod.NORMALIZE || transformMethod == TransformMethod.SUBTRACT_MA))
+                        ? lastAnomalyDescriptor.getDeltaShift()
+                        : null;
+        if (deltaShift != null) {
             double factor = exp(-gap * lastAnomalyDescriptor.getTransformDecay());
             for (int y = 0; y < answer.length; y++) {
                 answer[y] = (currentScale[y] == 0) ? 0 : deltaShift[y] * factor / currentScale[y];
@@ -357,7 +359,8 @@ public class PredictorCorrector {
         float[] correctedPoint = Arrays.copyOf(point, point.length);
 
         // following will fail for first 100ish points and if dimension < 3
-        if (lastAnomalyDescriptor.getExpectedRCFPoint() != null) {
+        // (the points of the last anomaly are read only within a shingle of it)
+        if (gap <= shingleSize && lastAnomalyDescriptor.isExpectedRCFPointPresent()) {
             float[] lastExpectedPoint = lastAnomalyDescriptor.getExpectedRCFPoint();
             float[] lastAnomalyPoint = lastAnomalyDescriptor.getRCFPoint();
             int lastRelativeIndex = lastAnomalyDescriptor.getRelativeIndex();
@@ -401,7 +404,7 @@ public class PredictorCorrector {
      * noiseFactor of the standard deviation of the successive differences (in the
      * multivariate setting). Finally, it caps the maximum grade possible for this
      * point
-     * 
+     *
      * @param result the transcript of the current point
      * @param point  the current point
      * @param <P>    Either AnomalyDescriptor of ForecastDescriptor
@@ -437,7 +440,7 @@ public class PredictorCorrector {
     /**
      * The following is useful for managing late detection of anomalies -- this
      * calculates the zig-zag over the values in the late detection
-     * 
+     *
      * @param point         the point being scored
      * @param startPosition the position of the block where we think the anomaly
      *                      started
@@ -560,7 +563,7 @@ public class PredictorCorrector {
      * uses the native approximate near neighbor in RCF to determine what fraction
      * of samples from different trees are in the uncertainty box around the queried
      * point
-     * 
+     *
      * @param uncertaintyBox the potentially asymmetric box around a point (original
      *                       space)
      * @param point          the point in question
@@ -617,7 +620,7 @@ public class PredictorCorrector {
     /**
      * returned the attribution vector; it tries to reuse cached version to save
      * computation
-     * 
+     *
      * @param choice            the mode of the attribution in question
      * @param point             the point being considered
      * @param attributionVector the vector (cached) of attributions
@@ -635,7 +638,7 @@ public class PredictorCorrector {
     /**
      * computes the attribution of a (candidate) point based on mode, when the
      * results are not expected to be cached
-     * 
+     *
      * @param choice the mode
      * @param point  the point in question
      * @param forest the resident RCF
@@ -651,7 +654,7 @@ public class PredictorCorrector {
 
     /**
      * same as getNewAttribution, except when just the score suffices
-     * 
+     *
      * @param choice the mode in question
      * @param point  the point in question
      * @param forest the resident RCF
@@ -669,7 +672,7 @@ public class PredictorCorrector {
      * returns the threshold and grade corresponding to a mode choice (based on
      * scoring strategy) currently the scoring strategy is unused, but would likely
      * be used in future
-     * 
+     *
      * @param strategy    the scoring strategy
      * @param choice      the chosen mode
      * @param scoreVector the vector of scores
@@ -692,7 +695,7 @@ public class PredictorCorrector {
 
     /**
      * the strategy to save scores based on the scoring strategy
-     * 
+     *
      * @param strategy       the strategy
      * @param choice         the mode for which corrected score applies
      * @param scoreVector    the vector of scores
@@ -735,8 +738,8 @@ public class PredictorCorrector {
      */
     protected <P extends AnomalyDescriptor> P detect(P result, RCFComputeDescriptor lastSignificantDescriptor,
             RandomCutForest forest) {
-        if (result.getRCFPoint() == null) {
-            lastDescriptor = result.copyOf();
+        if (!result.isRCFPointPresent()) {
+            lastDescriptor = result.copyOf(lastDescriptor);
             return result;
         }
         float[] point = result.getRCFPoint();
@@ -754,7 +757,7 @@ public class PredictorCorrector {
 
         // we will not have zero scores affect any thresholding
         if (score == 0) {
-            lastDescriptor = result.copyOf();
+            lastDescriptor = result.copyOf(lastDescriptor);
             return result;
         }
 
@@ -799,7 +802,7 @@ public class PredictorCorrector {
             }
         }
 
-        if (lastDescriptor != null && lastDescriptor.getExpectedRCFPoint() != null) {
+        if (lastDescriptor != null && lastDescriptor.isExpectedRCFPointPresent()) {
             lastSignificantDescriptor = lastDescriptor;
         }
 
@@ -825,9 +828,12 @@ public class PredictorCorrector {
             workingThreshold = temp.index;
         }
 
-        // we perform basic correction
-        correctedPoint = applyPastCorrector(point, gap, shingleSize, point.length / shingleSize, result.getScale(),
-                result.getTransformMethod(), lastSignificantDescriptor);
+        // we perform basic correction; the corrected point is read only for a
+        // candidate
+        if (workingGrade > 0) {
+            correctedPoint = applyPastCorrector(point, gap, shingleSize, point.length / shingleSize, result.getScale(),
+                    result.getTransformMethod(), lastSignificantDescriptor);
+        }
 
         /**
          * we check if the point is too close to 0 for centered transforms as well as
@@ -980,7 +986,7 @@ public class PredictorCorrector {
             ++runLength;
         }
 
-        lastDescriptor = result.copyOf();
+        lastDescriptor = result.copyOf(lastDescriptor);
         saveScores(strategy, choice, scoreVector, correctedScore, result.getTransformMethod(), shingleSize);
         return result;
     }
@@ -1166,6 +1172,10 @@ public class PredictorCorrector {
         this.lastDescriptor = lastDescriptor.copyOf();
     }
 
+    /**
+     * @return the descriptor of the last point; the next point overwrites it in
+     *         place, so a caller that keeps it takes a copy
+     */
     public RCFComputeDescriptor getLastDescriptor() {
         return lastDescriptor;
     }

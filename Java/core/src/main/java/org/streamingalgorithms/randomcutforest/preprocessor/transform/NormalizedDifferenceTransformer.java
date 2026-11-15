@@ -49,7 +49,7 @@ public class NormalizedDifferenceTransformer extends NormalizedTransformer {
      * expected difference maintained in deviation[j + inputLength] is added for
      * each attribute j, once for each iteration; and the resulting value is added
      * back as an inverse of the differencing operation.
-     * 
+     *
      * @param ranges        provides p50 values with upper and lower estimates
      * @param baseDimension the number of variables being forecast (often 1)
      * @param previousInput the last input of length baseDimension
@@ -76,7 +76,7 @@ public class NormalizedDifferenceTransformer extends NormalizedTransformer {
     /**
      * a transformation that differences and then normalizes the results of
      * multivariate values
-     * 
+     *
      * @param internalTimeStamp timestamp corresponding to this operation; used to
      *                          ensure smoothness at 0
      * @param inputPoint        the actual input
@@ -97,12 +97,11 @@ public class NormalizedDifferenceTransformer extends NormalizedTransformer {
     }
 
     @Override
-    public double[] getShift(double[] previous) {
-        double[] answer = new double[weights.length];
+    public double[] getShift(double[] previous, double[] buffer, int offset) {
         for (int i = 0; i < weights.length; i++) {
-            answer[i] = getShift(i, deviations) + previous[i];
+            buffer[offset + i] = getShift(i, deviations) + previous[i];
         }
-        return answer;
+        return buffer;
     }
 
     @Override

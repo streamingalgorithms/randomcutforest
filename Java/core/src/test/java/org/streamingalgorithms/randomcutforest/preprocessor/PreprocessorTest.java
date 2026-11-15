@@ -485,4 +485,62 @@ public class PreprocessorTest {
         }
     }
 
+    /**
+     * The smoothed deviations hold the input's and then (time augmented) time's,
+     * for the values and then for their differences. The reads that take a buffer
+     * agree with those that allocate, and write into the buffer.
+     */
+    @Test
+    public void smoothedDeviationsLayout() {
+        int inputLength = 2;
+        for (ForestMode mode : new ForestMode[] { STANDARD, TIME_AUGMENTED }) {
+            for (TransformMethod method : new TransformMethod[] { NORMALIZE, NORMALIZE_DIFFERENCE }) {
+                for (int shingleSize : new int[] { 1, 4 }) {
+                    int base = (mode == TIME_AUGMENTED) ? inputLength + 1 : inputLength;
+                    int dimensions = base * shingleSize;
+                    Preprocessor preprocessor = Preprocessor.builder().inputLength(inputLength).dimensions(dimensions)
+                            .shingleSize(shingleSize).transformMethod(method).forestMode(mode).randomSeed(1).build();
+                    RandomCutForest forest = RandomCutForest.builder().dimensions(dimensions).shingleSize(shingleSize)
+                            .internalShinglingEnabled(true).randomSeed(2).outputAfter(32).sampleSize(64).build();
+                    Random random = new Random(3);
+                    long timestamp = 0;
+                    for (int i = 0; i < 300; i++) {
+                        timestamp += 90 + random.nextInt(20);
+                        double[] input = new double[] { 10 + random.nextGaussian(), 100 + 5 * random.nextGaussian() };
+                        float[] point = preprocessor.getScaledShingledInput(input, timestamp, null, forest);
+                        if (point != null) {
+                            float[] buffer = new float[point.length];
+                            assertArrayEquals(point,
+                                    preprocessor.getScaledShingledInput(input, timestamp, null, forest, buffer));
+                            preprocessor.update(input, point, timestamp, null, forest);
+                        } else {
+                            preprocessor.update(input, null, timestamp, null, forest);
+                        }
+                    }
+                    double[] deviations = preprocessor.getSmoothedDeviations();
+                    assertEquals(2 * base, deviations.length);
+                    Deviation[] list = preprocessor.getDeviationList();
+                    for (int j = 0; j < inputLength; j++) {
+                        assertEquals(abs(list[j + 2 * inputLength].getMean()), deviations[j]);
+                        assertEquals(abs(list[j + 4 * inputLength].getMean()), deviations[base + j]);
+                    }
+                    if (mode == TIME_AUGMENTED) {
+                        double time = preprocessor.getTimeStampDeviations()[4].getMean();
+                        assertEquals(time, deviations[inputLength]);
+                        assertEquals(time, deviations[2 * inputLength + 1]);
+                    }
+                    double[] buffer = new double[deviations.length];
+                    assertTrue(buffer == preprocessor.getSmoothedDeviations(buffer));
+                    assertArrayEquals(deviations, buffer);
+                    double[] scale = preprocessor.getScale();
+                    double[] shift = preprocessor.getShift();
+                    assertEquals(base, scale.length);
+                    assertArrayEquals(scale, preprocessor.getScale(new double[base]));
+                    assertArrayEquals(shift, preprocessor.getShift(new double[base]));
+                    // a buffer of another length is not used
+                    assertArrayEquals(scale, preprocessor.getScale(new double[base + 1]));
+                }
+            }
+        }
+    }
 }
